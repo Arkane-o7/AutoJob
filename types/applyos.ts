@@ -11,6 +11,10 @@ export type ApplicationStatus =
 
 export type Priority = "low" | "medium" | "high";
 
+export type ContactRelationship = "recruiter" | "hiring_manager" | "interviewer" | "employee" | "referral" | "other";
+export type InterviewType = "recruiter_screen" | "hiring_manager" | "technical" | "behavioral" | "panel" | "final" | "other";
+export type InterviewFormat = "video" | "phone" | "onsite" | "other";
+
 export type ATSPlatform =
   | "greenhouse"
   | "lever"
@@ -134,6 +138,41 @@ export interface ResumeVersion {
   is_current: boolean;
 }
 
+export interface ContactRecord {
+  id: string;
+  name: string;
+  title: string;
+  company: string;
+  email: string;
+  linkedin_url: string;
+  relationship: ContactRelationship;
+  application_ids: string[];
+  notes: string;
+  last_contacted_at: string | null;
+  next_action_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface InterviewRecord {
+  id: string;
+  application_id: string;
+  type: InterviewType;
+  format: InterviewFormat;
+  scheduled_at: string | null;
+  location: string;
+  meeting_url: string;
+  interviewer_contact_ids: string[];
+  company_research: string;
+  preparation_notes: string;
+  question_notes: string;
+  next_action: string;
+  next_action_at: string | null;
+  completed_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface StateMigrationRecord {
   from_version: number;
   to_version: number;
@@ -149,6 +188,8 @@ export interface ApplyOSState {
   answer_memory: AnswerMemoryItem[];
   learned_answers: LearnedAnswer[];
   resume_versions: ResumeVersion[];
+  contacts: ContactRecord[];
+  interviews: InterviewRecord[];
   settings: {
     final_follow_up_enabled: boolean;
     notification_enabled: boolean;

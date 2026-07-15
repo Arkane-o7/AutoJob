@@ -50,4 +50,35 @@
 
     return { subject, body, generated_at: ApplyOS.nowISO(), type };
   };
+
+  ApplyOS.generateThankYouDraft = function generateThankYouDraft(application, interview = {}, profile = {}, contact = {}) {
+    const fullName = profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(" ") || "Your name";
+    const greeting = contact.name ? `Hello ${contact.name.split(/\s+/)[0]},` : "Hello,";
+    const interviewLabel = String(interview.type || "interview").replace(/_/g, " ");
+    const body = [
+      greeting,
+      "",
+      `Thank you for taking the time to speak with me about the ${application.role} position at ${application.company}. I appreciated learning more about the role and the team.`,
+      interview.question_notes ? `I especially enjoyed our discussion about ${interview.question_notes.split(/[.\n]/)[0].trim()}.` : `Our ${interviewLabel} conversation reinforced my interest in the opportunity.`,
+      "",
+      "Please let me know if I can provide any additional information. I look forward to hearing about the next steps.",
+      "",
+      "Best,",
+      fullName,
+      profile.linkedin || profile.portfolio || ""
+    ].filter((line, index, lines) => line || lines[index - 1] !== "").join("\n").trim();
+    return { subject: `Thank you — ${application.role} interview`, body, generated_at: ApplyOS.nowISO(), type: "interview_thank_you" };
+  };
+
+  ApplyOS.buildComposeLinks = function buildComposeLinks(draft = {}, recipient = "") {
+    const email = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(recipient || "").trim()) ? String(recipient).trim() : "";
+    const subject = String(draft.subject || "");
+    const body = String(draft.body || "");
+    const query = (entries) => entries.map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`).join("&");
+    return {
+      gmail: `https://mail.google.com/mail/?${query([["view", "cm"], ["fs", "1"], ["to", email], ["su", subject], ["body", body]])}`,
+      outlook: `https://outlook.office.com/mail/deeplink/compose?${query([["to", email], ["subject", subject], ["body", body]])}`,
+      mailto: `mailto:${email}?${query([["subject", subject], ["body", body]])}`
+    };
+  };
 })(globalThis);

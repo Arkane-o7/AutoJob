@@ -20,19 +20,19 @@ The new modules are:
 - `shared/offlyn-core.js`: MIT-attributed ATS recognition, semantic field classification, type/value safeguards, and correction matching adapted to the ApplyOS profile schema.
 - `shared/ats-compat.js`: a registry-based compatibility layer for ATS field context, custom dropdown options, and resume dropzones. Greenhouse legacy/React patterns are BSD-attributed adaptations from Job App Filler; the remaining adapters use ApplyOS heuristics.
 - `shared/profiles.js`: multi-profile index, active-profile switching, legacy `profile` mirroring, completeness checks, and resume-text normalization.
-- `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, reminders, answer memory, resume versions, and settings. Schema v3 records its revision and migration history while preserving legacy data.
+- `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, reminders, contacts, interviews, answer memory, resume versions, and settings. Schema v4 records its revision and migration history while preserving legacy data.
 - `shared/matching.js`: deterministic, local skill/keyword matching with matched skills, gaps, keywords, experience hints, and answer prompts.
-- `shared/followup.js`: editable 7-day and optional 14-day reminders plus review-only email drafts.
+- `shared/followup.js`: editable 7-day and optional 14-day reminders, interview thank-you drafts, and review-only Gmail, Outlook, and local-email-app compose links.
 - `shared/ai.js`: zero-setup Smart Draft fallbacks for cover letters, resume focus plans, and keyword gaps, plus optional localhost-only Ollama enhancement.
 - `shared/graph.js`: answer/correction knowledge graph with reusable-answer retrieval and lightweight reinforcement weights.
 - `shared/agent.js`: local-AI planning with an allowlist of fill/select/check/skip actions and hard blocks for submission, consent, sensitive fields, CAPTCHAs, and assessments.
 - `shared/workday.js`: 1,128-line browser-ready compatibility port of Offlyn's 1,277-line Workday handler. Type-only code and automatic Save-and-Continue navigation are intentionally removed; inline experience Add/Save remains to support multiple editable records.
 - `shared/diagnostics.js`: privacy-safe broken-field snapshots containing only reviewed labels and allowlisted DOM structure—never entered values or file contents.
 - `shared/submission.js`: conservative confirmation scoring that requires both recent user submit intent and strong confirmation-page evidence.
-- `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. No email integration.
+- `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. It has no email credentials or send capability.
 - `onboarding.*`: five-step profile, resume-text, safety, and local-AI setup flow.
-- `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, date editing, match guidance, follow-up drafts, profile switching, and the local-AI studio.
-- `types/applyos.ts`: TypeScript contracts for captured jobs, CRM records, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
+- `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, review-only compose handoffs, match guidance, profile switching, and the local-AI studio.
+- `types/applyos.ts`: TypeScript contracts for captured jobs, applications, contacts, interviews, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
 
 ## Install or update locally
 
@@ -42,7 +42,7 @@ The new modules are:
 4. Refresh any job pages that were already open so the updated content scripts load.
 5. Pin **ApplyOS** and choose **Setup** once to complete onboarding. Use **Profile & answer memory** for the full editor.
 
-All application, profile, answer, and resume data stays in `chrome.storage.local`. ApplyOS has no backend or analytics. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
+All application, contact, interview, profile, answer, and resume data stays in `chrome.storage.local`. ApplyOS has no backend or analytics. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
 
 ## Test the complete workflow
 
@@ -92,9 +92,17 @@ Applied records show the next follow-up in the popup and dashboard. Due reminder
 
 ### 6. Generate a follow-up draft
 
-Open an application record, choose first or final follow-up, and click **Generate draft**. Edit or copy the subject and body, then review and send it yourself in your email client. ApplyOS has no send function.
+Open an application record, choose first or final follow-up, and click **Generate draft**. Select a linked contact if available, edit the subject and body, then copy it or open the reviewed draft in Gmail, Outlook, or the device email app. ApplyOS has no email credentials and no send function.
 
-### 7. Use Smart Drafts
+### 7. Track contacts and networking
+
+Open **Dashboard → Contacts** to add recruiters, hiring managers, interviewers, referrals, employees, or general networking contacts. Store their company, title, email, LinkedIn URL, relationship, notes, last-contacted date, and next action. A contact can be linked to an application and selected as the recipient for reviewed drafts.
+
+### 8. Use the interview workspace
+
+Open an application and choose **Add interview**. Record the round, format, scheduled time, interviewer, location or meeting URL, company research, preparation notes, question notes, and next action. Saved interviews appear in **Next Actions** and move an active application to Interview. Generate and edit a thank-you draft, then manually open it in an email provider if desired.
+
+### 9. Use Smart Drafts
 
 Open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These work immediately without accounts, model downloads, terminal commands, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Answers → Advanced**, but it is never part of onboarding or required for core functionality.
 
@@ -114,9 +122,9 @@ npm run test:browser:dist
 npm run verify
 ```
 
-`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, and review-only draft generation.
+`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, and review-only draft generation.
 
-`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, the reviewed diagnostic flow, and the reviewed post-submit confirmation flow. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
+`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed diagnostics and post-submit confirmation, contact creation, compose handoffs, interview preparation, and thank-you drafting. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
 
 ## Safety boundaries and limitations
 

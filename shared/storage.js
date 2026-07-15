@@ -39,6 +39,15 @@
     return Object.fromEntries(Object.entries(value).filter(([, item]) => typeof item === "string"));
   }
 
+  function safeWebUrl(value) {
+    const text = safeString(value).trim();
+    if (!text) return "";
+    try {
+      const parsed = new URL(text);
+      return ["http:", "https:"].includes(parsed.protocol) ? parsed.toString() : "";
+    } catch { return ""; }
+  }
+
   function normalizeConfidence(value) {
     if (!isRecord(value)) return { overall: 0 };
     return { overall: 0, ...Object.fromEntries(Object.entries(value).filter(([, score]) => typeof score === "number" && Number.isFinite(score))
@@ -65,7 +74,8 @@
   const migrations = {
     0: (state) => recordMigration(state, 0, 1),
     1: (state) => recordMigration(state, 1, 2),
-    2: (state) => recordMigration({ ...state, revision: Math.max(0, Math.trunc(safeNumber(state.revision))) }, 2, 3)
+    2: (state) => recordMigration({ ...state, revision: Math.max(0, Math.trunc(safeNumber(state.revision))) }, 2, 3),
+    3: (state) => recordMigration({ ...state, contacts: Array.isArray(state.contacts) ? state.contacts : [], interviews: Array.isArray(state.interviews) ? state.interviews : [] }, 3, 4)
   };
 
   function migrateState(input) {
@@ -177,6 +187,53 @@
     };
   }
 
+  function normalizeContact(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const createdAt = safeDateString(item.created_at, now);
+    return {
+      ...item,
+      id: safeString(item.id) || ApplyOS.uid("contact"),
+      name: safeString(item.name, "Unnamed contact") || "Unnamed contact",
+      title: safeString(item.title),
+      company: safeString(item.company),
+      email: safeString(item.email),
+      linkedin_url: safeWebUrl(item.linkedin_url),
+      relationship: ApplyOS.CONTACT_RELATIONSHIPS.includes(item.relationship) ? item.relationship : "other",
+      application_ids: [...new Set(safeStringArray(item.application_ids).filter(Boolean))],
+      notes: safeString(item.notes),
+      last_contacted_at: safeNullableDate(item.last_contacted_at),
+      next_action_at: safeNullableDate(item.next_action_at),
+      created_at: createdAt,
+      updated_at: safeDateString(item.updated_at, createdAt)
+    };
+  }
+
+  function normalizeInterview(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const createdAt = safeDateString(item.created_at, now);
+    return {
+      ...item,
+      id: safeString(item.id) || ApplyOS.uid("interview"),
+      application_id: safeString(item.application_id),
+      type: ApplyOS.INTERVIEW_TYPES.includes(item.type) ? item.type : "other",
+      format: ApplyOS.INTERVIEW_FORMATS.includes(item.format) ? item.format : "video",
+      scheduled_at: safeNullableDate(item.scheduled_at),
+      location: safeString(item.location),
+      meeting_url: safeWebUrl(item.meeting_url),
+      interviewer_contact_ids: [...new Set(safeStringArray(item.interviewer_contact_ids).filter(Boolean))],
+      company_research: safeString(item.company_research),
+      preparation_notes: safeString(item.preparation_notes),
+      question_notes: safeString(item.question_notes),
+      next_action: safeString(item.next_action),
+      next_action_at: safeNullableDate(item.next_action_at),
+      completed_at: safeNullableDate(item.completed_at),
+      created_at: createdAt,
+      updated_at: safeDateString(item.updated_at, createdAt)
+    };
+  }
+
   function emptyState() {
     return {
       schema_version: ApplyOS.SCHEMA_VERSION,
@@ -187,6 +244,8 @@
       answer_memory: [],
       learned_answers: [],
       resume_versions: [],
+      contacts: [],
+      interviews: [],
       settings: { final_follow_up_enabled: true, notification_enabled: true },
       migrated_at: ApplyOS.nowISO()
     };
@@ -202,6 +261,8 @@
     state.answer_memory = (Array.isArray(state.answer_memory) ? state.answer_memory : []).map(normalizeAnswer).filter(Boolean);
     state.learned_answers = (Array.isArray(state.learned_answers) ? state.learned_answers : []).map(normalizeLearnedAnswer).filter(Boolean);
     state.resume_versions = (Array.isArray(state.resume_versions) ? state.resume_versions : []).map(normalizeResumeVersion).filter(Boolean);
+    state.contacts = (Array.isArray(state.contacts) ? state.contacts : []).map(normalizeContact).filter(Boolean);
+    state.interviews = (Array.isArray(state.interviews) ? state.interviews : []).map(normalizeInterview).filter(Boolean);
     state.settings = { ...emptyState().settings, ...(isRecord(state.settings) ? state.settings : {}) };
     state.settings.final_follow_up_enabled = state.settings.final_follow_up_enabled !== false;
     state.settings.notification_enabled = state.settings.notification_enabled !== false;
@@ -518,6 +579,56 @@
     return current;
   };
 
+  ApplyOS.upsertContact = async function upsertContact(input = {}) {
+    let saved = null;
+    await ApplyOS.mutateState((state) => {
+      const now = ApplyOS.nowISO();
+      const index = state.contacts.findIndex((item) => item.id === input.id);
+      const current = index >= 0 ? state.contacts[index] : { id: ApplyOS.uid("contact"), created_at: now };
+      saved = normalizeContact({ ...current, ...input, id: current.id, updated_at: now });
+      if (index >= 0) state.contacts[index] = saved;
+      else state.contacts.unshift(saved);
+      return state;
+    });
+    return saved;
+  };
+
+  ApplyOS.deleteContact = async function deleteContact(id) {
+    return ApplyOS.mutateState((state) => {
+      state.contacts = state.contacts.filter((item) => item.id !== id);
+      state.interviews = state.interviews.map((item) => ({ ...item, interviewer_contact_ids: item.interviewer_contact_ids.filter((contactId) => contactId !== id) }));
+      return state;
+    });
+  };
+
+  ApplyOS.upsertInterview = async function upsertInterview(input = {}) {
+    let saved = null;
+    await ApplyOS.mutateState((state) => {
+      const now = ApplyOS.nowISO();
+      const index = state.interviews.findIndex((item) => item.id === input.id);
+      const current = index >= 0 ? state.interviews[index] : { id: ApplyOS.uid("interview"), created_at: now };
+      saved = normalizeInterview({ ...current, ...input, id: current.id, updated_at: now });
+      if (index >= 0) state.interviews[index] = saved;
+      else state.interviews.unshift(saved);
+      if (saved.application_id) {
+        const application = state.applications.find((item) => item.id === saved.application_id);
+        if (application && !["offer", "rejected", "closed"].includes(application.status)) {
+          application.status = "interview";
+          application.updated_at = now;
+        }
+      }
+      return state;
+    });
+    return saved;
+  };
+
+  ApplyOS.deleteInterview = async function deleteInterview(id) {
+    return ApplyOS.mutateState((state) => {
+      state.interviews = state.interviews.filter((item) => item.id !== id);
+      return state;
+    });
+  };
+
   ApplyOS.seedMockData = async function seedMockData() {
     const now = new Date();
     const samples = [
@@ -540,6 +651,11 @@
           created_at: created, updated_at: created, captured_at: created, location: "Remote", extraction_confidence: { overall: 1 }
         });
         if (status === "applied") state.reminders.push({ id: ApplyOS.uid("rem"), application_id: id, type: "follow_up", due_at: ApplyOS.addDays(now, 2), completed_at: null, created_at: created });
+        if (status === "interview") {
+          const contactId = ApplyOS.uid("contact");
+          state.contacts.push({ id: contactId, name: "Morgan Recruiter", title: "Talent Partner", company, email: "morgan@example.com", linkedin_url: "", relationship: "recruiter", application_ids: [id], notes: "Mock contact — safe to edit or delete.", last_contacted_at: null, next_action_at: ApplyOS.addDays(now, 1), created_at: created, updated_at: created });
+          state.interviews.push({ id: ApplyOS.uid("interview"), application_id: id, type: "technical", format: "video", scheduled_at: ApplyOS.addDays(now, 3), location: "", meeting_url: "https://example.com/mock-meeting", interviewer_contact_ids: [contactId], company_research: "Review the product and engineering blog.", preparation_notes: "Prepare two system-design stories.", question_notes: "", next_action: "Send thank-you note", next_action_at: ApplyOS.addDays(now, 4), completed_at: null, created_at: created, updated_at: created });
+        }
       });
       return state;
     });

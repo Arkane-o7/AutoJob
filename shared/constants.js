@@ -3,7 +3,7 @@
 
   const ApplyOS = root.ApplyOS = root.ApplyOS || {};
 
-  ApplyOS.SCHEMA_VERSION = 3;
+  ApplyOS.SCHEMA_VERSION = 4;
   ApplyOS.STORAGE_KEY = "applyos_state";
   ApplyOS.PROFILE_KEY = "profile";
   ApplyOS.APPLICATION_STATUSES = [
@@ -29,6 +29,9 @@
     closed: { label: "Closed", tone: "slate" }
   };
   ApplyOS.PRIORITIES = ["low", "medium", "high"];
+  ApplyOS.CONTACT_RELATIONSHIPS = ["recruiter", "hiring_manager", "interviewer", "employee", "referral", "other"];
+  ApplyOS.INTERVIEW_TYPES = ["recruiter_screen", "hiring_manager", "technical", "behavioral", "panel", "final", "other"];
+  ApplyOS.INTERVIEW_FORMATS = ["video", "phone", "onsite", "other"];
 
   ApplyOS.uid = function uid(prefix = "id") {
     if (root.crypto?.randomUUID) return `${prefix}_${root.crypto.randomUUID()}`;

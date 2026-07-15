@@ -9,6 +9,7 @@
   <body>
     <header class="masthead">
       <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
+      <nav class="section-tabs" aria-label="Dashboard sections"><button class="active" data-section="applications" type="button">Applications</button><button data-section="contacts" type="button">Contacts</button></nav>
       <div class="header-actions">
         <span class="privacy">LOCAL DATA</span>
         <select id="active-profile" aria-label="Active profile"></select>
@@ -17,7 +18,7 @@
     </header>
 
     <main>
-      <section class="intro">
+      <section class="intro application-only">
         <div><p class="eyebrow">APPLICATION COMMAND CENTER</p><h1>Turn applications<br>into a <em>system.</em></h1></div>
         <div class="metric-grid">
           <article><strong id="metric-total">0</strong><span>ACTIVE</span></article>
@@ -27,12 +28,12 @@
         </div>
       </section>
 
-      <section class="due-strip">
+      <section class="due-strip application-only">
         <div><p class="eyebrow">NEXT ACTIONS</p><h2>Upcoming deadlines & follow-ups</h2></div>
         <div id="upcoming" class="upcoming"></div>
       </section>
 
-      <section class="workspace">
+      <section class="workspace application-only">
         <div class="toolbar">
           <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search company, role, notes…"></label>
           <select id="filter-status" aria-label="Filter by status"><option value="">All statuses</option></select>
@@ -44,6 +45,13 @@
         <div id="empty" class="empty hidden"><span>A.</span><h2>Your pipeline starts here.</h2><p>Open a job page and choose “Save to ApplyOS,” or load mock records to explore the dashboard.</p><button id="mock" class="primary" type="button">Load sample data</button></div>
         <div id="board" class="board"></div>
         <div id="list" class="list hidden"></div>
+      </section>
+
+      <section id="contacts-workspace" class="contacts-workspace hidden">
+        <div class="contacts-intro"><div><p class="eyebrow">NETWORKING CRM</p><h1>Remember the <em>people,</em><br>not just the pipeline.</h1></div><button id="add-contact" class="primary" type="button">Add contact</button></div>
+        <div class="contacts-toolbar"><label class="search"><span>⌕</span><input id="contact-search" type="search" placeholder="Search name, company, role, notes…"></label><span id="contact-count">0 contacts</span></div>
+        <div id="contacts-empty" class="empty"><span>+</span><h2>Build your network deliberately.</h2><p>Add recruiters, interviewers, referrals, and people you meet during the search.</p><button id="contacts-empty-add" class="primary" type="button">Add first contact</button></div>
+        <div id="contacts-list" class="contacts-list hidden"></div>
       </section>
     </main>
 
@@ -64,11 +72,30 @@
         <section class="match-panel"><div><span>RESUME MATCH</span><strong id="detail-score">0%</strong></div><div class="match-bar"><i id="detail-bar"></i></div><p id="detail-skills"></p><p id="detail-missing"></p></section>
         <div class="detail-actions"><button class="primary" type="submit">Save changes</button><button id="detail-applied" class="outline" type="button">Mark as applied</button><a id="detail-url" class="outline link-button" target="_blank" rel="noreferrer">Open job ↗</a></div>
       </form>
+      <section class="contact-panel">
+        <div class="panel-heading"><div><p class="eyebrow">PEOPLE</p><h2>Contacts for this role</h2></div><button id="add-linked-contact" class="outline" type="button">Add contact</button></div>
+        <div id="linked-contacts" class="linked-contacts"></div>
+      </section>
       <section class="draft-panel">
         <div><p class="eyebrow">MANUAL FOLLOW-UP</p><h2>Email draft</h2></div>
+        <label><span>Recipient</span><select id="draft-contact"><option value="">Hiring team / no address</option></select></label>
         <select id="draft-type" aria-label="Draft type"><option value="follow_up">First follow-up</option><option value="final_follow_up">Final follow-up</option></select>
         <button id="generate-draft" class="dark-button" type="button">Generate draft</button>
-        <div id="draft" class="draft hidden"><label><span>Subject</span><input id="draft-subject"></label><label><span>Message</span><textarea id="draft-body"></textarea></label><button id="copy-draft" class="outline" type="button">Copy draft</button><small>ApplyOS never sends this. Review and send it yourself.</small></div>
+        <div id="draft" class="draft hidden"><label><span>Subject</span><input id="draft-subject"></label><label><span>Message</span><textarea id="draft-body"></textarea></label><div class="compose-actions"><a id="compose-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="compose-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="compose-mailto" class="outline link-button">Email app ↗</a><button id="copy-draft" class="outline" type="button">Copy</button></div><small>These buttons only open a reviewed draft. ApplyOS never sends it.</small></div>
+      </section>
+      <section class="interview-panel">
+        <div class="panel-heading"><div><p class="eyebrow">INTERVIEW WORKSPACE</p><h2>Prepare, meet, follow through.</h2></div><button id="add-interview" class="outline" type="button">Add interview</button></div>
+        <div id="interview-list" class="interview-list"></div>
+        <form id="interview-form" class="interview-form hidden">
+          <input id="interview-id" type="hidden">
+          <div class="detail-grid"><label><span>Round</span><select id="interview-type"></select></label><label><span>Format</span><select id="interview-format"></select></label><label><span>Scheduled</span><input id="interview-scheduled" type="datetime-local"></label><label><span>Interviewer</span><select id="interview-contact"><option value="">Not linked</option></select></label><label><span>Location</span><input id="interview-location" placeholder="Office or phone"></label><label><span>Meeting URL</span><input id="interview-url" type="url" placeholder="https://…"></label></div>
+          <label><span>Company research</span><textarea id="interview-research" placeholder="Product, news, team context…"></textarea></label>
+          <label><span>Preparation notes</span><textarea id="interview-prep" placeholder="Stories, questions to ask, topics to review…"></textarea></label>
+          <label><span>Question notes</span><textarea id="interview-questions" placeholder="Questions discussed and your notes…"></textarea></label>
+          <div class="detail-grid"><label><span>Next action</span><input id="interview-next-action" placeholder="Send thank-you note"></label><label><span>Next action date</span><input id="interview-next-date" type="date"></label></div>
+          <div class="detail-actions"><button class="primary" type="submit">Save interview</button><button id="cancel-interview" class="outline" type="button">Cancel</button><button id="delete-interview" class="outline danger hidden" type="button">Delete</button><button id="generate-thank-you" class="outline" type="button">Thank-you draft</button></div>
+        </form>
+        <div id="thank-you" class="draft hidden"><label><span>Subject</span><input id="thank-you-subject"></label><label><span>Message</span><textarea id="thank-you-body"></textarea></label><div class="compose-actions"><a id="thank-you-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="thank-you-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="thank-you-mailto" class="outline link-button">Email app ↗</a><button id="copy-thank-you" class="outline" type="button">Copy</button></div><small>Review every line before sending.</small></div>
       </section>
       <section class="ai-studio">
         <div class="studio-head"><div><p class="eyebrow">SMART DRAFT STUDIO</p><h2>Tailor with evidence.</h2></div><span id="studio-status">READY OFFLINE</span></div>
@@ -76,6 +103,19 @@
         <div class="studio-actions"><button id="ai-cover-letter" type="button">Cover-letter draft</button><button id="ai-tailor-resume" type="button">Resume focus plan</button><button id="ai-keywords" type="button">Keyword gap</button></div>
         <div id="ai-output-wrap" class="ai-output hidden"><div><strong id="ai-output-title">Smart draft</strong><button id="copy-ai-output" type="button">Copy</button></div><textarea id="ai-output" aria-label="Generated ApplyOS draft"></textarea><small>Review required · no facts should be added unless they are true.</small></div>
       </section>
+    </aside>
+    <aside id="contact-detail" class="detail contact-detail" role="dialog" aria-modal="true" aria-label="Contact details" aria-hidden="true" inert>
+      <button id="close-contact" class="close" type="button" aria-label="Close contact details">×</button>
+      <p class="eyebrow">NETWORK CONTACT</p>
+      <form id="contact-form">
+        <input id="contact-id" type="hidden">
+        <label class="hero-field"><span>NAME</span><input id="contact-name" required placeholder="Recruiter or contact name"></label>
+        <label class="hero-field company-field"><span>TITLE / COMPANY</span><input id="contact-title" placeholder="Recruiter, Engineering Manager…"></label>
+        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Application</span><select id="contact-application"><option value="">General networking</option></select></label><label><span>Last contacted</span><input id="contact-last" type="date"></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
+        <label><span>Notes</span><textarea id="contact-notes" placeholder="How you met, context, promises, next conversation…"></textarea></label>
+        <div class="detail-actions"><button class="primary" type="submit">Save contact</button><button id="delete-contact" class="outline danger hidden" type="button">Delete</button><a id="open-contact-linkedin" class="outline link-button hidden" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>
+      </form>
+      <section class="contact-compose"><p class="eyebrow">MANUAL MESSAGE</p><h2>Compose without auto-sending.</h2><label><span>Subject</span><input id="contact-subject" value="Great connecting"></label><label><span>Message</span><textarea id="contact-message" placeholder="Write or paste a reviewed message…"></textarea></label><div class="compose-actions"><a id="contact-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="contact-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="contact-mailto" class="outline link-button">Email app ↗</a></div><small>ApplyOS opens a draft only. You review and send it yourself.</small></section>
     </aside>
     <div id="scrim" class="scrim hidden"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>

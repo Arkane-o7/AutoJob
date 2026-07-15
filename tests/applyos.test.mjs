@@ -36,7 +36,7 @@ test("migrates legacy profile without removing it", async () => {
   assert.equal(state.resume_versions[0].name, "ada.pdf");
 });
 
-test("migrates a v2 state to v3 without losing applications or the legacy profile", async () => {
+test("migrates a v2 state through v4 without losing applications or the legacy profile", async () => {
   const profile = { firstName: "Ada", email: "ada@example.com" };
   const application = {
     id: "app_existing",
@@ -71,12 +71,14 @@ test("migrates a v2 state to v3 without losing applications or the legacy profil
   });
 
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 3);
+  assert.equal(state.schema_version, 4);
   assert.equal(state.revision, 0);
   assert.equal(state.applications.length, 1);
   assert.equal(state.applications[0].id, "app_existing");
   assert.equal(state.applications[0].notes, "Keep this note");
-  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3]]));
+  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4]]));
+  assert.equal(state.contacts.length, 0);
+  assert.equal(state.interviews.length, 0);
   assert.equal(data.profile.email, "ada@example.com");
 });
 
@@ -99,7 +101,7 @@ test("state migration is idempotent and does not increment the mutation revision
 
   assert.equal(first.revision, 0);
   assert.equal(second.revision, 0);
-  assert.equal(second.migration_history.length, 1);
+  assert.equal(second.migration_history.length, 2);
   assert.deepEqual(data.applyos_state, storedAfterFirstRead);
 });
 
@@ -233,7 +235,7 @@ test("stores corrections and reuses the best site-aware learned answer", async (
   });
   assert.equal(learned.answer, "4");
   const state = await ApplyOS.getState();
-  assert.equal(state.schema_version, 3);
+  assert.equal(state.schema_version, 4);
   assert.equal(state.learned_answers.length, 1);
   const match = ApplyOS.OfflynCore.bestLearnedAnswer("How many years have you handled large datasets", state.learned_answers, {
     site: "example.myworkdayjobs.com",
@@ -248,6 +250,45 @@ test("follow-up generation produces a draft but no send action", async () => {
   assert.match(draft.subject, /Engineer at Acme/);
   assert.match(draft.body, /Ada Lovelace/);
   assert.equal(typeof ApplyOS.sendFollowUp, "undefined");
+});
+
+test("contact CRM links people to applications and preserves review-only compose URLs", async () => {
+  const { ApplyOS } = await runtime();
+  const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/contact-job", source: "test", description: "" });
+  const contact = await ApplyOS.upsertContact({
+    name: "Riley Recruiter", title: "Talent Partner", company: "Acme", email: "riley@example.com",
+    linkedin_url: "https://www.linkedin.com/in/riley", relationship: "recruiter", application_ids: [application.id], notes: "Met at a hiring event."
+  });
+  const state = await ApplyOS.getState();
+  assert.equal(state.contacts[0].id, contact.id);
+  assert.deepEqual([...state.contacts[0].application_ids], [application.id]);
+  const links = ApplyOS.buildComposeLinks({ subject: "Following up", body: "Reviewed draft" }, contact.email);
+  assert.match(links.gmail, /^https:\/\/mail\.google\.com\/mail\/\?/);
+  assert.match(links.outlook, /^https:\/\/outlook\.office\.com\/mail\/deeplink\/compose\?/);
+  assert.match(links.mailto, /^mailto:riley@example\.com\?/);
+  assert.equal(typeof ApplyOS.sendContactMessage, "undefined");
+});
+
+test("interview workspace stores preparation and builds a manual thank-you draft", async () => {
+  const { ApplyOS } = await runtime();
+  const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/interview-job", source: "test", description: "" });
+  const contact = await ApplyOS.upsertContact({ name: "Taylor Manager", email: "taylor@example.com", relationship: "interviewer", application_ids: [application.id] });
+  const interview = await ApplyOS.upsertInterview({
+    application_id: application.id, type: "technical", format: "video", scheduled_at: "2026-08-02T10:30:00.000Z",
+    interviewer_contact_ids: [contact.id], company_research: "Read the engineering blog", preparation_notes: "Review system design",
+    question_notes: "event-driven architecture and observability", next_action: "Send thank-you", next_action_at: "2026-08-03T12:00:00.000Z"
+  });
+  const state = await ApplyOS.getState();
+  assert.equal(state.applications[0].status, "interview");
+  assert.equal(state.interviews[0].id, interview.id);
+  assert.equal(state.interviews[0].preparation_notes, "Review system design");
+  const draft = ApplyOS.generateThankYouDraft(state.applications[0], interview, { fullName: "Ada Lovelace" }, contact);
+  assert.match(draft.subject, /Engineer interview/);
+  assert.match(draft.body, /Hello Taylor/);
+  assert.match(draft.body, /event-driven architecture/);
+  assert.equal(typeof ApplyOS.sendThankYou, "undefined");
+  await ApplyOS.deleteContact(contact.id);
+  assert.equal((await ApplyOS.getState()).interviews[0].interviewer_contact_ids.length, 0);
 });
 
 test("migrates the legacy profile into a switchable active profile", async () => {

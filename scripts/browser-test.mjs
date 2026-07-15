@@ -336,8 +336,69 @@ async function main() {
     assert.equal(await detail.getAttribute("aria-hidden"), "true", "closed detail drawer is hidden from assistive technology");
     assert.equal(await detail.getAttribute("inert"), "", "closed detail drawer is removed from keyboard interaction");
     assert.equal(await helper.evaluate(() => document.activeElement?.classList.contains("job-card")), true, "closing details restores focus to the opening card");
+
+    await helper.locator("[data-section='contacts']").click();
+    await helper.locator("#add-contact").click();
+    const contactDetail = helper.locator("#contact-detail");
+    await contactDetail.waitFor({ state: "visible" });
+    await helper.locator("#contact-name").fill("Casey Recruiter");
+    await helper.locator("#contact-title").fill("Talent Partner");
+    await helper.locator("#contact-company").fill("Fixture Labs");
+    await helper.locator("#contact-email").fill("casey@example.test");
+    await helper.locator("#contact-relationship").selectOption("recruiter");
+    await helper.locator("#contact-application").selectOption(applicationId);
+    await helper.locator("#contact-notes").fill("Met during the reviewed browser fixture.");
+    await helper.locator("#contact-form button[type='submit']").click();
+    await helper.waitForFunction(() => document.querySelector("#contact-detail")?.getAttribute("aria-hidden") === "true");
+    assert.equal(await contactDetail.getAttribute("inert"), "", "closed contact drawer is removed from keyboard interaction");
+    const contactCard = helper.locator(".contact-card", { hasText: "Casey Recruiter" });
+    await contactCard.waitFor({ state: "visible" });
+    await contactCard.click();
+    assert.match(await helper.locator("#contact-gmail").getAttribute("href"), /mail\.google\.com\/mail\/\?.*to=casey%40example\.test/);
+    assert.match(await helper.locator("#contact-outlook").getAttribute("href"), /outlook\.office\.com\/mail\/deeplink\/compose\?/);
+    assert.match(await helper.locator("#contact-mailto").getAttribute("href"), /^mailto:casey@example\.test\?/);
+    await helper.locator("#close-contact").click();
+
+    await helper.locator("[data-section='applications']").click();
+    await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
+    await helper.locator("#linked-contacts", { hasText: "Casey Recruiter" }).waitFor({ state: "visible" });
+    const contactId = await helper.locator("#draft-contact option", { hasText: "Casey Recruiter" }).getAttribute("value");
+    assert.ok(contactId, "saved contact should be selectable for a reviewed follow-up");
+    await helper.locator("#draft-contact").selectOption(contactId);
+    await helper.locator("#generate-draft").click();
+    assert.match(await helper.locator("#compose-gmail").getAttribute("href"), /to=casey%40example\.test/);
+
+    await helper.locator("#add-interview").click();
+    await helper.locator("#interview-type").selectOption("technical");
+    await helper.locator("#interview-format").selectOption("video");
+    await helper.locator("#interview-scheduled").fill("2026-08-05T10:30");
+    await helper.locator("#interview-contact").selectOption(contactId);
+    await helper.locator("#interview-research").fill("Review the fixture product and engineering notes.");
+    await helper.locator("#interview-prep").fill("Prepare a system-design story.");
+    await helper.locator("#interview-questions").fill("Event-driven architecture and observability.");
+    await helper.locator("#interview-next-action").fill("Send thank-you note");
+    await helper.locator("#interview-next-date").fill("2026-08-06");
+    await helper.locator("#interview-form button[type='submit']").click();
+    const interviewCard = helper.locator("#interview-list .interview-card", { hasText: "Technical" });
+    await interviewCard.waitFor({ state: "visible" });
+    await interviewCard.locator("button").click();
+    await helper.locator("#generate-thank-you").click();
+    assert.match(await helper.locator("#thank-you-body").inputValue(), /Hello Casey/);
+    assert.match(await helper.locator("#thank-you-gmail").getAttribute("href"), /to=casey%40example\.test/);
+    const crmState = await worker.evaluate(async (id) => {
+      const current = await ApplyOS.getState();
+      return {
+        contact: current.contacts.find((item) => item.application_ids.includes(id)),
+        interview: current.interviews.find((item) => item.application_id === id),
+        application: current.applications.find((item) => item.id === id)
+      };
+    }, applicationId);
+    assert.equal(crmState.contact.email, "casey@example.test", "contact CRM persists the reviewed recipient");
+    assert.equal(crmState.interview.preparation_notes, "Prepare a system-design story.", "interview workspace persists preparation");
+    assert.equal(crmState.application.status, "interview", "saving an interview advances an active application to interview");
+    await helper.locator("#close-detail").click();
     await helper.close();
-    console.log("PASS reviewed submission prompt and accessible dashboard detail focus lifecycle");
+    console.log("PASS reviewed submission, contact CRM, compose handoff and interview workspace lifecycle");
     console.log(`Browser regression complete: ${ATS_CASES.length}/${ATS_CASES.length} ATS fixtures passed using unpacked MV3 at ${extensionRoot}.`);
   } finally {
     await context?.close().catch(() => {});
