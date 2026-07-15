@@ -224,6 +224,10 @@
 
   function descriptor(element, includeValue = false) {
     const dataset = Object.values(element.dataset || {}).slice(0, 10);
+    // Microsoft's closest role=group is an entire form section containing
+    // several unrelated questions. Appending that section text makes answers
+    // from sibling fields compete with the control's exact aria label.
+    const atsContext = isMicrosoftCareers() ? "" : ATSCompat?.fieldContext?.(element);
     const values = [
       labelText(element),
       element.getAttribute("aria-label"),
@@ -233,7 +237,7 @@
       element.name,
       element.id,
       ...dataset,
-      ATSCompat?.fieldContext?.(element),
+      atsContext,
       includeValue ? element.value : ""
     ];
     return normalize(values.filter(Boolean).join(" "));
@@ -438,7 +442,12 @@
     if (element instanceof HTMLInputElement && ["radio", "checkbox"].includes(element.type)) return element.checked;
     if (element.isContentEditable) return Boolean(element.innerText.trim());
     if (element instanceof HTMLSelectElement) return Boolean(element.value) && element.selectedIndex > 0;
-    if ("value" in element) return Boolean(String(element.value || "").trim());
+    if ("value" in element) {
+      if (isMicrosoftCareers() && element.getAttribute("role") === "combobox" && element.getAttribute("aria-expanded") === "true") {
+        return false;
+      }
+      return Boolean(String(element.value || "").trim());
+    }
     if (ATSCompat?.isCustomControl?.(element)) return Boolean(ATSCompat.customValue(element));
     return false;
   }
@@ -601,18 +610,30 @@
         "[data-automation-id='menuItem']",
         "[data-testid*='option']"
       ].join(",");
-      const standardCandidates = controlled ? Array.from(controlled.querySelectorAll(selector)) : queryAllDeep(selector);
+      const standardCandidates = controlled ? Array.from(controlled.querySelectorAll(selector)) : [];
       const adapterCandidates = ATSCompat?.optionCandidates?.(owner) || [];
-      const candidates = [...new Set([...standardCandidates, ...adapterCandidates])].filter(visible);
+      // Fluent UI renders several listboxes in portals. Never borrow an option
+      // from a sibling Microsoft combobox: wait for the list referenced by this
+      // control's aria-controls attribute, or fail this field safely.
+      const candidates = isMicrosoftCareers()
+        ? (controlledId ? standardCandidates : []).filter(visible)
+        : [...new Set([...(standardCandidates.length ? standardCandidates : queryAllDeep(selector)), ...adapterCandidates])].filter(visible);
       let best = null;
       for (const candidate of candidates.slice(0, 250)) {
         const score = optionMatchScore(`${candidate.getAttribute("aria-label") || ""} ${candidate.innerText || candidate.textContent || ""}`, rawValue);
         if (score > (best?.score || 0)) best = { candidate, score };
       }
       if (best?.score >= 82) {
+        best.candidate.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true, composed: true }));
+        best.candidate.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true, composed: true }));
         best.candidate.click();
-        await sleep(50);
-        return true;
+        await sleep(isMicrosoftCareers() ? 120 : 50);
+        if (!isMicrosoftCareers()) return true;
+        const selectedValue = String(owner?.value || "").trim();
+        const selected = best.candidate.getAttribute("aria-selected") === "true"
+          || (owner?.getAttribute("aria-expanded") !== "true" && optionMatchScore(selectedValue, rawValue) >= 72)
+          || !owner?.isConnected;
+        if (selected) return true;
       }
     }
     return false;
@@ -628,6 +649,11 @@
       // which used to feed the assist observer indefinitely.
       if (!element.readOnly && !isMicrosoftCareers()) await setNativeValueWithRetry(element, rawValue);
       const selected = await chooseOpenOption(rawValue, element);
+      if (!selected && isMicrosoftCareers() && element.getAttribute("aria-expanded") === "true") {
+        element.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true, composed: true }));
+        await sleep(40);
+        if (element.getAttribute("aria-expanded") === "true") element.click();
+      }
       return selected || hasExistingValue(element);
     }
     element.click();
@@ -897,6 +923,10 @@
     assistProfile = profile;
     assistUntil = Date.now() + ASSIST_DURATION_MS;
     assistObserver?.disconnect();
+    // The Microsoft application is rendered as one controlled form. Its
+    // autosave and Fluent UI portals generate mutations for every interaction,
+    // so mutation-assisted refills are unsafe and unnecessary on this site.
+    if (isMicrosoftCareers()) return;
     assistObserver = new MutationObserver((mutations) => {
       if (Date.now() > assistUntil) {
         assistObserver.disconnect();

@@ -128,6 +128,8 @@ async function snapshot(target) {
     microsoftAuth: document.querySelector("#microsoft-auth")?.value,
     microsoftBacklog: document.querySelector("input[name='microsoft-backlog']:checked")?.value || "",
     microsoftSponsorshipClicks: window.__fixture.microsoftSponsorshipClicks,
+    microsoftSponsorshipExpanded: document.querySelector("#microsoft-sponsorship")?.getAttribute("aria-expanded"),
+    microsoftStrayOptionClicks: window.__fixture.microsoftStrayOptionClicks,
     ssn: document.querySelector("#ssn")?.value, gender: document.querySelector("#gender")?.value,
     consent: document.querySelector("#privacy-consent")?.checked,
     resumeName: document.querySelector("#resume")?.files?.[0]?.name || "",
@@ -171,6 +173,8 @@ function assertSafeFill(testCase, response, state) {
     assert.equal(state.microsoftBacklog, "No", "microsoft: readonly-styled radio group remains interactable");
     assert.ok(state.events["microsoft-auth:change"] >= 1, "microsoft: combobox change event should fire");
     assert.ok(state.events["microsoft-backlog-no:change"] >= 1, "microsoft: radio change event should fire");
+    assert.equal(state.microsoftSponsorshipExpanded, "false", "microsoft: an unmatched dropdown must be closed after one bounded attempt");
+    assert.equal(state.microsoftStrayOptionClicks, 0, "microsoft: a dropdown must never select an option from a sibling listbox");
   }
   if (testCase.expectedDrops) assert.deepEqual(state.drops, ["dragenter", "dragover", "drop"], `${testCase.id}: ATS dropzone events`);
   assert.equal(state.submitCount, 0, `${testCase.id}: form must not submit`);
@@ -244,6 +248,7 @@ async function main() {
         await target.waitForTimeout(1800);
         const afterRerender = await snapshot(target);
         assert.equal(afterRerender.microsoftSponsorshipClicks, clickBaseline, "microsoft: controlled rerenders must not restart a settled dropdown attempt");
+        assert.equal(afterRerender.microsoftStrayOptionClicks, 0, "microsoft: controlled rerenders never borrow sibling options");
       }
 
       if (testCase.dynamic) {
