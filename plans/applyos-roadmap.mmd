@@ -1,0 +1,19 @@
+flowchart LR
+  A["Phase 0: safe schema migrations and write authority"] --> B["Phase 1: browser-driven ATS regression lab"]
+  B --> C["Phase 2: reviewed broken-field reports"]
+  B --> D["Phase 2: confirmation-page prompt"]
+  A --> E["Phase 3: contacts and networking CRM"]
+  D --> E
+  E --> F["Phase 3: reviewed Gmail, Outlook, and mailto compose"]
+  E --> G["Phase 4: interview workspace"]
+  G --> H["Phase 4: thank-you drafts and next actions"]
+  A --> I["Phase 5A: encrypted export and import"]
+  I --> J{"Cloud business model approved?"}
+  J -->|"No"| K["Local-first paid product"]
+  J -->|"Yes"| L["Phase 5B: accounts, encrypted sync, conflicts, deletion"]
+  C --> M["Release gate: ATS pass matrix and privacy review"]
+  D --> M
+  F --> M
+  H --> M
+  K --> M
+  L --> M

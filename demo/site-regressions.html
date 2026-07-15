@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>ApplyKit live-site regression fixtures</title>
+    <style>
+      body{max-width:900px;margin:40px auto;font:15px sans-serif}section{padding:20px;margin:20px 0;border:1px solid #aaa}.question{margin:18px 0}.question p{font-weight:700}input,textarea,button{padding:9px;min-width:260px}.options{border:1px solid #777;width:360px}.options [role=option]{padding:9px;cursor:pointer}.react-shell{margin-top:7px}.hidden{display:none}
+    </style>
+  </head>
+  <body>
+    <h1>Captured Workday and NorthStarz patterns</h1>
+
+    <section id="workday">
+      <h2>Workday-style questions</h2>
+      <div class="question" role="group">
+        <p>What is your desired start date?*</p>
+        <input aria-label="Month" role="spinbutton" data-automation-id="dateSectionMonth-input">
+        <input aria-label="Day" role="spinbutton" data-automation-id="dateSectionDay-input">
+        <input aria-label="Year" role="spinbutton" data-automation-id="dateSectionYear-input">
+      </div>
+      <div class="question" role="group">
+        <p>Are you legally permitted to work in the country where this job is located?*</p>
+        <button type="button" aria-haspopup="listbox">Select One</button>
+      </div>
+      <div class="question" role="group">
+        <p>Please select the appropriate option describing your employment eligibility.*</p>
+        <button type="button" aria-haspopup="listbox">Select One</button>
+      </div>
+      <div class="question" role="group">
+        <p>What is your desired compensation?*</p>
+        <input type="text">
+      </div>
+      <div class="question" role="group">
+        <p>Have you ever worked for ExampleCo, a subcontractor, or subsidiary of ExampleCo?*</p>
+        <button type="button" aria-haspopup="listbox">Select One</button>
+      </div>
+      <div class="question" role="group">
+        <p>Are you related to or know anyone that works or has worked at ExampleCo, a subcontractor, or subsidiary?*</p>
+        <button type="button" aria-haspopup="listbox">Select One</button>
+      </div>
+    </section>
+
+    <section id="northstarz">
+      <h2>NorthStarz-style unlabeled fields</h2>
+      <div><p>Email *</p><input type="text"></div>
+      <div><p>Current Location *</p><input type="text" placeholder="Enter current location"></div>
+      <div class="w-full md:w-1/2 flex flex-col space-y-3">
+        <div><p>Upload CV/Resume *</p><p>Upload your resume in .pdf, .doc, or .docx format.</p></div>
+        <div class="drop-zone">Select a file to upload <span>or drag &amp; drop it here</span><input class="hidden" type="file" accept=".pdf,.doc,.docx"></div>
+        <output class="upload-result" aria-live="polite"></output>
+      </div>
+      <div><p>Current Monthly Salary *</p><input type="text" placeholder="Enter monthly salary"></div>
+      <div><p>Expected Monthly Salary *</p><input type="text" placeholder="Enter expected monthly salary"></div>
+      <div class="react-field"><p>Are you willing to work from the office? *</p><div class="react-shell"><div><div><input id="react-select-2-input" role="combobox" aria-haspopup="true"></div></div></div></div>
+      <div><p>Notice Period (in days) *</p><input type="text" placeholder="Enter notice period in days"></div>
+      <div><p>Years of experience in How many years of experience do you have handling &gt;100 TB of data? *</p><input type="text" placeholder="Enter years (e.g. 2)"></div>
+      <div><p>Years of experience in Internet Crawling? *</p><input type="text" placeholder="Enter years (e.g. 2)"></div>
+      <div class="react-field"><p>How did you hear about us *</p><div class="react-shell"><div><div><input id="react-select-3-input" role="combobox" aria-haspopup="true"></div></div></div></div>
+      <label><input id="consent" type="checkbox"> I have read and understood the terms of this consent form and agree.</label>
+      <label><input id="whatsapp-consent" type="checkbox"> I confirm to receive WhatsApp messages.</label>
+    </section>
+
+    <script>
+      const eligibility = ["I am authorized to work permanently in the country.", "I have an active temporary work permit.", "I require sponsorship before I am able to work."];
+      document.querySelectorAll("#workday button[aria-haspopup=listbox]").forEach((button, index) => {
+        button.addEventListener("click", () => {
+          document.querySelectorAll(".options").forEach((menu) => menu.remove());
+          const menu = document.createElement("div");
+          menu.className = "options";
+          menu.setAttribute("role", "listbox");
+          const values = index === 1 ? eligibility : ["Yes", "No"];
+          values.forEach((value) => {
+            const option = document.createElement("div");
+            option.setAttribute("role", "option");
+            option.textContent = value;
+            option.addEventListener("click", () => {
+              button.textContent = value;
+              button.dataset.selected = value;
+              menu.remove();
+            });
+            menu.append(option);
+          });
+          button.after(menu);
+        });
+      });
+
+      const setupReactSelect = (input, values) => {
+        input.addEventListener("click", () => {
+          document.querySelectorAll(".options").forEach((menu) => menu.remove());
+          const menu = document.createElement("div");
+          menu.className = "options";
+          menu.setAttribute("role", "listbox");
+          values.forEach((value) => {
+            const option = document.createElement("div");
+            option.setAttribute("role", "option");
+            option.textContent = value;
+            option.addEventListener("click", () => {
+              input.dataset.selected = value;
+              input.value = "";
+              menu.remove();
+            });
+            menu.append(option);
+          });
+          input.closest(".react-shell").after(menu);
+        });
+      };
+      setupReactSelect(document.querySelector("#react-select-2-input"), ["Yes", "No"]);
+      setupReactSelect(document.querySelector("#react-select-3-input"), ["LinkedIn", "Indeed", "Referral", "Other"]);
+      document.querySelector("#northstarz input[type=file]").addEventListener("change", (event) => {
+        document.querySelector("#northstarz .upload-result").textContent = event.target.files?.[0]?.name || "";
+      });
+    </script>
+  </body>
+</html>

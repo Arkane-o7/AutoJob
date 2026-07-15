@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ApplyOS — Profile</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <a class="brand" href="#top"><span class="mark">A.</span><span>APPLYOS</span></a>
+      <div class="local-note"><span></span> SAVED ONLY IN THIS BROWSER</div>
+    </header>
+
+    <main id="top">
+      <aside>
+        <p class="kicker">YOUR APPLICATION DOSSIER</p>
+        <h1>Tell it once.<br><em>Review every time.</em></h1>
+        <p>ApplyOS uses these details to fill forms you open. Nothing is uploaded to an ApplyOS server, and the extension never clicks Submit.</p>
+        <div class="profile-manager">
+          <label><span>ACTIVE PROFILE</span><select id="profile-select"></select></label>
+          <button id="new-profile" type="button">+ New profile</button>
+          <button id="open-onboarding" type="button">Run setup again</button>
+        </div>
+        <nav aria-label="Profile sections">
+          <a href="#identity">01 — Identity</a>
+          <a href="#links">02 — Links & location</a>
+          <a href="#employment">03 — Employment</a>
+          <a href="#education">04 — Education</a>
+          <a href="#preferences">05 — Preferences</a>
+          <a href="#resume">06 — Resume</a>
+          <a href="#answers">07 — Custom answers</a>
+          <a href="#local-ai">08 — Local AI</a>
+        </nav>
+      </aside>
+
+      <form id="profile-form">
+        <section id="identity">
+          <div class="section-number">01</div>
+          <div class="section-heading"><p>THE ESSENTIALS</p><h2>Identity & contact</h2></div>
+          <div class="grid">
+            <label><span>First name *</span><input name="firstName" autocomplete="given-name" required></label>
+            <label><span>Last name *</span><input name="lastName" autocomplete="family-name" required></label>
+            <label><span>Middle name</span><input name="middleName" autocomplete="additional-name"></label>
+            <label><span>Preferred name</span><input name="preferredName"></label>
+            <label><span>Email *</span><input name="email" type="email" autocomplete="email" required></label>
+            <label><span>Phone country code</span><input name="phoneCountryCode" inputmode="tel" placeholder="e.g. +91"></label>
+            <label class="wide"><span>Phone *</span><input name="phone" type="tel" autocomplete="tel" required></label>
+          </div>
+        </section>
+
+        <section id="links">
+          <div class="section-number">02</div>
+          <div class="section-heading"><p>WHERE TO FIND YOU</p><h2>Links & location</h2></div>
+          <div class="grid">
+            <label class="wide"><span>Street address</span><input name="address" autocomplete="street-address"></label>
+            <label><span>Address line 2</span><input name="address2" autocomplete="address-line2"></label>
+            <label><span>City</span><input name="city" autocomplete="address-level2"></label>
+            <label><span>State / province</span><input name="state" autocomplete="address-level1"></label>
+            <label><span>Postal code</span><input name="postalCode" autocomplete="postal-code"></label>
+            <label><span>Country</span><input name="country" autocomplete="country-name"></label>
+            <label><span>Current location label</span><input name="currentLocation" placeholder="e.g. Bengaluru, Karnataka, India"></label>
+            <label><span>LinkedIn URL</span><input name="linkedin" type="url" placeholder="https://linkedin.com/in/…"></label>
+            <label><span>GitHub URL</span><input name="github" type="url" placeholder="https://github.com/…"></label>
+            <label class="wide"><span>Portfolio / website</span><input name="portfolio" type="url"></label>
+          </div>
+        </section>
+
+        <section id="employment">
+          <div class="section-number">03</div>
+          <div class="section-heading"><p>MOST RECENT ROLE</p><h2>Employment</h2></div>
+          <p class="section-copy">This release fills the first employment-history block with your most recent role.</p>
+          <div class="grid">
+            <label><span>Company</span><input name="currentCompany" autocomplete="organization"></label>
+            <label><span>Job title</span><input name="currentTitle" autocomplete="organization-title"></label>
+            <label><span>Start month</span><input name="employmentStartDate" type="month"></label>
+            <label><span>End month</span><input name="employmentEndDate" type="month"></label>
+            <label class="wide"><span>Responsibilities / role description</span><textarea name="jobDescription" placeholder="A concise description of your work and impact"></textarea></label>
+          </div>
+        </section>
+
+        <section id="education">
+          <div class="section-number">04</div>
+          <div class="section-heading"><p>HIGHEST OR MOST RECENT</p><h2>Education</h2></div>
+          <p class="section-copy">Used for the first education block on applications that request academic history.</p>
+          <div class="grid">
+            <label class="wide"><span>School / university</span><input name="school"></label>
+            <label><span>Degree</span><input name="degree" placeholder="e.g. Bachelor of Technology"></label>
+            <label><span>Field of study</span><input name="fieldOfStudy" placeholder="e.g. Computer Science"></label>
+            <label><span>Graduation month</span><input name="graduationDate" type="month"></label>
+            <label><span>GPA / grade</span><input name="gpa"></label>
+          </div>
+        </section>
+
+        <section id="preferences">
+          <div class="section-number">05</div>
+          <div class="section-heading"><p>YOUR DEFAULT ANSWERS</p><h2>Work preferences</h2></div>
+          <div class="grid">
+            <label><span>Years of experience</span><input name="yearsExperience" inputmode="numeric"></label>
+            <label><span>Desired start date</span><input name="desiredStartDate" type="date"></label>
+            <label><span>Current salary</span><input name="currentSalary" placeholder="Annual or as normally requested"></label>
+            <label><span>Current monthly salary</span><input name="currentMonthlySalary" placeholder="For forms that explicitly ask monthly"></label>
+            <label><span>Desired salary</span><input name="desiredSalary" placeholder="e.g. 2400000"></label>
+            <label><span>Salary currency</span><input name="salaryCurrency" placeholder="e.g. INR"></label>
+            <label><span>Notice period / availability</span><input name="noticePeriod" placeholder="e.g. 30 days"></label>
+            <label><span>Remote preference</span><select name="remotePreference"><option value="">Choose…</option><option>Remote</option><option>Hybrid</option><option>On-site</option><option>Flexible</option></select></label>
+            <label><span>Authorized to work?</span><select name="workAuthorization"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label><span>Require visa sponsorship?</span><select name="visaSponsorship"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label class="wide"><span>Employment eligibility option</span><input name="employmentEligibility" list="eligibility-options" placeholder="Use the exact option you normally select"></label>
+            <datalist id="eligibility-options"><option value="I am authorized to work permanently in the country."><option value="I have an active temporary work permit."><option value="I require sponsorship before I am able to work."></datalist>
+            <label><span>Willing to relocate?</span><select name="willingToRelocate"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label><span>Willing to work onsite?</span><select name="willingToWorkOnsite"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label><span>Willing to travel?</span><select name="travelWillingness"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label><span>Security clearance</span><input name="securityClearance" placeholder="e.g. None or Secret"></label>
+            <label><span>Previously worked for employer?</span><select name="previouslyWorkedForCompany"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label><span>Know / related to an employee?</span><select name="knowsEmployeeAtCompany"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label class="wide"><span>Prior employer details, if Yes</span><textarea name="priorCompanyDetails" placeholder="Company, subsidiary, role, and dates"></textarea></label>
+            <label class="wide"><span>Employee connection details, if Yes</span><textarea name="employeeConnectionDetails" placeholder="Name and relationship"></textarea></label>
+            <label><span>How did you hear about the job?</span><input name="jobSource" placeholder="e.g. LinkedIn"></label>
+            <label class="wide"><span>General cover letter / introduction</span><textarea name="coverLetter" placeholder="Use a general version here; tailor it for important applications."></textarea></label>
+          </div>
+          <div class="safety-note"><strong>Intentionally manual</strong><span>ApplyOS does not autofill demographic, disability, veteran, government-ID, birth-date, assessment, CAPTCHA, or consent fields.</span></div>
+        </section>
+
+        <section id="resume">
+          <div class="section-number">06</div>
+          <div class="section-heading"><p>THE DOCUMENT</p><h2>Your resume</h2></div>
+          <label class="file-drop" for="resume-file">
+            <input id="resume-file" type="file" accept=".pdf,.doc,.docx,application/pdf">
+            <span class="file-icon">↥</span>
+            <strong id="file-title">Choose a PDF or DOCX</strong>
+            <small id="file-detail">Best-effort attachment on supported forms · 8 MB maximum</small>
+          </label>
+          <button id="remove-resume" type="button" class="remove hidden">Remove saved resume</button>
+          <label class="resume-text"><span>Resume text for matching & Smart Tools</span><textarea name="resumeText" rows="12" placeholder="Paste your resume text here. ApplyOS never sends it to an ApplyOS server."></textarea></label>
+        </section>
+
+        <section id="answers">
+          <div class="section-number">07</div>
+          <div class="section-heading"><p>FOR REPEATED QUESTIONS</p><h2>Custom answers</h2></div>
+          <p class="section-copy">Add phrases from questions you see often—including skill-specific experience such as “years handling 100 TB of data.” Answers can be text, numbers, or the exact label of a dropdown option.</p>
+          <div id="custom-answers"></div>
+          <button id="add-answer" type="button" class="add-answer">+ Add a question and answer</button>
+        </section>
+
+        <section id="local-ai">
+          <div class="section-number">08</div>
+          <div class="section-heading"><p>ADVANCED · ENTIRELY OPTIONAL</p><h2>Local AI enhancement</h2></div>
+          <div class="smart-ready"><span>✓</span><div><strong>Smart Tools are already ready.</strong><p>Cover-letter drafts, resume focus plans, keyword matching, and answer learning work without Ollama or any model download.</p></div></div>
+          <details class="advanced-ai">
+            <summary><span>Technical users</span><strong>Configure an existing Ollama installation</strong><i>＋</i></summary>
+            <div class="advanced-ai-body">
+              <p>This can enhance drafts with a generative model running on your computer. ApplyOS does not install Ollama, download models, or require this feature.</p>
+              <div class="grid">
+                <label class="wide"><span>Ollama endpoint</span><input id="ai-endpoint" value="http://localhost:11434"></label>
+                <label><span>Installed chat model</span><input id="ai-model" value="llama3.2"></label>
+                <label><span>Installed embedding model</span><input id="embedding-model" value="nomic-embed-text"></label>
+              </div>
+              <div class="ai-controls"><button id="test-ai" type="button">Detect existing setup →</button><span id="ai-result">Optional · not checked</span></div>
+              <p class="advanced-warning">If browser security or Ollama permissions block the connection, Smart Tools continue working normally.</p>
+            </div>
+          </details>
+        </section>
+
+        <div class="save-bar">
+          <div><strong id="save-status">Unsaved changes</strong><span>Review autofilled forms before submitting.</span></div>
+          <button type="submit">Save profile <span>→</span></button>
+        </div>
+      </form>
+    </main>
+    <script src="shared/constants.js"></script>
+    <script src="shared/matching.js"></script>
+    <script src="shared/followup.js"></script>
+    <script src="shared/profiles.js"></script>
+    <script src="shared/ai.js"></script>
+    <script src="shared/graph.js"></script>
+    <script src="shared/storage.js"></script>
+    <script src="options.js"></script>
+  </body>
+</html>

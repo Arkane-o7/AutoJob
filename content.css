@@ -1,0 +1,24 @@
+.applykit-filled {
+  outline: 2px solid #b8f34a !important;
+  outline-offset: 2px !important;
+  transition: outline-color 220ms ease !important;
+}
+
+.applykit-file-filled {
+  box-shadow: 0 0 0 3px rgba(184, 243, 74, 0.35) !important;
+}
+
+.applykit-toast {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  right: 20px !important;
+  bottom: 20px !important;
+  max-width: 360px !important;
+  padding: 14px 16px !important;
+  border: 1px solid #181915 !important;
+  background: #181915 !important;
+  color: #f3f0e6 !important;
+  box-shadow: 5px 5px 0 #b8f34a !important;
+  font: 700 12px/1.45 "Avenir Next", sans-serif !important;
+  letter-spacing: 0 !important;
+}

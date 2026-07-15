@@ -1,0 +1,27 @@
+{
+  "manifest_version": 3,
+  "name": "ApplyOS",
+  "version": "0.6.3",
+  "description": "A private, review-first job application CRM and autofill assistant.",
+  "permissions": ["storage", "unlimitedStorage", "activeTab", "alarms"],
+  "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "ApplyOS",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["shared/constants.js", "shared/matching.js", "shared/offlyn-core.js", "shared/profiles.js", "shared/ai.js", "shared/graph.js", "shared/agent.js", "shared/ats-compat.js", "shared/workday.js", "capture.js", "content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true,
+      "match_origin_as_fallback": true
+    }
+  ]
+}

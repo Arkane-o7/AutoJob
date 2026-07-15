@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ApplyOS Dashboard</title>
+    <link rel="stylesheet" href="dashboard.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
+      <div class="header-actions">
+        <span class="privacy">LOCAL DATA</span>
+        <select id="active-profile" aria-label="Active profile"></select>
+        <button id="profile" class="outline" type="button">Profile & answers</button>
+      </div>
+    </header>
+
+    <main>
+      <section class="intro">
+        <div><p class="eyebrow">APPLICATION COMMAND CENTER</p><h1>Turn applications<br>into a <em>system.</em></h1></div>
+        <div class="metric-grid">
+          <article><strong id="metric-total">0</strong><span>ACTIVE</span></article>
+          <article class="acid"><strong id="metric-due">0</strong><span>FOLLOW-UPS DUE</span></article>
+          <article><strong id="metric-interviews">0</strong><span>INTERVIEWS</span></article>
+          <article><strong id="metric-memory">0</strong><span>LEARNED ANSWERS</span></article>
+        </div>
+      </section>
+
+      <section class="due-strip">
+        <div><p class="eyebrow">NEXT ACTIONS</p><h2>Upcoming deadlines & follow-ups</h2></div>
+        <div id="upcoming" class="upcoming"></div>
+      </section>
+
+      <section class="workspace">
+        <div class="toolbar">
+          <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search company, role, notes…"></label>
+          <select id="filter-status" aria-label="Filter by status"><option value="">All statuses</option></select>
+          <select id="filter-source" aria-label="Filter by source"><option value="">All sources</option></select>
+          <select id="filter-priority" aria-label="Filter by priority"><option value="">All priorities</option><option value="high">High priority</option><option value="medium">Medium priority</option><option value="low">Low priority</option></select>
+          <div class="view-toggle" aria-label="Choose dashboard view"><button class="active" data-view="board" type="button">Board</button><button data-view="list" type="button">List</button></div>
+        </div>
+
+        <div id="empty" class="empty hidden"><span>A.</span><h2>Your pipeline starts here.</h2><p>Open a job page and choose “Save to ApplyOS,” or load mock records to explore the dashboard.</p><button id="mock" class="primary" type="button">Load sample data</button></div>
+        <div id="board" class="board"></div>
+        <div id="list" class="list hidden"></div>
+      </section>
+    </main>
+
+    <aside id="detail" class="detail" aria-hidden="true">
+      <button id="close-detail" class="close" type="button" aria-label="Close details">×</button>
+      <p class="eyebrow">APPLICATION RECORD</p>
+      <form id="detail-form">
+        <input id="detail-id" type="hidden">
+        <label class="hero-field"><span>ROLE</span><input id="detail-role" required></label>
+        <label class="hero-field company-field"><span>COMPANY</span><input id="detail-company" required></label>
+        <div class="detail-grid">
+          <label><span>Status</span><select id="detail-status"></select></label>
+          <label><span>Priority</span><select id="detail-priority"><option>low</option><option>medium</option><option>high</option></select></label>
+          <label><span>Deadline</span><input id="detail-deadline" type="date"></label>
+          <label><span>Next follow-up</span><input id="detail-follow-up" type="date"></label>
+        </div>
+        <label><span>Notes</span><textarea id="detail-notes" placeholder="Contacts, context, interview notes…"></textarea></label>
+        <section class="match-panel"><div><span>RESUME MATCH</span><strong id="detail-score">0%</strong></div><div class="match-bar"><i id="detail-bar"></i></div><p id="detail-skills"></p><p id="detail-missing"></p></section>
+        <div class="detail-actions"><button class="primary" type="submit">Save changes</button><button id="detail-applied" class="outline" type="button">Mark as applied</button><a id="detail-url" class="outline link-button" target="_blank" rel="noreferrer">Open job ↗</a></div>
+      </form>
+      <section class="draft-panel">
+        <div><p class="eyebrow">MANUAL FOLLOW-UP</p><h2>Email draft</h2></div>
+        <select id="draft-type" aria-label="Draft type"><option value="follow_up">First follow-up</option><option value="final_follow_up">Final follow-up</option></select>
+        <button id="generate-draft" class="dark-button" type="button">Generate draft</button>
+        <div id="draft" class="draft hidden"><label><span>Subject</span><input id="draft-subject"></label><label><span>Message</span><textarea id="draft-body"></textarea></label><button id="copy-draft" class="outline" type="button">Copy draft</button><small>ApplyOS never sends this. Review and send it yourself.</small></div>
+      </section>
+      <section class="ai-studio">
+        <div class="studio-head"><div><p class="eyebrow">SMART DRAFT STUDIO</p><h2>Tailor with evidence.</h2></div><span id="studio-status">READY OFFLINE</span></div>
+        <p class="studio-copy">Works without accounts, models, or setup. Material is never submitted or sent; review every line.</p>
+        <div class="studio-actions"><button id="ai-cover-letter" type="button">Cover-letter draft</button><button id="ai-tailor-resume" type="button">Resume focus plan</button><button id="ai-keywords" type="button">Keyword gap</button></div>
+        <div id="ai-output-wrap" class="ai-output hidden"><div><strong id="ai-output-title">Smart draft</strong><button id="copy-ai-output" type="button">Copy</button></div><textarea id="ai-output" aria-label="Generated ApplyOS draft"></textarea><small>Review required · no facts should be added unless they are true.</small></div>
+      </section>
+    </aside>
+    <div id="scrim" class="scrim hidden"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+    <script src="shared/constants.js"></script>
+    <script src="shared/matching.js"></script>
+    <script src="shared/followup.js"></script>
+    <script src="shared/profiles.js"></script>
+    <script src="shared/ai.js"></script>
+    <script src="shared/graph.js"></script>
+    <script src="shared/storage.js"></script>
+    <script src="dashboard.js"></script>
+  </body>
+</html>

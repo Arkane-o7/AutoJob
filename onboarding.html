@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Welcome to ApplyOS</title>
+    <link rel="stylesheet" href="onboarding.css">
+  </head>
+  <body>
+    <header class="masthead">
+      <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
+      <div class="privacy"><span></span> PRIVATE BY DEFAULT</div>
+    </header>
+
+    <main>
+      <aside class="rail">
+        <p class="eyebrow">SYSTEM SETUP</p>
+        <h1>One profile.<br><em>Less repetition.</em></h1>
+        <p class="promise">Your profile, applications, and AI requests stay on this device. ApplyOS fills; you review and submit.</p>
+        <ol id="steps">
+          <li class="active" data-step="0"><span>01</span> Your identity</li>
+          <li data-step="1"><span>02</span> Career context</li>
+          <li data-step="2"><span>03</span> Defaults</li>
+          <li data-step="3"><span>04</span> Smart tools</li>
+          <li data-step="4"><span>05</span> Ready</li>
+        </ol>
+      </aside>
+
+      <form id="onboarding-form" class="stage">
+        <section class="panel active" data-panel="0">
+          <p class="eyebrow">01 / IDENTITY</p>
+          <h2>Start with the details forms ask every time.</h2>
+          <div class="grid">
+            <label><span>First name *</span><input name="firstName" required autocomplete="given-name"></label>
+            <label><span>Last name *</span><input name="lastName" required autocomplete="family-name"></label>
+            <label><span>Email *</span><input name="email" required type="email" autocomplete="email"></label>
+            <label><span>Phone *</span><input name="phone" required type="tel" autocomplete="tel"></label>
+            <label class="wide"><span>Current location</span><input name="currentLocation" placeholder="Hyderabad, Telangana, India"></label>
+            <label><span>LinkedIn</span><input name="linkedin" type="url" placeholder="https://linkedin.com/in/…"></label>
+            <label><span>GitHub / portfolio</span><input name="github" type="url" placeholder="https://github.com/…"></label>
+          </div>
+        </section>
+
+        <section class="panel" data-panel="1">
+          <p class="eyebrow">02 / CAREER CONTEXT</p>
+          <h2>Give matching and tailoring real evidence.</h2>
+          <div class="grid">
+            <label><span>Current / recent company</span><input name="currentCompany"></label>
+            <label><span>Current / recent title</span><input name="currentTitle"></label>
+            <label class="wide"><span>Experience and achievements</span><textarea name="jobDescription" rows="5" placeholder="Describe your responsibilities, projects, outcomes, and technologies. Keep every claim factual."></textarea></label>
+            <label><span>School / university</span><input name="school"></label>
+            <label><span>Degree & field</span><input name="degree" placeholder="B.Tech — Computer Science"></label>
+            <label class="wide"><span>Resume text</span><textarea name="resumeText" rows="9" placeholder="Paste the text of your resume. Local AI uses this for matching, tailoring, and cover letters."></textarea></label>
+          </div>
+          <p class="hint">You can attach the actual PDF or DOCX later in Profile & Answers.</p>
+        </section>
+
+        <section class="panel" data-panel="2">
+          <p class="eyebrow">03 / REUSABLE DEFAULTS</p>
+          <h2>Set answers that should never be guessed.</h2>
+          <div class="grid">
+            <label><span>Work authorization</span><select name="workAuthorization"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label><span>Need sponsorship</span><select name="visaSponsorship"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label><span>Notice period</span><input name="noticePeriod" placeholder="30 days"></label>
+            <label><span>Desired salary</span><input name="desiredSalary" placeholder="Your preferred format"></label>
+            <label><span>Remote preference</span><select name="remotePreference"><option value="">Choose…</option><option>Remote</option><option>Hybrid</option><option>On-site</option><option>Flexible</option></select></label>
+            <label><span>Willing to relocate</span><select name="willingToRelocate"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
+            <label class="wide"><span>Tell us about yourself</span><textarea name="coverLetter" rows="5" placeholder="A factual reusable introduction. ApplyOS can tailor it locally for each role."></textarea></label>
+          </div>
+          <div class="guardrail"><strong>Always manual</strong><span>Demographics, disability, veteran status, government IDs, consent, CAPTCHAs, assessments, and submission.</span></div>
+        </section>
+
+        <section class="panel" data-panel="3">
+          <p class="eyebrow">04 / READY OUT OF THE BOX</p>
+          <h2>No model downloads.<br>No terminal commands.</h2>
+          <p class="lede">ApplyOS Smart Tools work immediately using your profile and the job description. Everything stays in the browser.</p>
+          <div class="smart-grid">
+            <article><span>01</span><strong>Cover-letter draft</strong><p>Creates a factual starting point from your stored experience and matched skills.</p></article>
+            <article><span>02</span><strong>Resume focus plan</strong><p>Shows what to emphasize, which keywords overlap, and what must be verified.</p></article>
+            <article><span>03</span><strong>Keyword gap</strong><p>Compares the job with your profile without uploading either one.</p></article>
+            <article><span>04</span><strong>Answer learning</strong><p>Remembers corrections and reuses them on similar forms.</p></article>
+          </div>
+          <div class="advanced-note"><div><strong>Want generative local AI?</strong><span>Ollama integration remains available in Advanced settings for technical users. It is never required.</span></div><button id="open-ai-settings" type="button">Advanced settings ↗</button></div>
+        </section>
+
+        <section class="panel final" data-panel="4">
+          <div class="finish-mark">A.</div>
+          <p class="eyebrow">SYSTEM READY</p>
+          <h2>Your application workspace is ready.</h2>
+          <p id="completion-copy">Open a job page, save it, autofill, review every answer, and submit it yourself.</p>
+          <div class="finish-actions">
+            <button id="open-dashboard" type="button">Open dashboard <span>↗</span></button>
+            <button id="open-profile" class="outline" type="button">Edit full profile</button>
+          </div>
+        </section>
+
+        <footer class="controls">
+          <button id="back" class="back" type="button" disabled>← Back</button>
+          <div class="progress"><span id="progress"></span></div>
+          <button id="next" type="button">Continue →</button>
+        </footer>
+      </form>
+    </main>
+    <script src="shared/constants.js"></script>
+    <script src="shared/matching.js"></script>
+    <script src="shared/followup.js"></script>
+    <script src="shared/profiles.js"></script>
+    <script src="shared/storage.js"></script>
+    <script src="onboarding.js"></script>
+  </body>
+</html>

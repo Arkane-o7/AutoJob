@@ -1,0 +1,199 @@
+const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "result", "settings", "dashboard", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
+let activeTab = null;
+let profile = {};
+let detectedJob = null;
+let application = null;
+let aiConfig = null;
+
+function hasCoreProfile(value) {
+  return Boolean(value?.firstName && value?.lastName && value?.email && value?.phone);
+}
+
+function say(message, tone = "") {
+  ui.result.className = `result ${tone}`.trim();
+  ui.result.textContent = message;
+}
+
+function dateLabel(value) {
+  if (!value) return "Not scheduled";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
+function populateStatuses() {
+  ui.status.replaceChildren(...ApplyOS.APPLICATION_STATUSES.map((status) => {
+    const option = document.createElement("option");
+    option.value = status;
+    option.textContent = ApplyOS.STATUS_META[status].label;
+    return option;
+  }));
+}
+
+function renderRecord() {
+  ui["record-controls"].classList.toggle("hidden", !application);
+  if (!application) return;
+  ui.status.value = application.status;
+  ui["follow-up"].textContent = dateLabel(application.follow_up_date);
+  ui.save.firstElementChild.textContent = "Update saved job";
+  ui.applied.disabled = !hasCoreProfile(profile) || ["applied", "follow_up_due"].includes(application.status);
+}
+
+function renderDetection(job) {
+  detectedJob = job;
+  ui.role.value = job.role || "";
+  ui.company.value = job.company || "";
+  ui["site-label"].textContent = `${String(job.platform || "career page").replaceAll("_", " ")} · ${job.source}`;
+  const match = ApplyOS.calculateMatch(job.description, profile);
+  ui.score.querySelector("strong").textContent = job.description ? `${match.score}%` : "—";
+  const confidence = Math.round((job.confidence?.overall || 0) * 100);
+  const warnings = job.warnings?.join(" · ");
+  ui.confidence.textContent = warnings || `${confidence}% extraction confidence. Review the editable title and company before saving.`;
+  ui.confidence.classList.toggle("low", confidence < 70 || Boolean(warnings));
+  ui.save.disabled = false;
+  ui.fill.disabled = !hasCoreProfile(profile);
+  ui.applied.disabled = !hasCoreProfile(profile);
+}
+
+function fallbackJobFromTab(tab, reason) {
+  let source = "unknown";
+  try { source = new URL(tab.url).hostname.replace(/^www\./, ""); } catch { /* Keep unknown source. */ }
+  const rawTitle = String(tab.title || "").trim();
+  const genericTitle = /^(?:northstarz(?:\.ai)?|linkedin|workday|greenhouse|lever|ashby|wellfound|job application|apply)$/i.test(rawTitle);
+  return {
+    company: "",
+    role: genericTitle ? "" : rawTitle,
+    url: ApplyOS.canonicalizeUrl(tab.url),
+    source,
+    platform: source.includes("northstarz") ? "northstarz" : "career_page",
+    description: "",
+    location: "",
+    deadline: null,
+    skills: [],
+    keywords: [],
+    confidence: { company: 0, role: genericTitle ? 0 : 0.35, description: 0, location: 0, deadline: 0, overall: 0 },
+    warnings: [reason || "Automatic page detection was unavailable", "Enter or review the company and role before saving"],
+    captured_at: ApplyOS.nowISO()
+  };
+}
+
+async function restoreSavedRecord(job) {
+  application = await ApplyOS.getApplicationByUrl(job.url);
+  if (application) {
+    ui.role.value = application.role;
+    ui.company.value = application.company;
+    ui.score.querySelector("strong").textContent = `${application.match_score || 0}%`;
+  }
+  renderRecord();
+}
+
+function currentJob() {
+  return { ...detectedJob, company: ui.company.value.trim(), role: ui.role.value.trim() };
+}
+
+async function saveCurrent() {
+  if (!ui.company.value.trim() || !ui.role.value.trim()) throw new Error("Review and enter both the company and role before saving.");
+  application = await ApplyOS.upsertApplication(currentJob(), profile);
+  renderRecord();
+  return application;
+}
+
+async function initialize() {
+  populateStatuses();
+  const [profilesIndex, activeProfile, config, tabs] = await Promise.all([
+    ApplyOS.getProfilesIndex(), ApplyOS.getActiveProfile(), ApplyOS.getAIConfig(), chrome.tabs.query({ active: true, currentWindow: true })
+  ]);
+  profile = activeProfile; aiConfig = config; [activeTab] = tabs;
+  ui["profile-select"].replaceChildren(...profilesIndex.profiles.map((meta) => {
+    const option = document.createElement("option"); option.value = meta.id; option.textContent = meta.targetRole ? `${meta.name} · ${meta.targetRole}` : meta.name; return option;
+  }));
+  ui["profile-select"].value = profilesIndex.activeId;
+  ui["ai-status"].textContent = aiConfig.enabled ? "AI + SMART" : "SMART READY";
+  ui["ai-status"].classList.add("on");
+  ui.agent.classList.toggle("hidden", !aiConfig.enabled);
+  ui.agent.disabled = !aiConfig.enabled || !hasCoreProfile(profile);
+  await ApplyOS.ensureState();
+  if (!activeTab?.id || !/^https?:/.test(activeTab.url || "")) {
+    ui.confidence.textContent = "Open a job posting or application page to capture it.";
+    return;
+  }
+  ui.fill.disabled = !hasCoreProfile(profile);
+  try {
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_DETECT_JOB" });
+    if (!response?.ok) throw new Error(response?.error || "Page detection failed");
+    renderDetection(response.job);
+    await restoreSavedRecord(response.job);
+    if (!hasCoreProfile(profile)) say("Set up your profile before autofilling. You can still save this job.");
+  } catch (error) {
+    const reason = error.message.includes("Receiving end does not exist") || error.message === "Page detection failed"
+      ? "This tab needs one refresh for automatic detection"
+      : "Automatic page detection was unavailable";
+    const fallback = fallbackJobFromTab(activeTab, reason);
+    renderDetection(fallback);
+    await restoreSavedRecord(fallback);
+    say("Autofill is still available. Refresh this job tab once to restore automatic company and role detection.");
+  }
+}
+
+ui.save.addEventListener("click", async () => {
+  ui.save.disabled = true;
+  try { await saveCurrent(); say("Saved to your ApplyOS dashboard.", "success"); }
+  catch (error) { say(error.message, "error"); }
+  finally { ui.save.disabled = false; }
+});
+
+ui.agent.addEventListener("click", async () => {
+  if (!aiConfig?.enabled) { say("Connect Ollama in Setup before using the local-AI pass."); return; }
+  ui.agent.disabled = true; say("Local AI is reviewing empty, non-sensitive fields…");
+  try {
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_AGENT_ASSIST" });
+    if (!response?.ok) throw new Error(response?.error || "Local AI pass failed.");
+    const report = response.report;
+    say(`AI filled ${report.filled} field${report.filled === 1 ? "" : "s"}; ${report.skipped} left for you. Review every answer before continuing.`, report.filled ? "success" : "");
+  } catch (error) { say(error.message, "error"); }
+  finally { ui.agent.disabled = false; }
+});
+
+ui.fill.addEventListener("click", async () => {
+  if (!hasCoreProfile(profile)) { chrome.runtime.openOptionsPage(); return; }
+  say("Reading the visible form…");
+  ui.fill.disabled = true;
+  try {
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYKIT_FILL" });
+    if (!response?.ok) throw new Error(response?.error || "This page could not be filled.");
+    const { filled, attached, scanned, unmatchedRequired = 0, resumeStatus = "not-found", site = "This form" } = response.report;
+    say(resumeStatus === "missing"
+      ? `${site}: found the resume upload field, but no resume is saved. Add one in Profile & answer memory.`
+      : resumeStatus === "failed"
+        ? `${site}: found the resume upload field but could not attach the saved file. Attach it manually and review the form.`
+        : filled || attached
+      ? `${site}: filled ${filled} field${filled === 1 ? "" : "s"}${attached ? ` and attached ${attached} resume` : ""}. Review every answer before submitting.`
+      : `No confident matches among ${scanned} visible fields. ${unmatchedRequired} required field${unmatchedRequired === 1 ? "" : "s"} still need review.`, filled || attached ? "success" : resumeStatus === "failed" || resumeStatus === "missing" ? "error" : "");
+  } catch (error) { say(error.message, "error"); }
+  finally { ui.fill.disabled = false; }
+});
+
+ui.applied.addEventListener("click", async () => {
+  ui.applied.disabled = true;
+  try {
+    if (!application) await saveCurrent();
+    application = await ApplyOS.markApplicationApplied(application.id);
+    renderRecord();
+    chrome.runtime.sendMessage({ type: "APPLYOS_REFRESH_DUE" }).catch(() => {});
+    say(`Marked applied. First follow-up: ${dateLabel(application.follow_up_date)}.`, "success");
+  } catch (error) { say(error.message, "error"); ui.applied.disabled = false; }
+});
+
+ui.status.addEventListener("change", async () => {
+  if (!application) return;
+  application = ui.status.value === "applied" && !application.applied_at
+    ? await ApplyOS.markApplicationApplied(application.id)
+    : await ApplyOS.updateApplication(application.id, { status: ui.status.value });
+  renderRecord();
+  say("Status updated.", "success");
+});
+
+ui.settings.addEventListener("click", () => chrome.runtime.openOptionsPage());
+ui.dashboard.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
+ui.onboarding.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") }));
+ui["profile-select"].addEventListener("change", async () => { await ApplyOS.setActiveProfile(ui["profile-select"].value); window.location.reload(); });
+initialize().catch((error) => say(error.message, "error"));

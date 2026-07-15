@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ApplyKit demo application</title>
+    <style>
+      body { max-width: 720px; margin: 50px auto; padding: 0 20px 80px; font: 16px/1.5 sans-serif; color: #222; }
+      form { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      label, fieldset { display: grid; gap: 7px; }
+      .wide, fieldset { grid-column: 1 / -1; }
+      input, select, textarea { padding: 11px; font: inherit; }
+      textarea { min-height: 100px; }
+      fieldset label { display: inline-flex; margin-right: 18px; }
+      button { padding: 13px; }
+    </style>
+  </head>
+  <body>
+    <h1>Example job application</h1>
+    <p>Serve this folder over HTTP, open this page in Chrome, and use ApplyKit to test your saved profile.</p>
+    <form>
+      <label>First name <input name="first_name" autocomplete="given-name"></label>
+      <label>Last name <input name="last_name" autocomplete="family-name"></label>
+      <label>Email address <input name="candidate_email" type="email"></label>
+      <label>Phone number <input name="mobile_phone" type="tel"></label>
+      <label>Current job title <input name="job_title"></label>
+      <label>LinkedIn profile <input name="linkedin_url" type="url"></label>
+      <label>City <input name="city"></label>
+      <label>Country <select name="country"><option value="">Select…</option><option>India</option><option>United States</option><option>United Kingdom</option><option>Canada</option></select></label>
+      <fieldset><legend>Are you legally authorized to work in this country?</legend><label><input type="radio" name="authorized" value="yes"> Yes</label><label><input type="radio" name="authorized" value="no"> No</label></fieldset>
+      <fieldset><legend>Will you require visa sponsorship now or in the future?</legend><label><input type="radio" name="sponsorship" value="yes"> Yes</label><label><input type="radio" name="sponsorship" value="no"> No</label></fieldset>
+      <label class="wide">Upload resume <input name="resume" type="file" accept=".pdf,.doc,.docx"></label>
+      <label class="wide">Why do you want to work here? <textarea name="motivation"></textarea></label>
+      <button class="wide" type="button">Demo submit button (does nothing)</button>
+    </form>
+  </body>
+</html>

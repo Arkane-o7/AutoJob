@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ApplyOS</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
+        <button id="dashboard" class="nav-button" type="button">Dashboard ↗</button>
+      </header>
+
+      <section class="profile-strip">
+        <label><span>ACTIVE PROFILE</span><select id="profile-select"></select></label>
+        <button id="onboarding" type="button">Setup</button>
+        <span id="ai-status" class="ai-status">AI OFF</span>
+      </section>
+
+      <section class="page-state">
+        <div>
+          <p class="eyebrow" id="site-label">READING THIS PAGE</p>
+          <label class="editable-title"><span>Role</span><input id="role" placeholder="Job title"></label>
+          <label class="editable-company"><span>Company</span><input id="company" placeholder="Company"></label>
+        </div>
+        <div class="score" id="score" aria-label="Resume match score"><strong>—</strong><span>MATCH</span></div>
+      </section>
+
+      <div id="confidence" class="confidence">Waiting for page details…</div>
+
+      <section id="record-controls" class="record-controls hidden">
+        <label><span>Status</span><select id="status"></select></label>
+        <div><span>Next follow-up</span><strong id="follow-up">Not scheduled</strong></div>
+      </section>
+
+      <section class="actions">
+        <button id="save" class="primary" type="button" disabled><span>Save to ApplyOS</span><span>＋</span></button>
+        <button id="fill" class="secondary" type="button" disabled><span>Autofill application</span><span>↗</span></button>
+        <button id="agent" class="secondary ai-action hidden" type="button" disabled><span>Optional AI enhancement</span><span>✦</span></button>
+        <button id="applied" class="secondary dark" type="button" disabled><span>Mark as applied</span><span>✓</span></button>
+      </section>
+
+      <div id="result" class="result" role="status" aria-live="polite"></div>
+
+      <footer>
+        <button id="settings" class="text-button" type="button">Profile & answer memory</button>
+        <span>Review first · never auto-submits</span>
+      </footer>
+    </main>
+    <script src="shared/constants.js"></script>
+    <script src="shared/matching.js"></script>
+    <script src="shared/followup.js"></script>
+    <script src="shared/profiles.js"></script>
+    <script src="shared/ai.js"></script>
+    <script src="shared/storage.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

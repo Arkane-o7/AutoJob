@@ -1,0 +1,116 @@
+# ApplyOS
+
+ApplyOS is a private, review-first Chrome extension that combines job capture, application tracking, resume matching, answer memory, follow-up reminders, and the existing autofill engine. It never submits an application or sends a message.
+
+ApplyOS retains its interface and legacy-profile compatibility while incorporating licensed implementation work adapted from [Offlyn Apply](https://github.com/offlyn-ai/offlyn-apply) and [Job App Filler](https://github.com/berellevy/job_app_filler). See `THIRD_PARTY_NOTICES.md` and `licenses/` for attribution and license terms.
+
+## Existing architecture and the upgrade
+
+The original extension was a Manifest V3, plain-JavaScript extension with three surfaces:
+
+- `options.html` stored one legacy `profile` object—including resume data and custom answers—in `chrome.storage.local`.
+- `popup.js` sent `APPLYKIT_FILL` to `content.js` on the active tab.
+- `content.js` detected form fields from labels, ARIA metadata, names, placeholders, nearby text, ATS attributes, custom controls, open shadow roots, and subframes. It filled empty fields, attached the saved resume when allowed, and watched later multi-step fields.
+
+There was no service worker, CRM schema, storage abstraction, job-page extractor, reminder engine, or dashboard. ApplyOS preserves the legacy `profile`, message name, keyboard shortcut, and autofill path, then adds a parallel versioned `applyos_state` store. Migration copies answer and resume metadata into the new store without deleting or rewriting the old profile.
+
+The new modules are:
+
+- `capture.js`: JSON-LD-first job extraction with adapters for LinkedIn, Workday, Greenhouse, Lever, Ashby, Wellfound, and generic career pages. Every extracted field has a confidence score and ambiguous title/company fields remain editable.
+- `shared/offlyn-core.js`: MIT-attributed ATS recognition, semantic field classification, type/value safeguards, and correction matching adapted to the ApplyOS profile schema.
+- `shared/ats-compat.js`: a registry-based compatibility layer for ATS field context, custom dropdown options, and resume dropzones. Greenhouse legacy/React patterns are BSD-attributed adaptations from Job App Filler; the remaining adapters use ApplyOS heuristics.
+- `shared/profiles.js`: multi-profile index, active-profile switching, legacy `profile` mirroring, completeness checks, and resume-text normalization.
+- `shared/storage.js`: safe schema initialization and CRUD for applications, reminders, answer memory, resume versions, and settings.
+- `shared/matching.js`: deterministic, local skill/keyword matching with matched skills, gaps, keywords, experience hints, and answer prompts.
+- `shared/followup.js`: editable 7-day and optional 14-day reminders plus review-only email drafts.
+- `shared/ai.js`: zero-setup Smart Draft fallbacks for cover letters, resume focus plans, and keyword gaps, plus optional localhost-only Ollama enhancement.
+- `shared/graph.js`: answer/correction knowledge graph with reusable-answer retrieval and lightweight reinforcement weights.
+- `shared/agent.js`: local-AI planning with an allowlist of fill/select/check/skip actions and hard blocks for submission, consent, sensitive fields, CAPTCHAs, and assessments.
+- `shared/workday.js`: 1,128-line browser-ready compatibility port of Offlyn's 1,277-line Workday handler. Type-only code and automatic Save-and-Continue navigation are intentionally removed; inline experience Add/Save remains to support multiple editable records.
+- `background.js`: state/profile migration, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. No email integration.
+- `onboarding.*`: five-step profile, resume-text, safety, and local-AI setup flow.
+- `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, date editing, match guidance, follow-up drafts, profile switching, and the local-AI studio.
+- `types/applyos.ts`: TypeScript contracts for captured jobs, CRM records, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
+
+## Install or update locally
+
+1. Run `npm install` and `npm run verify` from this folder.
+2. Open `chrome://extensions` in Chrome and enable **Developer mode**.
+3. If ApplyOS is already loaded, click its reload icon. Otherwise click **Load unpacked** and choose this project folder (or the generated `dist` folder).
+4. Refresh any job pages that were already open so the updated content scripts load.
+5. Pin **ApplyOS** and choose **Setup** once to complete onboarding. Use **Profile & answer memory** for the full editor.
+
+All application, profile, answer, and resume data stays in `chrome.storage.local`. ApplyOS has no backend or analytics. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
+
+## Test the complete workflow
+
+### 1. Save a job
+
+Open a LinkedIn, Workday, Greenhouse, Lever, Ashby, Wellfound, or company job page. Open ApplyOS, review the editable company and role plus the extraction-confidence note, then click **Save to ApplyOS**.
+
+For a deterministic fixture, run:
+
+```sh
+python3 -m http.server 4173
+```
+
+Open `http://localhost:4173/demo/job-posting.html`, refresh it after reloading the extension, and save the detected Atlas Robotics role.
+
+### 2. Autofill an application
+
+Open an application form, choose **Autofill application**, and inspect every highlighted answer. Multi-step assist remains active for later fields. The original **Option/Alt + Shift + A** shortcut still works. ApplyOS never clicks Next, Review, Apply, or Submit.
+
+The fixtures `demo/application.html`, `demo/ats-fixtures.html`, and `demo/site-regressions.html` cover standard controls, Greenhouse legacy Select2 and React-select controls, custom ARIA controls, shadow DOM, Workday compound dates, NorthStarz labels, resume upload, and sensitive-field exclusions. On Workday's **My Experience** step, the specialized handler can manage multiple work/education inline entries. It never clicks the main Save and Continue button.
+
+### ATS coverage
+
+- Dedicated handler: Workday.
+- Compatibility adapters: Greenhouse (legacy and React), Lever, Ashby, SmartRecruiters, iCIMS, Oracle/Taleo, Workable, Jobvite, SAP SuccessFactors, BambooHR, Recruitee, Teamtailor, and Personio.
+- Generic fallback: semantic labels, ARIA controls, native fields, open shadow roots, and accessible subframes on other company career pages.
+
+An adapter means ApplyOS recognizes that ATS's common field containers, labels, dropdown options, and upload zones. Employer customizations can still differ, so every fill remains review-first and unsupported controls stay untouched.
+
+### 3. Mark it applied
+
+After you submit the application yourself, reopen ApplyOS and click **Mark as applied**. This records `applied_at` and creates a first follow-up 7 days later plus an optional final follow-up 14 days later.
+
+### 4. View the dashboard
+
+Choose **Dashboard** from the popup. Switch between Board and List, search, filter by status/source/priority, drag cards between columns, or open a record to edit its status, dates, priority, and notes. An empty dashboard includes a **Load sample data** button.
+
+### 5. See or edit a reminder
+
+Applied records show the next follow-up in the popup and dashboard. Due reminders move an `applied` record to `follow_up_due` and appear in Next Actions and the extension badge. Edit **Next follow-up** in the application detail drawer to reschedule it.
+
+### 6. Generate a follow-up draft
+
+Open an application record, choose first or final follow-up, and click **Generate draft**. Edit or copy the subject and body, then review and send it yourself in your email client. ApplyOS has no send function.
+
+### 7. Use Smart Drafts
+
+Open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These work immediately without accounts, model downloads, terminal commands, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Answers → Advanced**, but it is never part of onboarding or required for core functionality.
+
+## Answer memory
+
+Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized into answer memory and the local knowledge graph. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
+
+## Development checks
+
+```sh
+npm run lint
+npm run typecheck
+npm test
+npm run build
+# or all four
+npm run verify
+```
+
+`npm test` covers legacy and multi-profile migration, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, and review-only draft generation. `npm run build` creates a clean unpacked extension in `dist/`.
+
+## Safety boundaries and limitations
+
+- Never auto-submits applications, advances application steps, sends emails, or overwrites an existing answer. Workday inline-entry Save buttons may be used only to add editable work/education records on the current step.
+- Never autofills CAPTCHAs, consent attestations, assessments, demographic/self-identification fields, disability/veteran questions, government IDs, or birth dates.
+- Closed shadow roots and inaccessible cross-origin frames cannot be inspected.
+- Employer-specific custom widgets may still need manual entry; low-confidence job metadata is explicitly surfaced for review.
+- PDF/DOCX binary contents are not parsed. Matching and AI use pasted resume text plus the structured profile; saved files remain local for attachment.

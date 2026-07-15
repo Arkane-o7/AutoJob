@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ApplyKit ATS regression fixtures</title>
+    <style>
+      :root { color-scheme: light; }
+      body { max-width: 900px; margin: 40px auto; padding: 0 24px 90px; background: #f7f5ee; color: #20211d; font: 15px/1.5 sans-serif; }
+      h1 { font: 42px/1.05 Georgia, serif; }
+      section { margin: 28px 0; padding: 24px; border: 1px solid #aaa99f; background: white; }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+      .field, label, fieldset { display: grid; gap: 7px; }
+      .wide, fieldset { grid-column: 1 / -1; }
+      input, select, textarea, [contenteditable], [role=combobox] { min-height: 42px; padding: 9px; border: 1px solid #777; background: white; font: inherit; text-align: left; }
+      textarea, [contenteditable] { min-height: 90px; }
+      [role=radio] { display: inline-block; margin-right: 12px; padding: 8px 12px; border: 1px solid #777; cursor: pointer; }
+      [role=radio][aria-checked=true] { background: #d8ff8f; }
+      [role=listbox] { margin: 4px 0 0; padding: 4px; border: 1px solid #777; background: white; }
+      [role=option] { padding: 8px; cursor: pointer; }
+      [role=option]:hover { background: #eee; }
+      .select2-container, .select__control { min-height: 42px; padding: 9px; border: 1px solid #777; background: white; cursor: pointer; }
+      .select2-drop-active, .select__menu { margin-top: 4px; border: 1px solid #777; background: white; }
+      .select2-results, .select__menu { list-style: none; padding: 4px; }
+      .select2-results li, .select__option { padding: 8px; cursor: pointer; }
+      .file-upload { padding: 18px; border: 1px dashed #777; }
+      #step-two { display: none; }
+      button { padding: 10px 14px; font: inherit; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <h1>ATS regression fixtures</h1>
+    <p>This page combines the control patterns used by common applicant-tracking systems. Nothing submits.</p>
+
+    <section aria-labelledby="standard-heading">
+      <h2 id="standard-heading">Standard application controls</h2>
+      <div class="grid">
+        <label>Legal first name <input name="candidate[first_name]" required></label>
+        <label>Legal last name <input name="candidate[last_name]" required></label>
+        <label>Email address <input name="candidate[email]" type="email" required></label>
+        <label>Mobile phone <input name="candidate[phone]" type="tel"></label>
+        <label>LinkedIn profile URL <input name="urls[linkedin]"></label>
+        <label>Current employer <input name="candidate[company]"></label>
+        <label>Current job title <input name="candidate[title]"></label>
+        <label>Employment start date <input name="employment_start" type="month"></label>
+      </div>
+    </section>
+
+    <section aria-labelledby="greenhouse-heading">
+      <h2 id="greenhouse-heading">Greenhouse legacy and React controls</h2>
+      <div class="grid">
+        <div class="field">
+          <label>Country of residence</label>
+          <div id="legacy-country" class="select2-container">
+            <a href="#" role="button"><span class="select2-chosen">Select a country</span></a>
+          </div>
+          <div id="legacy-country-menu" class="select2-drop-active" hidden>
+            <div class="select2-search"><input class="select2-input" aria-label="Search countries"></div>
+            <ul class="select2-results"><li>United States</li><li>India</li><li>United Kingdom</li></ul>
+          </div>
+        </div>
+        <div class="select">
+          <label>Are you legally authorized to work in this country?</label>
+          <div id="react-authorization" class="select__control">
+            <span class="select__placeholder">Choose an answer</span>
+            <input aria-label="Work authorization" autocomplete="off">
+          </div>
+          <div id="react-authorization-menu" class="select__menu" hidden>
+            <div class="select__option">Yes</div><div class="select__option">No</div>
+          </div>
+        </div>
+        <div class="file-upload wide">
+          <label for="greenhouse-resume">Resume / CV</label>
+          <input id="greenhouse-resume" type="file" accept=".pdf,.doc,.docx">
+          <span id="greenhouse-upload-status">No file attached</span>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="custom-heading">
+      <h2 id="custom-heading">Custom React-style controls</h2>
+      <div class="grid">
+        <div class="field">
+          <label id="country-label">Country of residence</label>
+          <button id="country-combobox" type="button" role="combobox" aria-labelledby="country-label" aria-expanded="false">Choose country</button>
+          <div id="country-options" role="listbox" hidden>
+            <div role="option" data-value="US">United States</div>
+            <div role="option" data-value="IN">India</div>
+            <div role="option" data-value="GB">United Kingdom</div>
+          </div>
+        </div>
+        <div class="field" role="radiogroup" aria-labelledby="sponsor-label">
+          <label id="sponsor-label">Will you require visa sponsorship now or in the future?</label>
+          <div><span role="radio" aria-checked="false" data-value="yes">Yes</span><span role="radio" aria-checked="false" data-value="no">No</span></div>
+        </div>
+        <div class="form-group wide">
+          <label id="cover-label">Cover letter</label>
+          <div id="cover-letter" contenteditable="true" role="textbox" aria-labelledby="cover-label"></div>
+        </div>
+      </div>
+    </section>
+
+    <section aria-labelledby="shadow-heading">
+      <h2 id="shadow-heading">Nested component</h2>
+      <div id="education-component"></div>
+    </section>
+
+    <section aria-labelledby="steps-heading">
+      <h2 id="steps-heading">Multi-step application</h2>
+      <div id="step-one">
+        <p>The next step is inserted dynamically, like an Easy Apply or Workday flow.</p>
+        <button id="next-step" type="button">Next step</button>
+      </div>
+      <div id="step-two" class="grid">
+        <label>Years of professional experience <input name="years_experience" type="number" required></label>
+        <label>Degree type <select name="degree" required><option value="">Choose…</option><option>Bachelor of Technology</option><option>Master of Science</option></select></label>
+        <label>Field of study <input name="major"></label>
+        <label>Graduation year <select name="graduation_year"><option value="">Choose…</option><option>2022</option><option>2023</option><option>2024</option></select></label>
+      </div>
+    </section>
+
+    <section aria-labelledby="safety-heading">
+      <h2 id="safety-heading">Safety exclusions</h2>
+      <div class="grid">
+        <label>Social Security number <input name="ssn" required></label>
+        <label>Date of birth <input name="birth_date" type="date"></label>
+        <label>Gender <select name="gender"><option value="">Prefer not to answer yet</option><option>Woman</option><option>Man</option><option>Non-binary</option></select></label>
+      </div>
+    </section>
+
+    <button type="button">Review application (does nothing)</button>
+
+    <script>
+      const countryButton = document.querySelector("#country-combobox");
+      const countryOptions = document.querySelector("#country-options");
+      countryButton.addEventListener("click", () => {
+        const open = countryOptions.hidden;
+        countryOptions.hidden = !open;
+        countryButton.setAttribute("aria-expanded", String(open));
+      });
+      countryOptions.addEventListener("click", (event) => {
+        const option = event.target.closest("[role=option]");
+        if (!option) return;
+        countryButton.textContent = option.textContent;
+        countryButton.dataset.value = option.dataset.value;
+        countryOptions.hidden = true;
+        countryButton.setAttribute("aria-expanded", "false");
+      });
+      document.querySelectorAll("[role=radio]").forEach((radio) => radio.addEventListener("click", () => {
+        radio.closest("[role=radiogroup]").querySelectorAll("[role=radio]").forEach((item) => item.setAttribute("aria-checked", String(item === radio)));
+      }));
+
+      const legacyCountry = document.querySelector("#legacy-country");
+      const legacyCountryMenu = document.querySelector("#legacy-country-menu");
+      legacyCountry.querySelector("a").addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        legacyCountryMenu.hidden = false;
+        legacyCountry.classList.add("select2-dropdown-open");
+      });
+      legacyCountryMenu.addEventListener("click", (event) => {
+        const option = event.target.closest("li");
+        if (!option) return;
+        legacyCountry.querySelector(".select2-chosen").textContent = option.textContent;
+        legacyCountryMenu.hidden = true;
+        legacyCountry.classList.remove("select2-dropdown-open");
+      });
+
+      const reactAuthorization = document.querySelector("#react-authorization");
+      const reactAuthorizationMenu = document.querySelector("#react-authorization-menu");
+      reactAuthorization.addEventListener("click", () => { reactAuthorizationMenu.hidden = false; });
+      reactAuthorizationMenu.addEventListener("click", (event) => {
+        const option = event.target.closest(".select__option");
+        if (!option) return;
+        reactAuthorization.querySelector(".select__placeholder")?.remove();
+        let selected = reactAuthorization.querySelector(".select__single-value");
+        if (!selected) {
+          selected = document.createElement("span");
+          selected.className = "select__single-value";
+          reactAuthorization.prepend(selected);
+        }
+        selected.textContent = option.textContent;
+        reactAuthorizationMenu.hidden = true;
+      });
+      document.querySelector("#greenhouse-resume").addEventListener("change", (event) => {
+        document.querySelector("#greenhouse-upload-status").textContent = event.target.files[0]?.name || "No file attached";
+      });
+
+      const shadow = document.querySelector("#education-component").attachShadow({ mode: "open" });
+      shadow.innerHTML = `<style>label{display:grid;gap:7px}input{min-height:42px;padding:9px;font:15px sans-serif}</style><label>School or university name <input data-automation-id="schoolName"></label>`;
+
+      document.querySelector("#next-step").addEventListener("click", () => {
+        document.querySelector("#step-two").style.display = "grid";
+      });
+    </script>
+  </body>
+</html>
