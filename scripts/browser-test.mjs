@@ -296,8 +296,19 @@ async function main() {
     }, applicationId);
     assert.equal(confirmedState.application.status, "applied", "affirmative review marks the application applied");
     assert.equal(confirmedState.reminders.length, 2, "affirmative review schedules 7/14-day reminders");
+    await helper.reload({ waitUntil: "domcontentloaded" });
+    const applicationCard = helper.locator(`#board .job-card[data-id="${applicationId}"]`);
+    await applicationCard.waitFor({ state: "visible" });
+    await applicationCard.click();
+    const detail = helper.locator("#detail");
+    assert.equal(await detail.getAttribute("aria-hidden"), "false", "open detail drawer is exposed to assistive technology");
+    assert.equal(await helper.evaluate(() => document.activeElement?.id), "detail-role", "detail drawer moves focus to its first editable field");
+    await helper.locator("#close-detail").click();
+    assert.equal(await detail.getAttribute("aria-hidden"), "true", "closed detail drawer is hidden from assistive technology");
+    assert.equal(await detail.getAttribute("inert"), "", "closed detail drawer is removed from keyboard interaction");
+    assert.equal(await helper.evaluate(() => document.activeElement?.classList.contains("job-card")), true, "closing details restores focus to the opening card");
     await helper.close();
-    console.log("PASS reviewed submission prompt: silent/Not yet unchanged; affirmative schedules reminders");
+    console.log("PASS reviewed submission prompt and accessible dashboard detail focus lifecycle");
     console.log(`Browser regression complete: ${ATS_CASES.length}/${ATS_CASES.length} ATS fixtures passed using unpacked MV3 at ${extensionRoot}.`);
   } finally {
     await context?.close().catch(() => {});

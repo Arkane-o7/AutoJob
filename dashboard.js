@@ -28,6 +28,7 @@ const elements = {
 };
 let state = null;
 let selectedId = null;
+let detailReturnFocus = null;
 let currentView = "board";
 let profile = {};
 let aiConfig = {};
@@ -132,6 +133,10 @@ async function load() {
 function openDetail(id) {
   const item = state.applications.find((application) => application.id === id);
   if (!item) return;
+  if (!elements.detail.classList.contains("open")) {
+    const active = document.activeElement;
+    detailReturnFocus = active instanceof HTMLElement && !elements.detail.contains(active) ? active : null;
+  }
   selectedId = id;
   $("#detail-id").value = id; $("#detail-role").value = item.role; $("#detail-company").value = item.company;
   $("#detail-status").value = item.status; $("#detail-priority").value = item.priority; $("#detail-deadline").value = ApplyOS.toDateInput(item.deadline);
@@ -143,12 +148,21 @@ function openDetail(id) {
   $("#detail-url").href = item.url; $("#detail-applied").classList.toggle("hidden", Boolean(item.applied_at));
   $("#draft").classList.add("hidden");
   $("#ai-output-wrap").classList.add("hidden");
-  elements.detail.classList.add("open"); elements.detail.setAttribute("aria-hidden", "false"); elements.scrim.classList.remove("hidden");
+  elements.detail.inert = false; elements.detail.classList.add("open"); elements.detail.setAttribute("aria-hidden", "false"); elements.scrim.classList.remove("hidden");
   $("#detail-role").focus();
 }
 
 function closeDetail() {
-  selectedId = null; elements.detail.classList.remove("open"); elements.detail.setAttribute("aria-hidden", "true"); elements.scrim.classList.add("hidden");
+  if (!elements.detail.classList.contains("open")) return;
+  const fallback = $("#search");
+  const focusTarget = detailReturnFocus?.isConnected && typeof detailReturnFocus.focus === "function" ? detailReturnFocus : fallback;
+  if (elements.detail.contains(document.activeElement)) focusTarget?.focus();
+  selectedId = null;
+  elements.detail.inert = true;
+  elements.detail.classList.remove("open");
+  elements.detail.setAttribute("aria-hidden", "true");
+  elements.scrim.classList.add("hidden");
+  detailReturnFocus = null;
 }
 
 async function initialize() {
