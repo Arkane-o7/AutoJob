@@ -36,6 +36,151 @@ test("migrates legacy profile without removing it", async () => {
   assert.equal(state.resume_versions[0].name, "ada.pdf");
 });
 
+test("migrates a v2 state to v3 without losing applications or the legacy profile", async () => {
+  const profile = { firstName: "Ada", email: "ada@example.com" };
+  const application = {
+    id: "app_existing",
+    company: "Analytical Engines",
+    role: "Programmer",
+    url: "https://example.com/jobs/1",
+    source: "example.com",
+    description: "Build an engine",
+    status: "preparing",
+    priority: "high",
+    deadline: null,
+    applied_at: null,
+    follow_up_date: null,
+    resume_version_id: null,
+    notes: "Keep this note",
+    match_score: 88,
+    created_at: "2026-07-01T00:00:00.000Z",
+    updated_at: "2026-07-02T00:00:00.000Z"
+  };
+  const { ApplyOS, data } = await runtime({
+    profile,
+    applyos_state: {
+      schema_version: 2,
+      applications: [application],
+      reminders: [],
+      answer_memory: [],
+      learned_answers: [],
+      resume_versions: [],
+      settings: { final_follow_up_enabled: true, notification_enabled: true },
+      migrated_at: "2026-07-01T00:00:00.000Z"
+    }
+  });
+
+  const state = await ApplyOS.ensureState();
+  assert.equal(state.schema_version, 3);
+  assert.equal(state.revision, 0);
+  assert.equal(state.applications.length, 1);
+  assert.equal(state.applications[0].id, "app_existing");
+  assert.equal(state.applications[0].notes, "Keep this note");
+  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3]]));
+  assert.equal(data.profile.email, "ada@example.com");
+});
+
+test("state migration is idempotent and does not increment the mutation revision", async () => {
+  const { ApplyOS, data } = await runtime({
+    applyos_state: {
+      schema_version: 2,
+      applications: [],
+      reminders: [],
+      answer_memory: [],
+      learned_answers: [],
+      resume_versions: [],
+      settings: {},
+      migrated_at: "2026-07-01T00:00:00.000Z"
+    }
+  });
+  const first = await ApplyOS.ensureState();
+  const storedAfterFirstRead = structuredClone(data.applyos_state);
+  const second = await ApplyOS.ensureState();
+
+  assert.equal(first.revision, 0);
+  assert.equal(second.revision, 0);
+  assert.equal(second.migration_history.length, 1);
+  assert.deepEqual(data.applyos_state, storedAfterFirstRead);
+});
+
+test("normalizes corrupt collections and unsafe entity fields into runtime-safe shapes", async () => {
+  const { ApplyOS } = await runtime({
+    applyos_state: {
+      schema_version: 3,
+      revision: "invalid",
+      migration_history: "invalid",
+      applications: [null, "invalid", { id: "app_safe", company: 42, role: null, status: "made_up", priority: "urgent", match_score: Infinity }],
+      reminders: { not: "an array" },
+      answer_memory: [false, { id: "answer_safe", question: 4, answer: null, use_count: -3 }],
+      learned_answers: ["invalid", { id: "learned_safe", question: null, fingerprint: 7, use_count: "many" }],
+      resume_versions: [undefined, { id: "resume_safe", name: 9, size: -10 }],
+      settings: "invalid",
+      migrated_at: "not-a-date"
+    }
+  });
+  const state = await ApplyOS.ensureState();
+
+  assert.equal(state.revision, 0);
+  assert.equal(state.applications.length, 1);
+  assert.equal(state.applications[0].company, "Unknown company");
+  assert.equal(state.applications[0].role, "Untitled role");
+  assert.equal(state.applications[0].status, "saved");
+  assert.equal(state.applications[0].priority, "medium");
+  assert.equal(state.applications[0].match_score, 0);
+  assert.equal(state.reminders.length, 0);
+  assert.equal(state.answer_memory[0].question, "");
+  assert.equal(state.answer_memory[0].answer, "");
+  assert.equal(state.learned_answers[0].fingerprint, "");
+  assert.equal(state.resume_versions[0].name, "");
+  assert.equal(state.resume_versions[0].size, 0);
+  assert.equal(state.settings.final_follow_up_enabled, true);
+  assert.equal(state.settings.notification_enabled, true);
+});
+
+test("serializes overlapping async mutations without losing updates", async () => {
+  const { ApplyOS } = await runtime();
+  const addApplication = (id, company) => ({
+    id,
+    company,
+    role: "Engineer",
+    url: `https://example.com/${id}`,
+    source: "test",
+    description: "",
+    status: "saved",
+    priority: "medium",
+    deadline: null,
+    applied_at: null,
+    follow_up_date: null,
+    resume_version_id: null,
+    notes: "",
+    match_score: 0,
+    created_at: "2026-07-15T00:00:00.000Z",
+    updated_at: "2026-07-15T00:00:00.000Z"
+  });
+
+  await Promise.all([
+    ApplyOS.mutateState(async (state) => {
+      await new Promise((resolveDelay) => setTimeout(resolveDelay, 25));
+      state.applications.push(addApplication("first", "First"));
+      return state;
+    }),
+    ApplyOS.mutateState(async (state) => {
+      state.applications.push(addApplication("second", "Second"));
+      return state;
+    })
+  ]);
+
+  const state = await ApplyOS.getState();
+  assert.deepEqual(new Set(state.applications.map((item) => item.id)), new Set(["first", "second"]));
+  assert.equal(state.revision, 2);
+  assert.equal((await ApplyOS.getState()).revision, 2);
+
+  await assert.rejects(ApplyOS.mutateState(async () => {
+    throw new Error("intentional mutation failure");
+  }), /intentional mutation failure/);
+  assert.equal((await ApplyOS.getState()).revision, 2);
+});
+
 test("calculates local skill matches and missing skills", async () => {
   const { ApplyOS } = await runtime();
   const match = ApplyOS.calculateMatch("Build React and TypeScript services on AWS with Kubernetes.", { jobDescription: "Built React TypeScript apps on AWS." });
@@ -88,7 +233,7 @@ test("stores corrections and reuses the best site-aware learned answer", async (
   });
   assert.equal(learned.answer, "4");
   const state = await ApplyOS.getState();
-  assert.equal(state.schema_version, 2);
+  assert.equal(state.schema_version, 3);
   assert.equal(state.learned_answers.length, 1);
   const match = ApplyOS.OfflynCore.bestLearnedAnswer("How many years have you handled large datasets", state.learned_answers, {
     site: "example.myworkdayjobs.com",

@@ -20,14 +20,16 @@ The new modules are:
 - `shared/offlyn-core.js`: MIT-attributed ATS recognition, semantic field classification, type/value safeguards, and correction matching adapted to the ApplyOS profile schema.
 - `shared/ats-compat.js`: a registry-based compatibility layer for ATS field context, custom dropdown options, and resume dropzones. Greenhouse legacy/React patterns are BSD-attributed adaptations from Job App Filler; the remaining adapters use ApplyOS heuristics.
 - `shared/profiles.js`: multi-profile index, active-profile switching, legacy `profile` mirroring, completeness checks, and resume-text normalization.
-- `shared/storage.js`: safe schema initialization and CRUD for applications, reminders, answer memory, resume versions, and settings.
+- `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, reminders, answer memory, resume versions, and settings. Schema v3 records its revision and migration history while preserving legacy data.
 - `shared/matching.js`: deterministic, local skill/keyword matching with matched skills, gaps, keywords, experience hints, and answer prompts.
 - `shared/followup.js`: editable 7-day and optional 14-day reminders plus review-only email drafts.
 - `shared/ai.js`: zero-setup Smart Draft fallbacks for cover letters, resume focus plans, and keyword gaps, plus optional localhost-only Ollama enhancement.
 - `shared/graph.js`: answer/correction knowledge graph with reusable-answer retrieval and lightweight reinforcement weights.
 - `shared/agent.js`: local-AI planning with an allowlist of fill/select/check/skip actions and hard blocks for submission, consent, sensitive fields, CAPTCHAs, and assessments.
 - `shared/workday.js`: 1,128-line browser-ready compatibility port of Offlyn's 1,277-line Workday handler. Type-only code and automatic Save-and-Continue navigation are intentionally removed; inline experience Add/Save remains to support multiple editable records.
-- `background.js`: state/profile migration, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. No email integration.
+- `shared/diagnostics.js`: privacy-safe broken-field snapshots containing only reviewed labels and allowlisted DOM structure—never entered values or file contents.
+- `shared/submission.js`: conservative confirmation scoring that requires both recent user submit intent and strong confirmation-page evidence.
+- `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. No email integration.
 - `onboarding.*`: five-step profile, resume-text, safety, and local-AI setup flow.
 - `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, date editing, match guidance, follow-up drafts, profile switching, and the local-AI studio.
 - `types/applyos.ts`: TypeScript contracts for captured jobs, CRM records, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
@@ -72,7 +74,13 @@ An adapter means ApplyOS recognizes that ATS's common field containers, labels, 
 
 ### 3. Mark it applied
 
-After you submit the application yourself, reopen ApplyOS and click **Mark as applied**. This records `applied_at` and creates a first follow-up 7 days later plus an optional final follow-up 14 days later.
+After you submit the application yourself, ApplyOS can recognize a likely confirmation page and ask **Did you submit this application?** Choose **Yes, mark applied** to record `applied_at` and create a first follow-up 7 days later plus an optional final follow-up 14 days later. **Not yet** changes nothing. You can still reopen ApplyOS and use **Mark as applied** manually.
+
+Detection never changes an application status on its own. It requires a recent trusted submit interaction, strong confirmation evidence, and your explicit approval.
+
+### Report a broken field
+
+Choose **Report broken field** in the popup to open an on-page review. No fields are selected by default. Select only the problematic controls, inspect the generated JSON, then copy or download it yourself. Reports include bounded labels and allowlisted DOM attributes only; entered answers, resume filenames/data, email addresses, phone numbers, and hidden fields are excluded.
 
 ### 4. View the dashboard
 
@@ -101,11 +109,14 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
-# or all four
+npm run test:browser:dist
+# or all five
 npm run verify
 ```
 
-`npm test` covers legacy and multi-profile migration, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, and review-only draft generation. `npm run build` creates a clean unpacked extension in `dist/`.
+`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, and review-only draft generation.
+
+`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, NorthStarz, and a generic React dropzone. It verifies field values and events, resume attachment, sensitive/consent exclusions, no navigation or submission, late-rendered fields, the reviewed diagnostic flow, and the reviewed post-submit confirmation flow. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
 
 ## Safety boundaries and limitations
 

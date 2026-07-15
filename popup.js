@@ -1,4 +1,4 @@
-const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "result", "settings", "dashboard", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
+const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "settings", "dashboard", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
 let activeTab = null;
 let profile = {};
 let detectedJob = null;
@@ -97,6 +97,24 @@ async function saveCurrent() {
   return application;
 }
 
+async function startApplicationSession() {
+  if (!application?.id || !activeTab?.id) return null;
+  const response = await chrome.runtime.sendMessage({
+    type: "APPLYOS_SESSION_START",
+    tabId: activeTab.id,
+    application: { id: application.id, company: application.company, role: application.role },
+    platform: detectedJob?.platform || "generic",
+    url: activeTab.url
+  });
+  if (!response?.ok) throw new Error(response?.error || "Could not start application tracking.");
+  return response.session;
+}
+
+function clearApplicationSession() {
+  if (!activeTab?.id) return Promise.resolve();
+  return chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_CLEAR", tabId: activeTab.id }).catch(() => {});
+}
+
 async function initialize() {
   populateStatuses();
   const [profilesIndex, activeProfile, config, tabs] = await Promise.all([
@@ -114,6 +132,7 @@ async function initialize() {
   await ApplyOS.ensureState();
   if (!activeTab?.id || !/^https?:/.test(activeTab.url || "")) {
     ui.confidence.textContent = "Open a job posting or application page to capture it.";
+    ui.report.disabled = true;
     return;
   }
   ui.fill.disabled = !hasCoreProfile(profile);
@@ -136,7 +155,7 @@ async function initialize() {
 
 ui.save.addEventListener("click", async () => {
   ui.save.disabled = true;
-  try { await saveCurrent(); say("Saved to your ApplyOS dashboard.", "success"); }
+  try { await saveCurrent(); await startApplicationSession(); say("Saved to your ApplyOS dashboard.", "success"); }
   catch (error) { say(error.message, "error"); }
   finally { ui.save.disabled = false; }
 });
@@ -158,6 +177,8 @@ ui.fill.addEventListener("click", async () => {
   say("Reading the visible form…");
   ui.fill.disabled = true;
   try {
+    if (!application && ui.company.value.trim() && ui.role.value.trim()) await saveCurrent();
+    if (application) await startApplicationSession();
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYKIT_FILL" });
     if (!response?.ok) throw new Error(response?.error || "This page could not be filled.");
     const { filled, attached, scanned, unmatchedRequired = 0, resumeStatus = "not-found", site = "This form" } = response.report;
@@ -172,11 +193,23 @@ ui.fill.addEventListener("click", async () => {
   finally { ui.fill.disabled = false; }
 });
 
+ui.report.addEventListener("click", async () => {
+  if (!activeTab?.id) return;
+  ui.report.disabled = true;
+  try {
+    const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_REPORT_BROKEN" }, { frameId: 0 });
+    if (!response?.ok) throw new Error(response?.error || "Could not open the report review.");
+    say("Review the sanitized report on the job page. Nothing is uploaded.", "success");
+  } catch (error) { say(error.message, "error"); }
+  finally { ui.report.disabled = false; }
+});
+
 ui.applied.addEventListener("click", async () => {
   ui.applied.disabled = true;
   try {
     if (!application) await saveCurrent();
     application = await ApplyOS.markApplicationApplied(application.id);
+    await clearApplicationSession();
     renderRecord();
     chrome.runtime.sendMessage({ type: "APPLYOS_REFRESH_DUE" }).catch(() => {});
     say(`Marked applied. First follow-up: ${dateLabel(application.follow_up_date)}.`, "success");
@@ -188,6 +221,7 @@ ui.status.addEventListener("change", async () => {
   application = ui.status.value === "applied" && !application.applied_at
     ? await ApplyOS.markApplicationApplied(application.id)
     : await ApplyOS.updateApplication(application.id, { status: ui.status.value });
+  if (ui.status.value === "applied") await clearApplicationSession();
   renderRecord();
   say("Status updated.", "success");
 });

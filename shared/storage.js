@@ -2,10 +2,186 @@
   "use strict";
 
   const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const STORAGE_LOCK_NAME = "applyos-state-write";
+  let localStorageQueue = Promise.resolve();
+
+  function isRecord(value) {
+    return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+  }
+
+  function safeString(value, fallback = "") {
+    return typeof value === "string" ? value : fallback;
+  }
+
+  function safeNullableString(value) {
+    return typeof value === "string" && value ? value : null;
+  }
+
+  function safeNullableDate(value) {
+    return typeof value === "string" && value && !Number.isNaN(new Date(value).getTime()) ? value : null;
+  }
+
+  function safeDateString(value, fallback) {
+    if (typeof value !== "string" || Number.isNaN(new Date(value).getTime())) return fallback;
+    return value;
+  }
+
+  function safeNumber(value, fallback = 0) {
+    return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+  }
+
+  function safeStringArray(value) {
+    return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+  }
+
+  function safeStringRecord(value) {
+    if (!isRecord(value)) return {};
+    return Object.fromEntries(Object.entries(value).filter(([, item]) => typeof item === "string"));
+  }
+
+  function normalizeConfidence(value) {
+    if (!isRecord(value)) return { overall: 0 };
+    return { overall: 0, ...Object.fromEntries(Object.entries(value).filter(([, score]) => typeof score === "number" && Number.isFinite(score))
+      .map(([key, score]) => [key, Math.max(0, Math.min(1, score))])) };
+  }
+
+  function migrationHistory(value) {
+    if (!Array.isArray(value)) return [];
+    return value.filter(isRecord).map((item) => ({
+      from_version: Math.max(0, Math.trunc(safeNumber(item.from_version))),
+      to_version: Math.max(0, Math.trunc(safeNumber(item.to_version))),
+      migrated_at: safeDateString(item.migrated_at, ApplyOS.nowISO())
+    })).filter((item) => item.to_version > item.from_version);
+  }
+
+  function recordMigration(state, fromVersion, toVersion) {
+    const history = migrationHistory(state.migration_history);
+    if (!history.some((item) => item.from_version === fromVersion && item.to_version === toVersion)) {
+      history.push({ from_version: fromVersion, to_version: toVersion, migrated_at: ApplyOS.nowISO() });
+    }
+    return { ...state, schema_version: toVersion, migration_history: history };
+  }
+
+  const migrations = {
+    0: (state) => recordMigration(state, 0, 1),
+    1: (state) => recordMigration(state, 1, 2),
+    2: (state) => recordMigration({ ...state, revision: Math.max(0, Math.trunc(safeNumber(state.revision))) }, 2, 3)
+  };
+
+  function migrateState(input) {
+    let state = isRecord(input) ? { ...input } : {};
+    let version = Number.isInteger(state.schema_version) && state.schema_version >= 0 ? state.schema_version : 0;
+    while (version < ApplyOS.SCHEMA_VERSION) {
+      const migrate = migrations[version];
+      if (!migrate) throw new Error(`No ApplyOS storage migration from schema v${version}`);
+      state = migrate(state);
+      version = state.schema_version;
+    }
+    return state;
+  }
+
+  function normalizeApplication(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const createdAt = safeDateString(item.created_at, now);
+    return {
+      ...item,
+      id: safeString(item.id) || ApplyOS.uid("app"),
+      company: safeString(item.company, "Unknown company") || "Unknown company",
+      role: safeString(item.role, "Untitled role") || "Untitled role",
+      url: safeString(item.url),
+      source: safeString(item.source, "unknown") || "unknown",
+      description: safeString(item.description),
+      location: safeString(item.location),
+      status: ApplyOS.APPLICATION_STATUSES.includes(item.status) ? item.status : "saved",
+      priority: ApplyOS.PRIORITIES.includes(item.priority) ? item.priority : "medium",
+      deadline: safeNullableDate(item.deadline),
+      applied_at: safeNullableDate(item.applied_at),
+      follow_up_date: safeNullableDate(item.follow_up_date),
+      resume_version_id: safeNullableString(item.resume_version_id),
+      notes: safeString(item.notes),
+      match_score: Math.max(0, Math.min(100, safeNumber(item.match_score))),
+      matched_skills: safeStringArray(item.matched_skills),
+      missing_skills: safeStringArray(item.missing_skills),
+      suggested_keywords: safeStringArray(item.suggested_keywords),
+      suggested_experiences: safeStringArray(item.suggested_experiences),
+      suggested_answers: safeStringRecord(item.suggested_answers),
+      extraction_confidence: normalizeConfidence(item.extraction_confidence),
+      captured_at: safeDateString(item.captured_at, createdAt),
+      created_at: createdAt,
+      updated_at: safeDateString(item.updated_at, createdAt)
+    };
+  }
+
+  function normalizeReminder(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    return {
+      ...item,
+      id: safeString(item.id) || ApplyOS.uid("rem"),
+      application_id: safeString(item.application_id),
+      type: item.type === "final_follow_up" ? "final_follow_up" : "follow_up",
+      due_at: safeDateString(item.due_at, now),
+      completed_at: safeNullableString(item.completed_at),
+      created_at: safeDateString(item.created_at, now)
+    };
+  }
+
+  function normalizeAnswer(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const question = safeString(item.question);
+    return {
+      ...item,
+      id: safeString(item.id) || ApplyOS.uid("ans"),
+      question,
+      answer: safeString(item.answer),
+      normalized_question: safeString(item.normalized_question) || ApplyOS.normalizeQuestion(question),
+      source: ["profile", "manual", "application"].includes(item.source) ? item.source : "manual",
+      use_count: Math.max(0, Math.trunc(safeNumber(item.use_count))),
+      created_at: safeDateString(item.created_at, now),
+      updated_at: safeDateString(item.updated_at, now)
+    };
+  }
+
+  function normalizeLearnedAnswer(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const question = safeString(item.question);
+    return {
+      ...item,
+      id: safeString(item.id) || ApplyOS.uid("learned"),
+      fingerprint: safeString(item.fingerprint),
+      question,
+      normalized_question: safeString(item.normalized_question) || ApplyOS.normalizeQuestion(question),
+      answer: safeString(item.answer),
+      canonical_field: safeNullableString(item.canonical_field),
+      field_type: safeString(item.field_type, "text") || "text",
+      site: safeString(item.site, "unknown") || "unknown",
+      use_count: Math.max(0, Math.trunc(safeNumber(item.use_count))),
+      created_at: safeDateString(item.created_at, now),
+      updated_at: safeDateString(item.updated_at, now)
+    };
+  }
+
+  function normalizeResumeVersion(item) {
+    if (!isRecord(item)) return null;
+    return {
+      ...item,
+      id: safeString(item.id) || ApplyOS.uid("resume"),
+      name: safeString(item.name),
+      type: safeString(item.type),
+      size: Math.max(0, safeNumber(item.size)),
+      created_at: safeDateString(item.created_at, ApplyOS.nowISO()),
+      is_current: item.is_current === true
+    };
+  }
 
   function emptyState() {
     return {
       schema_version: ApplyOS.SCHEMA_VERSION,
+      revision: 0,
+      migration_history: [],
       applications: [],
       reminders: [],
       answer_memory: [],
@@ -17,15 +193,30 @@
   }
 
   function normalizeState(input) {
-    const state = { ...emptyState(), ...(input || {}) };
+    const state = { ...emptyState(), ...(isRecord(input) ? input : {}) };
     state.schema_version = ApplyOS.SCHEMA_VERSION;
-    state.applications = Array.isArray(state.applications) ? state.applications : [];
-    state.reminders = Array.isArray(state.reminders) ? state.reminders : [];
-    state.answer_memory = Array.isArray(state.answer_memory) ? state.answer_memory : [];
-    state.learned_answers = Array.isArray(state.learned_answers) ? state.learned_answers : [];
-    state.resume_versions = Array.isArray(state.resume_versions) ? state.resume_versions : [];
-    state.settings = { ...emptyState().settings, ...(state.settings || {}) };
+    state.revision = Math.max(0, Math.trunc(safeNumber(state.revision)));
+    state.migration_history = migrationHistory(state.migration_history);
+    state.applications = (Array.isArray(state.applications) ? state.applications : []).map(normalizeApplication).filter(Boolean);
+    state.reminders = (Array.isArray(state.reminders) ? state.reminders : []).map(normalizeReminder).filter(Boolean);
+    state.answer_memory = (Array.isArray(state.answer_memory) ? state.answer_memory : []).map(normalizeAnswer).filter(Boolean);
+    state.learned_answers = (Array.isArray(state.learned_answers) ? state.learned_answers : []).map(normalizeLearnedAnswer).filter(Boolean);
+    state.resume_versions = (Array.isArray(state.resume_versions) ? state.resume_versions : []).map(normalizeResumeVersion).filter(Boolean);
+    state.settings = { ...emptyState().settings, ...(isRecord(state.settings) ? state.settings : {}) };
+    state.settings.final_follow_up_enabled = state.settings.final_follow_up_enabled !== false;
+    state.settings.notification_enabled = state.settings.notification_enabled !== false;
+    state.migrated_at = safeDateString(state.migrated_at, ApplyOS.nowISO());
     return state;
+  }
+
+  function withStorageLock(task) {
+    const locks = root.navigator?.locks;
+    if (locks && typeof locks.request === "function") {
+      return locks.request(STORAGE_LOCK_NAME, { mode: "exclusive" }, task);
+    }
+    const run = localStorageQueue.then(task, task);
+    localStorageQueue = run.then(() => undefined, () => undefined);
+    return run;
   }
 
   async function readRaw() {
@@ -51,12 +242,13 @@
     };
   }
 
-  ApplyOS.ensureState = async function ensureState() {
+  async function ensureStateUnlocked() {
     await ApplyOS.ensureProfiles?.();
     const raw = await readRaw();
     if (raw[ApplyOS.STORAGE_KEY]) {
-      const normalized = normalizeState(raw[ApplyOS.STORAGE_KEY]);
-      if (raw[ApplyOS.STORAGE_KEY].schema_version !== ApplyOS.SCHEMA_VERSION) return writeState(normalized);
+      const migrated = migrateState(raw[ApplyOS.STORAGE_KEY]);
+      const normalized = normalizeState(migrated);
+      if (JSON.stringify(raw[ApplyOS.STORAGE_KEY]) !== JSON.stringify(normalized)) return writeState(normalized);
       return normalized;
     }
 
@@ -74,6 +266,10 @@
       });
     }
     return writeState(state);
+  }
+
+  ApplyOS.ensureState = async function ensureState() {
+    return withStorageLock(ensureStateUnlocked);
   };
 
   ApplyOS.getState = async function getState() {
@@ -81,9 +277,14 @@
   };
 
   ApplyOS.mutateState = async function mutateState(mutator) {
-    const state = await ApplyOS.ensureState();
-    const next = (await mutator(structuredClone(state))) || state;
-    return writeState(next);
+    if (typeof mutator !== "function") throw new TypeError("ApplyOS.mutateState requires a mutator function");
+    return withStorageLock(async () => {
+      const state = await ensureStateUnlocked();
+      const result = await mutator(structuredClone(state));
+      const next = isRecord(result) ? result : state;
+      next.revision = state.revision + 1;
+      return writeState(next);
+    });
   };
 
   ApplyOS.getApplicationByUrl = async function getApplicationByUrl(url) {

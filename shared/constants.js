@@ -3,7 +3,7 @@
 
   const ApplyOS = root.ApplyOS = root.ApplyOS || {};
 
-  ApplyOS.SCHEMA_VERSION = 2;
+  ApplyOS.SCHEMA_VERSION = 3;
   ApplyOS.STORAGE_KEY = "applyos_state";
   ApplyOS.PROFILE_KEY = "profile";
   ApplyOS.APPLICATION_STATUSES = [

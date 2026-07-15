@@ -134,8 +134,16 @@ export interface ResumeVersion {
   is_current: boolean;
 }
 
+export interface StateMigrationRecord {
+  from_version: number;
+  to_version: number;
+  migrated_at: string;
+}
+
 export interface ApplyOSState {
   schema_version: number;
+  revision: number;
+  migration_history: StateMigrationRecord[];
   applications: ApplicationRecord[];
   reminders: FollowUpReminder[];
   answer_memory: AnswerMemoryItem[];

@@ -22,3 +22,85 @@
   font: 700 12px/1.45 "Avenir Next", sans-serif !important;
   letter-spacing: 0 !important;
 }
+
+.applyos-review-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  display: grid !important;
+  place-items: center !important;
+  padding: 24px !important;
+  background: rgba(23, 24, 20, .76) !important;
+  color: #171814 !important;
+  font: 500 13px/1.45 "Avenir Next", "Century Gothic", sans-serif !important;
+}
+.applyos-review-dialog {
+  width: min(760px, 100%) !important;
+  max-height: min(820px, calc(100vh - 48px)) !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(100px, 1fr) minmax(180px, .8fr) auto !important;
+  overflow: hidden !important;
+  border: 1px solid #171814 !important;
+  background: linear-gradient(rgba(23,24,20,.04) 1px,transparent 1px), linear-gradient(90deg,rgba(23,24,20,.04) 1px,transparent 1px), #f3f0e6 !important;
+  background-size: 24px 24px !important;
+  box-shadow: 8px 8px 0 #b9f54a !important;
+}
+.applyos-review-dialog > header {
+  display: flex !important;
+  justify-content: space-between !important;
+  gap: 24px !important;
+  padding: 22px 24px 18px !important;
+  border-bottom: 1px solid rgba(23,24,20,.2) !important;
+}
+.applyos-review-dialog p, .applyos-review-dialog h2 { margin: 0 !important; }
+.applyos-review-dialog header p:first-child, .applyos-review-preview > span {
+  color: #676a60 !important;
+  font: 800 9px/1 "Courier New", monospace !important;
+  letter-spacing: .14em !important;
+}
+.applyos-review-dialog h2 { margin: 7px 0 8px !important; font: 400 30px/1 Georgia, serif !important; }
+.applyos-review-dialog header p:last-child { max-width: 610px !important; color: #676a60 !important; font-size: 12px !important; }
+.applyos-review-close { align-self: start !important; width: 34px !important; height: 34px !important; border: 1px solid #171814 !important; color: #171814 !important; background: transparent !important; cursor: pointer !important; font: 500 24px/1 sans-serif !important; }
+.applyos-review-fields { overflow: auto !important; padding: 12px 24px !important; border-bottom: 1px solid rgba(23,24,20,.2) !important; }
+.applyos-review-fields label { display: flex !important; align-items: flex-start !important; gap: 11px !important; padding: 10px 0 !important; border-bottom: 1px solid rgba(23,24,20,.12) !important; cursor: pointer !important; }
+.applyos-review-fields input { width: 17px !important; height: 17px !important; margin: 2px 0 0 !important; accent-color: #171814 !important; }
+.applyos-review-fields span { display: grid !important; gap: 3px !important; }
+.applyos-review-fields strong { color: #171814 !important; font: 700 12px/1.35 "Avenir Next", sans-serif !important; }
+.applyos-review-fields small { color: #676a60 !important; font: 700 9px/1.2 "Courier New", monospace !important; }
+.applyos-review-empty { padding: 20px 0 !important; color: #676a60 !important; }
+.applyos-review-preview { display: grid !important; grid-template-rows: auto 1fr !important; gap: 8px !important; min-height: 0 !important; padding: 14px 24px !important; }
+.applyos-review-preview textarea { width: 100% !important; min-height: 145px !important; resize: none !important; border: 1px solid #171814 !important; padding: 12px !important; color: #171814 !important; background: rgba(255,255,255,.58) !important; font: 10px/1.45 "Courier New", monospace !important; }
+.applyos-review-dialog > footer { display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 18px !important; padding: 15px 24px !important; border-top: 1px solid rgba(23,24,20,.2) !important; color: #676a60 !important; font-size: 10px !important; }
+.applyos-review-dialog footer div { display: flex !important; gap: 9px !important; }
+.applyos-review-dialog footer button { border: 1px solid #171814 !important; padding: 10px 13px !important; color: #171814 !important; background: transparent !important; cursor: pointer !important; font: 800 11px/1 "Avenir Next", sans-serif !important; }
+.applyos-review-dialog footer .applyos-review-download { background: #b9f54a !important; box-shadow: 3px 3px 0 #171814 !important; }
+
+.applyos-submit-prompt {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  right: 22px !important;
+  bottom: 22px !important;
+  width: min(390px, calc(100vw - 44px)) !important;
+  padding: 20px !important;
+  border: 1px solid #171814 !important;
+  color: #171814 !important;
+  background: linear-gradient(rgba(23,24,20,.04) 1px,transparent 1px), linear-gradient(90deg,rgba(23,24,20,.04) 1px,transparent 1px), #f3f0e6 !important;
+  background-size: 24px 24px !important;
+  box-shadow: 6px 6px 0 #b9f54a !important;
+  font: 500 12px/1.45 "Avenir Next", "Century Gothic", sans-serif !important;
+}
+.applyos-submit-prompt > p, .applyos-submit-prompt > h2 { margin: 0 !important; }
+.applyos-submit-prompt > p:first-child { color: #676a60 !important; font: 800 8px/1 "Courier New", monospace !important; letter-spacing: .14em !important; }
+.applyos-submit-prompt h2 { margin-top: 8px !important; font: 400 25px/1.1 Georgia, serif !important; }
+.applyos-submit-prompt h2 + p { margin-top: 8px !important; color: #676a60 !important; }
+.applyos-submit-prompt div { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-top: 16px !important; }
+.applyos-submit-prompt button { border: 1px solid #171814 !important; padding: 11px 9px !important; color: #171814 !important; background: transparent !important; cursor: pointer !important; font: 800 11px/1 "Avenir Next", sans-serif !important; }
+.applyos-submit-prompt .applyos-submit-yes { background: #b9f54a !important; box-shadow: 3px 3px 0 #171814 !important; }
+.applyos-submit-prompt .applyos-submit-suppress { grid-column: 1 / -1 !important; border-color: rgba(23,24,20,.3) !important; color: #676a60 !important; font-size: 9px !important; }
+
+@media (max-width: 640px) {
+  .applyos-review-overlay { padding: 10px !important; }
+  .applyos-review-dialog { max-height: calc(100vh - 20px) !important; grid-template-rows: auto minmax(90px, .8fr) minmax(150px, .65fr) auto !important; }
+  .applyos-review-dialog > header, .applyos-review-fields, .applyos-review-preview, .applyos-review-dialog > footer { padding-left: 14px !important; padding-right: 14px !important; }
+  .applyos-review-dialog > footer { align-items: stretch !important; flex-direction: column !important; }
+}

@@ -351,7 +351,10 @@
             ? "desiredStartYear"
             : null;
       if (workdayDateKey && hasAnswer(flatProfile[workdayDateKey])) {
-        return prepareAnswer(element, { key: workdayDateKey, value: flatProfile[workdayDateKey], score: 200, context }, classification);
+        const partialDateValue = String(flatProfile[workdayDateKey]).trim();
+        if (/^\d{1,4}$/.test(partialDateValue)) {
+          return { key: workdayDateKey, value: partialDateValue, score: 200, context, classification };
+        }
       }
     }
 
@@ -916,6 +919,277 @@
     window.setTimeout(() => toast.remove(), 5500);
   }
 
+  function diagnosticRawField(element) {
+    const attributes = {};
+    for (const name of ["aria-labelledby", "aria-describedby", "aria-required", "aria-haspopup", "aria-expanded", "aria-controls", "data-automation-id", "data-testid", "data-test", "data-ui"]) {
+      if (element.hasAttribute?.(name)) attributes[name] = element.getAttribute(name);
+    }
+    const ancestors = [];
+    let parent = element.parentElement;
+    for (let depth = 0; depth < 4 && parent; depth += 1, parent = parent.parentElement) {
+      ancestors.push({ tag: parent.tagName?.toLowerCase() || "unknown", role: parent.getAttribute?.("role") || "" });
+    }
+    return {
+      label: labelText(element),
+      tag: element.tagName?.toLowerCase() || "unknown",
+      type: element.type || "",
+      role: element.getAttribute?.("role") || "",
+      required: Boolean(element.required || element.getAttribute?.("aria-required") === "true"),
+      autocomplete: element.getAttribute?.("autocomplete") || "",
+      attributes,
+      ancestors,
+      hidden: !visible(element) || String(element.type || "").toLowerCase() === "hidden"
+    };
+  }
+
+  function collectDiagnosticFields() {
+    const blockedTypes = new Set(["hidden", "password", "submit", "button", "reset", "image"]);
+    return queryAllDeep(CONTROL_SELECTOR)
+      .filter((element) => !element.closest?.(".applyos-review-overlay, .applyos-submit-prompt") && !blockedTypes.has(String(element.type || "").toLowerCase()))
+      .map((element) => globalThis.ApplyOS.Diagnostics?.describeField(diagnosticRawField(element)))
+      .filter(Boolean)
+      .slice(0, 80);
+  }
+
+  function reportPayload(fields) {
+    const job = globalThis.ApplyOS?.captureJob?.() || {};
+    return globalThis.ApplyOS.Diagnostics.buildReport({
+      pageUrl: location.href,
+      platform: job.platform || detectSite().toLowerCase(),
+      extensionVersion: chrome.runtime.getManifest().version,
+      fields
+    });
+  }
+
+  function downloadDiagnosticReport(payload) {
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `applyos-broken-fields-${payload.source_domain}-${Date.now()}.json`;
+    link.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  function openDiagnosticReview() {
+    if (window !== window.top) return { count: 0 };
+    document.querySelector(".applyos-review-overlay")?.remove();
+    const fields = collectDiagnosticFields();
+    const overlay = document.createElement("div");
+    overlay.className = "applyos-review-overlay";
+    const dialog = document.createElement("section");
+    dialog.className = "applyos-review-dialog";
+    dialog.setAttribute("role", "dialog");
+    dialog.setAttribute("aria-modal", "true");
+    dialog.setAttribute("aria-label", "Review broken-field report");
+
+    const header = document.createElement("header");
+    const heading = document.createElement("div");
+    const eyebrow = document.createElement("p");
+    eyebrow.textContent = "PRIVACY REVIEW";
+    const title = document.createElement("h2");
+    title.textContent = "Report broken fields";
+    const explanation = document.createElement("p");
+    explanation.textContent = "Select only the fields that failed. The preview contains labels and sanitized structure—never entered answers, resume data, or the page URL query. Nothing is uploaded.";
+    heading.append(eyebrow, title, explanation);
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "applyos-review-close";
+    close.setAttribute("aria-label", "Close report review");
+    close.textContent = "×";
+    header.append(heading, close);
+
+    const list = document.createElement("div");
+    list.className = "applyos-review-fields";
+    const checkboxes = fields.map((field, index) => {
+      const row = document.createElement("label");
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.checked = false;
+      checkbox.dataset.index = String(index);
+      const copy = document.createElement("span");
+      const name = document.createElement("strong");
+      name.textContent = field.label;
+      const meta = document.createElement("small");
+      meta.textContent = `${field.tag}${field.type ? ` · ${field.type}` : ""}${field.required ? " · required" : ""}`;
+      copy.append(name, meta);
+      row.append(checkbox, copy);
+      list.append(row);
+      return checkbox;
+    });
+    if (!fields.length) {
+      const empty = document.createElement("p");
+      empty.className = "applyos-review-empty";
+      empty.textContent = "No visible form fields were found on this page.";
+      list.append(empty);
+    }
+
+    const previewLabel = document.createElement("label");
+    previewLabel.className = "applyos-review-preview";
+    const previewTitle = document.createElement("span");
+    previewTitle.textContent = "COMPLETE SANITIZED PAYLOAD";
+    const preview = document.createElement("textarea");
+    preview.readOnly = true;
+    preview.spellcheck = false;
+    previewLabel.append(previewTitle, preview);
+
+    const actions = document.createElement("footer");
+    const privacy = document.createElement("span");
+    privacy.textContent = "Review required · no server upload";
+    const buttonGroup = document.createElement("div");
+    const copyButton = document.createElement("button");
+    copyButton.type = "button";
+    copyButton.textContent = "Copy JSON";
+    const downloadButton = document.createElement("button");
+    downloadButton.type = "button";
+    downloadButton.className = "applyos-review-download";
+    downloadButton.textContent = "Download JSON";
+    buttonGroup.append(copyButton, downloadButton);
+    actions.append(privacy, buttonGroup);
+
+    const selectedPayload = () => reportPayload(checkboxes.filter((checkbox) => checkbox.checked).map((checkbox) => fields[Number(checkbox.dataset.index)]));
+    const refreshPreview = () => { preview.value = JSON.stringify(selectedPayload(), null, 2); };
+    checkboxes.forEach((checkbox) => checkbox.addEventListener("change", refreshPreview));
+    close.addEventListener("click", () => overlay.remove());
+    overlay.addEventListener("click", (event) => { if (event.target === overlay) overlay.remove(); });
+    copyButton.addEventListener("click", async () => {
+      const json = JSON.stringify(selectedPayload(), null, 2);
+      let copied = false;
+      try { await navigator.clipboard.writeText(json); copied = true; } catch { /* Fall back to the reviewed preview. */ }
+      if (!copied) {
+        preview.focus();
+        preview.select();
+        copied = document.execCommand("copy");
+      }
+      copyButton.textContent = copied ? "Copied" : "Select and copy preview";
+    });
+    downloadButton.addEventListener("click", () => downloadDiagnosticReport(selectedPayload()));
+    dialog.append(header, list, previewLabel, actions);
+    overlay.append(dialog);
+    document.documentElement.append(overlay);
+    refreshPreview();
+    close.focus();
+    return { count: fields.length };
+  }
+
+  let submissionSession = null;
+  let confirmationObserver = null;
+  let confirmationTimer = null;
+  let observedUrl = location.href;
+
+  function confirmationSignals() {
+    const strongSelector = Boolean(document.querySelector(globalThis.ApplyOS.Submission.confirmationSelectors(submissionSession?.platform).join(",")));
+    const heading = Array.from(document.querySelectorAll("h1, h2, [role='heading']"))
+      .slice(0, 16).map((element) => String(element.textContent || "").trim()).filter(Boolean).join("\n").slice(0, 1600);
+    const main = document.querySelector("main, [role='main'], #main, #content");
+    const pageText = String(main?.textContent || "").replace(/\s+/g, " ").trim().slice(0, 4000);
+    const formPresent = document.querySelectorAll("form input:not([type='hidden']), form textarea, form select").length >= 3;
+    return { strongSelector, heading, pageText, formPresent };
+  }
+
+  async function evaluateSubmissionConfirmation() {
+    if (window !== window.top || !submissionSession || submissionSession.suppressed || !submissionSession.submitIntentAt) return;
+    if (submissionSession.promptedIntentAt === submissionSession.submitIntentAt) return;
+    const result = globalThis.ApplyOS.Submission.scoreConfirmation({
+      ...confirmationSignals(),
+      title: document.title,
+      url: location.href,
+      submitIntentAgeMs: Date.now() - submissionSession.submitIntentAt
+    });
+    if (!result.likely) return;
+    const marked = await chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_PROMPTED" });
+    if (!marked?.ok) return;
+    submissionSession = marked.session;
+    showSubmissionPrompt(submissionSession);
+  }
+
+  function queueConfirmationCheck(delay = 450) {
+    window.clearTimeout(confirmationTimer);
+    confirmationTimer = window.setTimeout(() => evaluateSubmissionConfirmation().catch(() => {}), delay);
+  }
+
+  async function noteTrustedSubmitIntent() {
+    const response = await chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_SUBMIT_INTENT", url: location.href });
+    if (!response?.ok) return;
+    submissionSession = response.session;
+    queueConfirmationCheck(250);
+  }
+
+  function showSubmissionPrompt(session) {
+    if (document.querySelector(".applyos-submit-prompt")) return;
+    const prompt = document.createElement("section");
+    prompt.className = "applyos-submit-prompt";
+    prompt.setAttribute("role", "dialog");
+    prompt.setAttribute("aria-label", "Confirm submitted application");
+    const eyebrow = document.createElement("p");
+    eyebrow.textContent = "APPLICATION CHECK";
+    const title = document.createElement("h2");
+    title.textContent = "Did you submit this application?";
+    const detail = document.createElement("p");
+    detail.textContent = [session.role, session.company].filter(Boolean).join(" at ") || "ApplyOS will only update this after you confirm.";
+    const actions = document.createElement("div");
+    const yes = document.createElement("button");
+    yes.type = "button";
+    yes.className = "applyos-submit-yes";
+    yes.textContent = "Yes, mark applied";
+    const notYet = document.createElement("button");
+    notYet.type = "button";
+    notYet.textContent = "Not yet";
+    const suppress = document.createElement("button");
+    suppress.type = "button";
+    suppress.className = "applyos-submit-suppress";
+    suppress.textContent = "Don’t ask again here";
+    actions.append(yes, notYet, suppress);
+    prompt.append(eyebrow, title, detail, actions);
+    document.documentElement.append(prompt);
+    yes.addEventListener("click", async () => {
+      yes.disabled = true;
+      const response = await chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_CONFIRM_APPLIED" });
+      if (!response?.ok) { yes.disabled = false; detail.textContent = response?.error || "Could not update the application."; return; }
+      prompt.remove();
+      submissionSession = null;
+      showResultToast({ filled: 0, attached: 0, unmatchedRequired: 0, resumeStatus: "not-found" });
+      const toast = document.querySelector(".applykit-toast");
+      if (toast) toast.textContent = "Marked applied. ApplyOS scheduled your reviewed follow-up reminders.";
+    });
+    notYet.addEventListener("click", async () => {
+      const response = await chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_DISMISS", action: "not_yet" });
+      if (response?.session) submissionSession = response.session;
+      prompt.remove();
+    });
+    suppress.addEventListener("click", async () => {
+      const response = await chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_DISMISS", action: "dont_ask" });
+      if (response?.session) submissionSession = response.session;
+      prompt.remove();
+    });
+    yes.focus();
+  }
+
+  function initializeSubmissionDetection() {
+    document.addEventListener("click", (event) => {
+      if (!event.isTrusted || submissionSession?.suppressed) return;
+      const control = event.target instanceof Element ? event.target.closest("button, input[type='submit'], [role='button']") : null;
+      if (!control || control.closest(".applyos-submit-prompt, .applyos-review-overlay")) return;
+      const label = control.getAttribute("aria-label") || control.value || control.textContent || "";
+      if (globalThis.ApplyOS.Submission.isSubmitIntentLabel(label)) noteTrustedSubmitIntent().catch(() => {});
+    }, true);
+    document.addEventListener("submit", (event) => {
+      if (event.isTrusted && !submissionSession?.suppressed) noteTrustedSubmitIntent().catch(() => {});
+    }, true);
+    if (window !== window.top) return;
+    chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_GET" }).then((response) => {
+      submissionSession = response?.session || null;
+      queueConfirmationCheck(150);
+    }).catch(() => {});
+    confirmationObserver = new MutationObserver(() => queueConfirmationCheck());
+    confirmationObserver.observe(document.documentElement, { childList: true, subtree: true });
+    window.setInterval(() => {
+      if (location.href === observedUrl) return;
+      observedUrl = location.href;
+      queueConfirmationCheck(100);
+    }, 750);
+  }
+
   document.addEventListener("keydown", (event) => {
     if (!(event.altKey && event.shiftKey && event.code === "KeyA")) return;
     event.preventDefault();
@@ -923,6 +1197,16 @@
   });
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === "APPLYOS_SESSION_UPDATED") {
+      if (window === window.top) submissionSession = message.session || null;
+      sendResponse({ ok: true });
+      return false;
+    }
+    if (message?.type === "APPLYOS_REPORT_BROKEN") {
+      try { sendResponse({ ok: true, ...openDiagnosticReview() }); }
+      catch (error) { sendResponse({ ok: false, error: error.message }); }
+      return false;
+    }
     const task = message?.type === "APPLYKIT_FILL"
       ? fillFromStorage()
       : message?.type === "APPLYOS_AGENT_ASSIST"
@@ -934,4 +1218,6 @@
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   });
+
+  initializeSubmissionDetection();
 })();
