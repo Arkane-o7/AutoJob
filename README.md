@@ -67,7 +67,7 @@ The fixtures `demo/application.html`, `demo/ats-fixtures.html`, and `demo/site-r
 ### ATS coverage
 
 - Dedicated handler: Workday.
-- Compatibility adapters: Greenhouse (legacy and React), Lever, Ashby, SmartRecruiters, iCIMS, Oracle/Taleo, Workable, Jobvite, SAP SuccessFactors, BambooHR, Recruitee, Teamtailor, and Personio.
+- Compatibility adapters: Greenhouse (legacy and React), Lever, Ashby, SmartRecruiters, iCIMS, Oracle/Taleo, Microsoft Careers/Eightfold, Workable, Jobvite, SAP SuccessFactors, BambooHR, Recruitee, Teamtailor, and Personio.
 - Generic fallback: semantic labels, ARIA controls, native fields, open shadow roots, and accessible subframes on other company career pages.
 
 An adapter means ApplyOS recognizes that ATS's common field containers, labels, dropdown options, and upload zones. Employer customizations can still differ, so every fill remains review-first and unsupported controls stay untouched.
@@ -116,7 +116,7 @@ npm run verify
 
 `npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, and review-only draft generation.
 
-`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, NorthStarz, and a generic React dropzone. It verifies field values and events, resume attachment, sensitive/consent exclusions, no navigation or submission, late-rendered fields, the reviewed diagnostic flow, and the reviewed post-submit confirmation flow. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
+`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, the reviewed diagnostic flow, and the reviewed post-submit confirmation flow. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
 
 ## Safety boundaries and limitations
 

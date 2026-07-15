@@ -333,7 +333,8 @@ test("major ATS compatibility registry recognizes hosted application domains", a
     "company.bamboohr.com": "bamboohr",
     "company.recruitee.com": "recruitee",
     "jobs.teamtailor.com": "teamtailor",
-    "company.personio.de": "personio"
+    "company.personio.de": "personio",
+    "apply.careers.microsoft.com": "microsoft"
   };
   for (const [host, expected] of Object.entries(cases)) {
     assert.equal(ApplyOS.ATSCompat.platformForHost(host), expected, host);
@@ -351,6 +352,8 @@ test("ATS adapters add controls without adding submission or navigation actions"
   assert.match(captureSource, /smartrecruiters:/);
   assert.match(captureSource, /successfactors:/);
   assert.match(captureSource, /teamtailor:/);
+  assert.match(captureSource, /microsoft:/);
+  assert.match(source, /Microsoft Careers/);
   assert.doesNotMatch(source, /requestSubmit|\.submit\s*\(/);
   assert.doesNotMatch(source, /save.and.continue|next.button/i);
   assert.match(fixture, /Greenhouse legacy and React controls/);

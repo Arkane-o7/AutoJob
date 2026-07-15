@@ -149,7 +149,11 @@
   }
 
   function visible(element) {
-    if (!element || element.disabled || element.readOnly || element.getAttribute("aria-disabled") === "true") return false;
+    if (!element || element.disabled || element.getAttribute("aria-disabled") === "true") return false;
+    const type = String(element.type || "").toLowerCase();
+    const role = element.getAttribute("role");
+    const readonlyInteractive = ["radio", "checkbox"].includes(type) || role === "combobox" || element.getAttribute("aria-haspopup") === "listbox";
+    if (element.readOnly && !readonlyInteractive) return false;
     const style = window.getComputedStyle(element);
     if (style.display === "none" || style.visibility === "hidden" || Number(style.opacity) === 0) return false;
     const box = element.getBoundingClientRect();
@@ -591,7 +595,7 @@
       element.focus();
       element.click();
       await sleep(25);
-      await setNativeValueWithRetry(element, rawValue);
+      if (!element.readOnly) await setNativeValueWithRetry(element, rawValue);
       const selected = await chooseOpenOption(rawValue, element);
       return selected || hasExistingValue(element);
     }
@@ -625,6 +629,17 @@
       console.warn("ApplyOS could not attach the stored resume", error);
       return false;
     }
+  }
+
+  function hasExistingResumeSelection(input) {
+    const owner = input.closest("[role='group'], fieldset, section, [class*='form-section']") || input.parentElement;
+    if (!owner) return false;
+    return Array.from(owner.querySelectorAll("[role='combobox'], select")).some((control) => {
+      if (control === input || !FILE_CONTEXT.test(descriptor(control))) return false;
+      return control instanceof HTMLSelectElement
+        ? Boolean(control.value) && control.selectedIndex >= 0
+        : Boolean(String(control.value || control.textContent || "").trim());
+    });
   }
 
   function detectSite() {
@@ -747,7 +762,7 @@
           report.scanned += 1;
           if (isResumeFileInput(element)) {
             report.resumeFields += 1;
-            if (element.files?.length) {
+            if (element.files?.length || hasExistingResumeSelection(element)) {
               report.resumeStatus = "attached";
               continue;
             }

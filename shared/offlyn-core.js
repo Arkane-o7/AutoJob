@@ -32,6 +32,7 @@
     recruitee: ["recruitee.com"],
     personio: ["personio.com", "personio.de"],
     teamtailor: ["teamtailor.com"],
+    microsoft: ["apply.careers.microsoft.com"],
     eightfold: ["eightfold.ai"],
     avature: ["avature.net"],
     freshteam: ["freshteam.com"],

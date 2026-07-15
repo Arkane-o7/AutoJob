@@ -52,6 +52,13 @@
       options: ["[role='option']", ".oj-listbox-result", ".ui-menu-item"],
       dropZones: ["[data-automation-id*='upload']", ".file-upload"]
     }),
+    microsoft: adapter("Microsoft Careers", [/(^|\.)apply\.careers\.microsoft\.com$/], {
+      signatures: ["[aria-label='Application sections']", "[class*='select-module_select-input']", "[class*='jobCartPositionName']"],
+      containers: ["[role='group']", "[role='radiogroup']", "[class*='form-section']", "[class*='field']"],
+      labels: ["label", "legend", "[id$='_label']", "[class*='label']"],
+      options: ["[role='listbox'] [role='option']", "[class*='list-module_list-container'] [role='option']"],
+      dropZones: ["[role='group']", "[class*='upload']"]
+    }),
     workable: adapter("Workable", [/(^|\.)workable\.com$/], {
       signatures: ["form[data-ui='application-form']", "[data-ui='job-application']", "[data-ui='application']"],
       containers: ["[data-ui='field']", "[data-ui*='question']", ".form-group", ".field"],

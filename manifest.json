@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ApplyOS",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "description": "A private, review-first job application CRM and autofill assistant.",
   "permissions": ["storage", "unlimitedStorage", "activeTab", "alarms"],
   "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*"],

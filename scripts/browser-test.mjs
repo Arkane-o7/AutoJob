@@ -20,7 +20,7 @@ const profile = Object.freeze({
     name: resumeName, type: "application/pdf", size: 51,
     dataUrl: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\n% ApplyOS browser regression fixture\n%%EOF").toString("base64")}`
   },
-  customAnswers: []
+  customAnswers: [{ question: "Do you currently have any active academic backlogs?", answer: "No" }]
 });
 
 function startFixtureServer() {
@@ -124,6 +124,8 @@ async function snapshot(target) {
     country: document.querySelector("#country")?.value,
     startMonth: document.querySelector("#start-month")?.value, startDay: document.querySelector("#start-day")?.value,
     startYear: document.querySelector("#start-year")?.value,
+    microsoftAuth: document.querySelector("#microsoft-auth")?.value,
+    microsoftBacklog: document.querySelector("input[name='microsoft-backlog']:checked")?.value || "",
     ssn: document.querySelector("#ssn")?.value, gender: document.querySelector("#gender")?.value,
     consent: document.querySelector("#privacy-consent")?.checked,
     resumeName: document.querySelector("#resume")?.files?.[0]?.name || "",
@@ -145,9 +147,15 @@ function assertSafeFill(testCase, response, state) {
   assert.equal(state.ssn, "", `${testCase.id}: SSN must remain blank`);
   assert.equal(state.gender, "", `${testCase.id}: demographic data must remain blank`);
   assert.equal(state.consent, false, `${testCase.id}: consent must remain unchecked`);
-  assert.equal(state.resumeName, resumeName, `${testCase.id}: resume input should contain stored file`);
-  assert.equal(state.resumeWidget, resumeName, `${testCase.id}: resume widget should observe attachment`);
-  for (const id of ["first-name", "last-name", "phone", "resume"]) {
+  if (testCase.existingResume) {
+    assert.equal(state.resumeName, "", `${testCase.id}: an already selected resume must not be uploaded again`);
+    assert.equal(state.resumeWidget, "Existing resume selected", `${testCase.id}: existing resume selection is preserved`);
+    assert.equal(state.events["resume:change"] || 0, 0, `${testCase.id}: existing resume must not emit upload events`);
+  } else {
+    assert.equal(state.resumeName, resumeName, `${testCase.id}: resume input should contain stored file`);
+    assert.equal(state.resumeWidget, resumeName, `${testCase.id}: resume widget should observe attachment`);
+  }
+  for (const id of ["first-name", "last-name", "phone", ...(testCase.existingResume ? [] : ["resume"])]) {
     assert.ok(state.events[`${id}:input`] >= 1, `${testCase.id}: ${id} input event should fire`);
     assert.ok(state.events[`${id}:change`] >= 1, `${testCase.id}: ${id} change event should fire`);
   }
@@ -155,6 +163,12 @@ function assertSafeFill(testCase, response, state) {
   if (testCase.id === "workday") {
     assert.deepEqual([state.startMonth, state.startDay, state.startYear], ["8", "1", "2026"], "workday: compound date fields");
     for (const id of ["start-month", "start-day", "start-year"]) assert.ok(state.events[`${id}:change`] >= 1, `workday: ${id} change event`);
+  }
+  if (testCase.id === "microsoft") {
+    assert.equal(state.microsoftAuth, "Yes", "microsoft: Fluent UI combobox option should be selected through its controlled listbox");
+    assert.equal(state.microsoftBacklog, "No", "microsoft: readonly-styled radio group remains interactable");
+    assert.ok(state.events["microsoft-auth:change"] >= 1, "microsoft: combobox change event should fire");
+    assert.ok(state.events["microsoft-backlog-no:change"] >= 1, "microsoft: radio change event should fire");
   }
   if (testCase.expectedDrops) assert.deepEqual(state.drops, ["dragenter", "dragover", "drop"], `${testCase.id}: ATS dropzone events`);
   assert.equal(state.submitCount, 0, `${testCase.id}: form must not submit`);
@@ -202,17 +216,24 @@ async function main() {
       await page.bringToFront();
       const target = await fixtureTarget(page, testCase);
       await target.waitForSelector("#first-name");
+      if (testCase.expectedCapture) {
+        const captured = await activeTabMessage(worker, { type: "APPLYOS_DETECT_JOB" });
+        assert.equal(captured?.ok, true, `${testCase.id}: job capture should succeed`);
+        for (const [field, value] of Object.entries(testCase.expectedCapture)) {
+          assert.equal(captured.job?.[field], value, `${testCase.id}: captured ${field}`);
+        }
+      }
       const response = await sendFill(worker);
       assert.equal(response?.ok, true, `${testCase.id}: response failed (${response?.error || "unknown error"})`);
-      await target.waitForFunction((name) => document.querySelector("#resume")?.files?.[0]?.name === name, resumeName);
+      if (!testCase.existingResume) await target.waitForFunction((name) => document.querySelector("#resume")?.files?.[0]?.name === name, resumeName);
       assertSafeFill(testCase, response, await snapshot(target));
       assert.equal(page.url(), url, `${testCase.id}: autofill must not navigate`);
 
       const secondResponse = await sendFill(worker);
       assert.equal(secondResponse?.ok, true, `${testCase.id}: repeat fill should succeed`);
       const repeated = await snapshot(target);
-      assert.equal(repeated.events["resume:change"], 1, `${testCase.id}: resume must not attach twice`);
-      assert.equal(repeated.resumeName, resumeName, `${testCase.id}: repeat fill preserves attachment`);
+      assert.equal(repeated.events["resume:change"] || 0, testCase.existingResume ? 0 : 1, `${testCase.id}: resume must not attach twice`);
+      assert.equal(repeated.resumeName, testCase.existingResume ? "" : resumeName, `${testCase.id}: repeat fill preserves attachment state`);
 
       if (testCase.dynamic) {
         await target.evaluate(() => window.addDynamicPhone());

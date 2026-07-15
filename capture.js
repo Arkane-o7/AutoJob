@@ -125,6 +125,13 @@
       company: [".bg-white.py-6.px-6 p:nth-of-type(2)"],
       description: [".bg-white.shadow-lg"],
       location: [".bg-white.py-6.px-6 p:nth-of-type(3)"]
+    },
+    microsoft: {
+      host: /(^|\.)apply\.careers\.microsoft\.com$/,
+      role: ["[class*='jobCartPositionName']", "[aria-label='Application for']", "h1"],
+      company: ["header a[href='https://www.microsoft.com']", "header a[href^='https://www.microsoft.com/']"],
+      description: ["[class*='job-description' i]", "[id*='job-description' i]"],
+      location: ["[class*='locationsContainer']"]
     }
   };
 

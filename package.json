@@ -1,6 +1,6 @@
 {
   "name": "applyos-extension",
-  "version": "0.7.2",
+  "version": "0.7.3",
   "private": true,
   "description": "Private, review-first job application CRM and autofill assistant.",
   "scripts": {
