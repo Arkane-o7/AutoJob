@@ -105,9 +105,13 @@ test("manifest loads diagnostics and submission helpers before the content scrip
   assert.ok(scripts.indexOf("shared/diagnostics.js") < scripts.indexOf("content.js"));
   assert.ok(scripts.indexOf("shared/submission.js") < scripts.indexOf("content.js"));
   const background = await readFile(resolve("background.js"), "utf8");
+  const popup = await readFile(resolve("popup.js"), "utf8");
   const content = await readFile(resolve("content.js"), "utf8");
+  assert.match(background, /APPLYOS_RUNTIME_PING/);
   assert.match(background, /APPLYOS_SESSION_UPDATED/);
   assert.match(background, /frameId: 0/);
+  assert.match(popup, /Saved to your dashboard/);
+  assert.match(popup, /trackingReloadNotice\(resultMessage\)/);
   assert.match(content, /checkbox\.checked = false/);
   assert.doesNotMatch(content, /blockedTypes = new Set\(\[[^\]]*"file"/);
 });

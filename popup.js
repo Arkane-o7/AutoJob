@@ -4,6 +4,7 @@ let profile = {};
 let detectedJob = null;
 let application = null;
 let aiConfig = null;
+let trackingRuntimeReady = true;
 
 function hasCoreProfile(value) {
   return Boolean(value?.firstName && value?.lastName && value?.email && value?.phone);
@@ -98,16 +99,33 @@ async function saveCurrent() {
 }
 
 async function startApplicationSession() {
-  if (!application?.id || !activeTab?.id) return null;
-  const response = await chrome.runtime.sendMessage({
-    type: "APPLYOS_SESSION_START",
-    tabId: activeTab.id,
-    application: { id: application.id, company: application.company, role: application.role },
-    platform: detectedJob?.platform || "generic",
-    url: activeTab.url
-  });
-  if (!response?.ok) throw new Error(response?.error || "Could not start application tracking.");
-  return response.session;
+  if (!application?.id || !activeTab?.id) return { ok: false, error: "A saved application and active job tab are required." };
+  try {
+    const response = await chrome.runtime.sendMessage({
+      type: "APPLYOS_SESSION_START",
+      tabId: activeTab.id,
+      application: { id: application.id, company: application.company, role: application.role },
+      platform: detectedJob?.platform || "generic",
+      url: activeTab.url
+    });
+    if (!response?.ok) return { ok: false, error: response?.error || "The tracking worker needs to be reloaded." };
+    trackingRuntimeReady = true;
+    return { ok: true, session: response.session };
+  } catch (error) {
+    return { ok: false, error: error.message };
+  }
+}
+
+async function checkTrackingRuntime() {
+  try {
+    const response = await chrome.runtime.sendMessage({ type: "APPLYOS_RUNTIME_PING" });
+    trackingRuntimeReady = Boolean(response?.ok && response.features?.applicationTracking);
+  } catch { trackingRuntimeReady = false; }
+  return trackingRuntimeReady;
+}
+
+function trackingReloadNotice(prefix) {
+  return `${prefix} Application tracking needs one extension reload: open chrome://extensions, find ApplyOS, and click Reload.`;
 }
 
 function clearApplicationSession() {
@@ -118,7 +136,7 @@ function clearApplicationSession() {
 async function initialize() {
   populateStatuses();
   const [profilesIndex, activeProfile, config, tabs] = await Promise.all([
-    ApplyOS.getProfilesIndex(), ApplyOS.getActiveProfile(), ApplyOS.getAIConfig(), chrome.tabs.query({ active: true, currentWindow: true })
+    ApplyOS.getProfilesIndex(), ApplyOS.getActiveProfile(), ApplyOS.getAIConfig(), chrome.tabs.query({ active: true, currentWindow: true }), checkTrackingRuntime()
   ]);
   profile = activeProfile; aiConfig = config; [activeTab] = tabs;
   ui["profile-select"].replaceChildren(...profilesIndex.profiles.map((meta) => {
@@ -142,6 +160,7 @@ async function initialize() {
     renderDetection(response.job);
     await restoreSavedRecord(response.job);
     if (!hasCoreProfile(profile)) say("Set up your profile before autofilling. You can still save this job.");
+    else if (!trackingRuntimeReady) say(trackingReloadNotice("ApplyOS was updated."), "error");
   } catch (error) {
     const reason = error.message.includes("Receiving end does not exist") || error.message === "Page detection failed"
       ? "This tab needs one refresh for automatic detection"
@@ -155,7 +174,11 @@ async function initialize() {
 
 ui.save.addEventListener("click", async () => {
   ui.save.disabled = true;
-  try { await saveCurrent(); await startApplicationSession(); say("Saved to your ApplyOS dashboard.", "success"); }
+  try {
+    await saveCurrent();
+    const tracking = await startApplicationSession();
+    say(tracking.ok ? "Saved to your ApplyOS dashboard." : trackingReloadNotice("Saved to your dashboard."), tracking.ok ? "success" : "error");
+  }
   catch (error) { say(error.message, "error"); }
   finally { ui.save.disabled = false; }
 });
@@ -178,17 +201,18 @@ ui.fill.addEventListener("click", async () => {
   ui.fill.disabled = true;
   try {
     if (!application && ui.company.value.trim() && ui.role.value.trim()) await saveCurrent();
-    if (application) await startApplicationSession();
+    const tracking = application ? await startApplicationSession() : { ok: true, skipped: true };
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYKIT_FILL" });
     if (!response?.ok) throw new Error(response?.error || "This page could not be filled.");
     const { filled, attached, scanned, unmatchedRequired = 0, resumeStatus = "not-found", site = "This form" } = response.report;
-    say(resumeStatus === "missing"
+    const resultMessage = resumeStatus === "missing"
       ? `${site}: found the resume upload field, but no resume is saved. Add one in Profile & answer memory.`
       : resumeStatus === "failed"
         ? `${site}: found the resume upload field but could not attach the saved file. Attach it manually and review the form.`
         : filled || attached
       ? `${site}: filled ${filled} field${filled === 1 ? "" : "s"}${attached ? ` and attached ${attached} resume` : ""}. Review every answer before submitting.`
-      : `No confident matches among ${scanned} visible fields. ${unmatchedRequired} required field${unmatchedRequired === 1 ? "" : "s"} still need review.`, filled || attached ? "success" : resumeStatus === "failed" || resumeStatus === "missing" ? "error" : "");
+      : `No confident matches among ${scanned} visible fields. ${unmatchedRequired} required field${unmatchedRequired === 1 ? "" : "s"} still need review.`;
+    say(tracking.ok ? resultMessage : trackingReloadNotice(resultMessage), tracking.ok && (filled || attached) ? "success" : resumeStatus === "failed" || resumeStatus === "missing" || !tracking.ok ? "error" : "");
   } catch (error) { say(error.message, "error"); }
   finally { ui.fill.disabled = false; }
 });

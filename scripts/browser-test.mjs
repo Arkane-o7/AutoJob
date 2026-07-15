@@ -246,6 +246,9 @@ async function main() {
     const extensionId = new URL(worker.url()).host;
     const helper = await context.newPage();
     await helper.goto(`chrome-extension://${extensionId}/dashboard.html`, { waitUntil: "domcontentloaded" });
+    const runtime = await helper.evaluate(() => chrome.runtime.sendMessage({ type: "APPLYOS_RUNTIME_PING" }));
+    assert.equal(runtime?.ok, true, "the popup runtime handshake should reach the service worker");
+    assert.equal(runtime?.features?.applicationTracking, true, "the service worker should advertise application tracking");
     const startSession = async () => {
       await page.goto(`http://apply.example.test:${server.port}/react-dropzone`, { waitUntil: "domcontentloaded" });
       await page.bringToFront();

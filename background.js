@@ -68,6 +68,14 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "APPLYOS_RUNTIME_PING") {
+    sendResponse({
+      ok: true,
+      version: chrome.runtime.getManifest().version,
+      features: { applicationTracking: true }
+    });
+    return false;
+  }
   if (message?.type === "APPLYOS_SESSION_START") {
     const tabId = messageTabId(message, _sender, true);
     if (tabId === null || !message.application?.id) {
