@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import vm from "node:vm";
 import { webcrypto } from "node:crypto";
+import { TextDecoder, TextEncoder } from "node:util";
 
 async function runtime(seed = {}) {
   const data = structuredClone(seed);
@@ -11,6 +12,7 @@ async function runtime(seed = {}) {
     storage: {
       local: {
         async get(keys) {
+          if (keys === null) return structuredClone(data);
           const wanted = Array.isArray(keys) ? keys : [keys];
           return Object.fromEntries(wanted.filter((key) => key in data).map((key) => [key, structuredClone(data[key])]));
         },
@@ -19,9 +21,13 @@ async function runtime(seed = {}) {
       }
     }
   };
-  const context = vm.createContext({ chrome, crypto: webcrypto, structuredClone, URL, URLSearchParams, Date, Math, console, globalThis: null });
+  chrome.runtime = { getManifest: () => ({ version: "test" }) };
+  const context = vm.createContext({
+    chrome, crypto: webcrypto, structuredClone, URL, URLSearchParams, TextEncoder, TextDecoder, Date, Math, console,
+    btoa: (value) => Buffer.from(value, "binary").toString("base64"), atob: (value) => Buffer.from(value, "base64").toString("binary"), globalThis: null
+  });
   context.globalThis = context;
-  for (const file of ["shared/constants.js", "shared/matching.js", "shared/offlyn-core.js", "shared/ats-compat.js", "shared/followup.js", "shared/profiles.js", "shared/ai.js", "shared/graph.js", "shared/agent.js", "shared/storage.js"]) {
+  for (const file of ["shared/constants.js", "shared/matching.js", "shared/offlyn-core.js", "shared/ats-compat.js", "shared/followup.js", "shared/profiles.js", "shared/ai.js", "shared/graph.js", "shared/agent.js", "shared/storage.js", "shared/backup.js"]) {
     vm.runInContext(await readFile(resolve(file), "utf8"), context, { filename: file });
   }
   return { ApplyOS: context.ApplyOS, data };
@@ -289,6 +295,29 @@ test("interview workspace stores preparation and builds a manual thank-you draft
   assert.equal(typeof ApplyOS.sendThankYou, "undefined");
   await ApplyOS.deleteContact(contact.id);
   assert.equal((await ApplyOS.getState()).interviews[0].interviewer_contact_ids.length, 0);
+});
+
+test("encrypted backup round-trip restores reviewed data and keeps a one-step undo checkpoint", async () => {
+  const { ApplyOS } = await runtime({ profile: { firstName: "Ada", email: "private@example.test", resume: { name: "private-resume.pdf", dataUrl: "data:application/pdf;base64,UERG" } } });
+  await ApplyOS.ensureState();
+  await ApplyOS.upsertApplication({ company: "Original Co", role: "Engineer", url: "https://example.com/original", source: "test", description: "" });
+  await ApplyOS.upsertContact({ name: "Original Recruiter", email: "recruiter@example.test", relationship: "recruiter" });
+  const password = "correct horse battery staple";
+  const exported = await ApplyOS.exportEncryptedBackup(password, "0.8.1");
+  assert.doesNotMatch(exported.serialized, /private@example\.test|private-resume\.pdf|Original Recruiter/);
+  await assert.rejects(ApplyOS.decryptBackup(exported.serialized, "wrong password"), /Could not decrypt/);
+  const snapshot = await ApplyOS.decryptBackup(exported.serialized, password);
+  assert.equal(ApplyOS.backupSummary(snapshot).applications, 1);
+  assert.equal(ApplyOS.backupSummary(snapshot).contacts, 1);
+
+  await ApplyOS.upsertApplication({ company: "Later Co", role: "Developer", url: "https://example.com/later", source: "test", description: "" });
+  assert.equal((await ApplyOS.getState()).applications.length, 2);
+  await ApplyOS.restoreBackup(snapshot);
+  assert.equal((await ApplyOS.getState()).applications.length, 1);
+  assert.equal(await ApplyOS.hasRestoreCheckpoint(), true);
+  await ApplyOS.undoLastRestore();
+  assert.equal((await ApplyOS.getState()).applications.length, 2);
+  assert.equal(await ApplyOS.hasRestoreCheckpoint(), false);
 });
 
 test("migrates the legacy profile into a switchable active profile", async () => {

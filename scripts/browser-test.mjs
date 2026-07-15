@@ -397,8 +397,31 @@ async function main() {
     assert.equal(crmState.interview.preparation_notes, "Prepare a system-design story.", "interview workspace persists preparation");
     assert.equal(crmState.application.status, "interview", "saving an interview advances an active application to interview");
     await helper.locator("#close-detail").click();
+
+    const backupPassword = "fixture backup password";
+    const optionsPage = await context.newPage();
+    await optionsPage.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
+    const encryptedBackup = await optionsPage.evaluate((password) => ApplyOS.exportEncryptedBackup(password, "browser-test"), backupPassword);
+    await optionsPage.locator("#backup-password").fill(backupPassword);
+    await optionsPage.locator("#backup-confirm").fill(backupPassword);
+    const downloadPromise = optionsPage.waitForEvent("download");
+    await optionsPage.locator("#export-backup").click();
+    const download = await downloadPromise;
+    assert.match(download.suggestedFilename(), /^applyos-backup-\d{4}-\d{2}-\d{2}\.applyos$/, "encrypted export uses the ApplyOS backup extension");
+    await optionsPage.locator("#backup-file").setInputFiles({ name: "fixture.applyos", mimeType: "application/json", buffer: Buffer.from(encryptedBackup.serialized) });
+    await optionsPage.locator("#restore-password").fill(backupPassword);
+    await optionsPage.locator("#preview-backup").click();
+    await optionsPage.locator("#backup-preview").waitFor({ state: "visible" });
+    const backupSummary = await optionsPage.locator("#backup-summary").textContent();
+    assert.match(backupSummary, /applications/);
+    assert.match(backupSummary, /contacts/);
+    assert.match(backupSummary, /interviews/);
+    assert.equal(await optionsPage.locator("#restore-backup").isDisabled(), true, "restore stays locked before the typed confirmation");
+    await optionsPage.locator("#restore-confirmation").fill("RESTORE");
+    assert.equal(await optionsPage.locator("#restore-backup").isEnabled(), true, "reviewed backup can be explicitly unlocked for restore");
+    await optionsPage.close();
     await helper.close();
-    console.log("PASS reviewed submission, contact CRM, compose handoff and interview workspace lifecycle");
+    console.log("PASS reviewed submission, CRM, interview and encrypted backup lifecycle");
     console.log(`Browser regression complete: ${ATS_CASES.length}/${ATS_CASES.length} ATS fixtures passed using unpacked MV3 at ${extensionRoot}.`);
   } finally {
     await context?.close().catch(() => {});

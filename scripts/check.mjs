@@ -10,7 +10,7 @@ const scripts = [
   manifest.background?.service_worker,
   ...manifest.content_scripts.flatMap((entry) => entry.js || []),
   "popup.js", "options.js", "dashboard.js", "onboarding.js",
-  "shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/storage.js"
+  "shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/storage.js", "shared/backup.js"
 ].filter(Boolean);
 
 for (const file of new Set(scripts)) {

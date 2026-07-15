@@ -29,6 +29,7 @@ The new modules are:
 - `shared/workday.js`: 1,128-line browser-ready compatibility port of Offlyn's 1,277-line Workday handler. Type-only code and automatic Save-and-Continue navigation are intentionally removed; inline experience Add/Save remains to support multiple editable records.
 - `shared/diagnostics.js`: privacy-safe broken-field snapshots containing only reviewed labels and allowlisted DOM structure—never entered values or file contents.
 - `shared/submission.js`: conservative confirmation scoring that requires both recent user submit intent and strong confirmation-page evidence.
+- `shared/backup.js`: password-derived AES-256-GCM export/import for the complete local workspace, decrypted summary review, safe version checks, and a one-step local restore checkpoint.
 - `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. It has no email credentials or send capability.
 - `onboarding.*`: five-step profile, resume-text, safety, and local-AI setup flow.
 - `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, review-only compose handoffs, match guidance, profile switching, and the local-AI studio.
@@ -106,6 +107,10 @@ Open an application and choose **Add interview**. Record the round, format, sche
 
 Open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These work immediately without accounts, model downloads, terminal commands, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Answers → Advanced**, but it is never part of onboarding or required for core functionality.
 
+### 10. Export or restore an encrypted backup
+
+Open **Profile & Answers → Encrypted backup**. Choose a password of at least 10 characters and download the `.applyos` file. The file includes the complete local workspace, including saved resume files, and is encrypted before download. To restore, select the file, enter its password, review the decrypted record counts, type `RESTORE`, and confirm. A successful restore keeps one local undo checkpoint. ApplyOS never stores or recovers the backup password.
+
 ## Answer memory
 
 Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized into answer memory and the local knowledge graph. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
@@ -122,7 +127,7 @@ npm run test:browser:dist
 npm run verify
 ```
 
-`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, and review-only draft generation.
+`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, encrypted backup round trips and rollback, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, and review-only draft generation.
 
 `npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed diagnostics and post-submit confirmation, contact creation, compose handoffs, interview preparation, and thank-you drafting. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
 
@@ -133,3 +138,4 @@ npm run verify
 - Closed shadow roots and inaccessible cross-origin frames cannot be inspected.
 - Employer-specific custom widgets may still need manual entry; low-confidence job metadata is explicitly surfaced for review.
 - PDF/DOCX binary contents are not parsed. Matching and AI use pasted resume text plus the structured profile; saved files remain local for attachment.
+- Encrypted backups cannot be recovered without their password. Cloud accounts and cross-device sync are not included; those require a separately designed authentication, encryption, conflict-resolution, export, and deletion service.

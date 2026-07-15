@@ -10,6 +10,27 @@ const saveStatus = document.querySelector("#save-status");
 let savedResume = null;
 let pendingResume = null;
 let profilesIndex = null;
+let pendingRestore = null;
+
+function setBackupStatus(message, tone = "") {
+  const status = document.querySelector("#backup-status");
+  status.textContent = message;
+  status.className = tone;
+}
+
+function downloadTextFile(contents, filename) {
+  const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url; anchor.download = filename; anchor.style.display = "none";
+  document.body.append(anchor); anchor.click(); anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function backupSummaryText(summary) {
+  const created = new Date(summary.created_at);
+  const date = Number.isNaN(created.getTime()) ? summary.created_at : created.toLocaleString();
+  return `${summary.profiles} profiles · ${summary.applications} applications · ${summary.contacts} contacts · ${summary.interviews} interviews · ${summary.answers} remembered answers · Created ${date} with ApplyOS ${summary.extension_version}`;
+}
 
 function createAnswerRow(answer = {}) {
   const row = document.createElement("div");
@@ -94,6 +115,7 @@ async function initialize() {
   document.querySelector("#ai-model").value = config.chatModel;
   document.querySelector("#embedding-model").value = config.embeddingModel;
   if (config.enabled) { document.querySelector("#ai-result").textContent = `Connected · Ollama ${config.version || "ready"}`; document.querySelector("#ai-result").className = "success"; }
+  document.querySelector("#undo-restore").classList.toggle("hidden", !(await ApplyOS.hasRestoreCheckpoint()));
 }
 
 resumeInput.addEventListener("change", async () => {
@@ -129,8 +151,8 @@ addAnswerButton.addEventListener("click", () => {
   markUnsaved();
 });
 
-form.addEventListener("input", markUnsaved);
-form.addEventListener("change", markUnsaved);
+form.addEventListener("input", (event) => { if (!event.target.closest("#backup")) markUnsaved(); });
+form.addEventListener("change", (event) => { if (!event.target.closest("#backup")) markUnsaved(); });
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -185,4 +207,61 @@ document.querySelector("#test-ai").addEventListener("click", async (event) => {
     if (status.success) document.querySelector("#ai-model").value = status.config.chatModel;
   } catch (error) { result.className = "error"; result.textContent = error.message; }
   button.disabled = false;
+});
+
+document.querySelector("#export-backup").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const password = document.querySelector("#backup-password").value;
+  const confirmation = document.querySelector("#backup-confirm").value;
+  if (password !== confirmation) { setBackupStatus("Backup passwords do not match.", "error"); return; }
+  button.disabled = true; setBackupStatus("Encrypting locally…");
+  try {
+    const result = await ApplyOS.exportEncryptedBackup(password, chrome.runtime.getManifest().version);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTextFile(result.serialized, `applyos-backup-${date}.applyos`);
+    setBackupStatus(`Encrypted backup downloaded · ${backupSummaryText(result.summary)}`, "success");
+    document.querySelector("#backup-password").value = ""; document.querySelector("#backup-confirm").value = "";
+  } catch (error) { setBackupStatus(error.message, "error"); }
+  finally { button.disabled = false; }
+});
+
+document.querySelector("#preview-backup").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const file = document.querySelector("#backup-file").files?.[0];
+  if (!file) { setBackupStatus("Choose an encrypted .applyos file first.", "error"); return; }
+  if (file.size > 64 * 1024 * 1024) { setBackupStatus("This backup is larger than the 64 MB restore limit.", "error"); return; }
+  button.disabled = true; pendingRestore = null; setBackupStatus("Decrypting locally…");
+  try {
+    pendingRestore = await ApplyOS.decryptBackup(await file.text(), document.querySelector("#restore-password").value);
+    const summary = ApplyOS.backupSummary(pendingRestore);
+    document.querySelector("#backup-summary-title").textContent = `ApplyOS ${summary.extension_version} backup`;
+    document.querySelector("#backup-summary").textContent = backupSummaryText(summary);
+    document.querySelector("#restore-confirmation").value = "";
+    document.querySelector("#restore-backup").disabled = true;
+    document.querySelector("#backup-preview").classList.remove("hidden");
+    setBackupStatus("Backup decrypted. Review the counts before restoring.", "success");
+  } catch (error) { document.querySelector("#backup-preview").classList.add("hidden"); setBackupStatus(error.message, "error"); }
+  finally { button.disabled = false; }
+});
+
+document.querySelector("#restore-confirmation").addEventListener("input", (event) => {
+  document.querySelector("#restore-backup").disabled = !pendingRestore || event.target.value !== "RESTORE";
+});
+
+document.querySelector("#restore-backup").addEventListener("click", async (event) => {
+  if (!pendingRestore || document.querySelector("#restore-confirmation").value !== "RESTORE") return;
+  if (!window.confirm("Replace this browser's ApplyOS data with the reviewed backup? A one-step local undo checkpoint will be kept.")) return;
+  const button = event.currentTarget; button.disabled = true; setBackupStatus("Restoring and validating local data…");
+  try {
+    const summary = await ApplyOS.restoreBackup(pendingRestore);
+    setBackupStatus(`Restore complete · ${backupSummaryText(summary)} · Reloading…`, "success");
+    window.setTimeout(() => window.location.reload(), 700);
+  } catch (error) { setBackupStatus(`Restore failed and previous data was recovered: ${error.message}`, "error"); button.disabled = false; }
+});
+
+document.querySelector("#undo-restore").addEventListener("click", async (event) => {
+  if (!window.confirm("Undo the last successful restore and return to the previous local data?")) return;
+  const button = event.currentTarget; button.disabled = true; setBackupStatus("Recovering the pre-restore checkpoint…");
+  try { await ApplyOS.undoLastRestore(); setBackupStatus("Previous local data recovered. Reloading…", "success"); window.setTimeout(() => window.location.reload(), 700); }
+  catch (error) { setBackupStatus(error.message, "error"); button.disabled = false; }
 });

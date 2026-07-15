@@ -197,6 +197,16 @@ export interface ApplyOSState {
   migrated_at: string;
 }
 
+export interface BackupSummary {
+  created_at: string;
+  extension_version: string;
+  profiles: number;
+  applications: number;
+  contacts: number;
+  interviews: number;
+  answers: number;
+}
+
 export interface JobMatchResult {
   score: number;
   jobSkills: string[];

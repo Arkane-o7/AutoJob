@@ -31,6 +31,7 @@
           <a href="#resume">06 — Resume</a>
           <a href="#answers">07 — Custom answers</a>
           <a href="#local-ai">08 — Local AI</a>
+          <a href="#backup">09 — Encrypted backup</a>
         </nav>
       </aside>
 
@@ -162,6 +163,35 @@
           </details>
         </section>
 
+        <section id="backup">
+          <div class="section-number">09</div>
+          <div class="section-heading"><p>PORTABILITY & RECOVERY</p><h2>Encrypted local backup</h2></div>
+          <p class="section-copy">Export your complete ApplyOS workspace—including profiles, saved resume files, applications, contacts, interviews, and answer memory—as one password-encrypted file. The password is never stored or sent anywhere.</p>
+          <div class="backup-grid">
+            <article class="backup-card">
+              <p class="kicker">EXPORT</p><h3>Protect a copy</h3>
+              <label><span>Backup password</span><input id="backup-password" type="password" autocomplete="new-password" minlength="10" placeholder="At least 10 characters"></label>
+              <label><span>Confirm password</span><input id="backup-confirm" type="password" autocomplete="new-password" minlength="10"></label>
+              <button id="export-backup" type="button">Download encrypted backup →</button>
+              <small>Keep the password safe. ApplyOS cannot recover it.</small>
+            </article>
+            <article class="backup-card">
+              <p class="kicker">IMPORT</p><h3>Review before replacing</h3>
+              <label><span>Encrypted .applyos file</span><input id="backup-file" type="file" accept=".applyos,application/json"></label>
+              <label><span>Backup password</span><input id="restore-password" type="password" autocomplete="current-password"></label>
+              <button id="preview-backup" type="button">Decrypt & preview →</button>
+              <small>Nothing changes until you review the counts and confirm Restore.</small>
+            </article>
+          </div>
+          <div id="backup-preview" class="backup-preview hidden" aria-live="polite">
+            <div><p class="kicker">DECRYPTED PREVIEW</p><h3 id="backup-summary-title">Backup ready to review</h3><p id="backup-summary"></p></div>
+            <label><span>Type RESTORE to replace local data</span><input id="restore-confirmation" autocomplete="off" placeholder="RESTORE"></label>
+            <button id="restore-backup" type="button" disabled>Replace local data</button>
+          </div>
+          <div class="backup-status-row"><strong id="backup-status">No backup operation running.</strong><button id="undo-restore" class="hidden" type="button">Undo last restore</button></div>
+          <div class="safety-note"><strong>Local and review-first</strong><span>Encryption uses AES-256-GCM with a password-derived key. Restore creates a local one-step rollback checkpoint and never uploads the file.</span></div>
+        </section>
+
         <div class="save-bar">
           <div><strong id="save-status">Unsaved changes</strong><span>Review autofilled forms before submitting.</span></div>
           <button type="submit">Save profile <span>→</span></button>
@@ -175,6 +205,7 @@
     <script src="shared/ai.js"></script>
     <script src="shared/graph.js"></script>
     <script src="shared/storage.js"></script>
+    <script src="shared/backup.js"></script>
     <script src="options.js"></script>
   </body>
 </html>
