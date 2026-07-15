@@ -59,6 +59,33 @@ test("hidden controls are omitted without inspecting their values", async () => 
   assert.equal(ApplyOS.Diagnostics.describeField({ tag: "textarea", hidden: true, label: "Notes", value: "SECRET" }), null);
 });
 
+test("reviewed diagnostics create a bounded prefilled GitHub issue without private values", async () => {
+  const ApplyOS = await pureRuntime();
+  const report = ApplyOS.Diagnostics.buildReport({
+    pageUrl: "https://apply.example.test/form?candidate=PRIVATE_QUERY#step",
+    platform: "fixture",
+    extensionVersion: "0.7.4",
+    fields: [{
+      label: "Email private.person@example.test",
+      tag: "input",
+      type: "email",
+      value: "PRIVATE_ENTERED_VALUE",
+      attributes: { "data-testid": "candidate-email", value: "PRIVATE_ATTRIBUTE" }
+    }]
+  });
+  const issueUrl = ApplyOS.Diagnostics.githubIssueUrl(report);
+  const parsed = new URL(issueUrl);
+  const body = parsed.searchParams.get("body");
+  assert.equal(parsed.origin + parsed.pathname, "https://github.com/Arkane-o7/AutoJob/issues/new");
+  assert.equal(parsed.searchParams.get("title"), "[Site report] apply.example.test");
+  assert.match(body, /candidate-email/);
+  assert.match(body, /\[redacted-email\]/);
+  for (const secret of ["PRIVATE_QUERY", "PRIVATE_ENTERED_VALUE", "PRIVATE_ATTRIBUTE", "private.person@example.test"]) {
+    assert.doesNotMatch(issueUrl, new RegExp(secret, "i"));
+  }
+  assert.ok(issueUrl.length < 8000, "prefilled issue URL stays within a conservative browser-safe bound");
+});
+
 test("submission scoring accepts strong confirmation only after recent trusted intent", async () => {
   const ApplyOS = await pureRuntime();
   assert.ok(ApplyOS.Submission.confirmationSelectors("workday").includes("[data-automation-id='confirmationPage']"));

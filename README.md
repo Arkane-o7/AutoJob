@@ -78,9 +78,9 @@ After you submit the application yourself, ApplyOS can recognize a likely confir
 
 Detection never changes an application status on its own. It requires a recent trusted submit interaction, strong confirmation evidence, and your explicit approval.
 
-### Report a broken field
+### Report a site problem
 
-Choose **Report broken field** in the popup to open an on-page review. No fields are selected by default. Select only the problematic controls, inspect the generated JSON, then copy or download it yourself. Reports include bounded labels and allowlisted DOM attributes only; entered answers, resume filenames/data, email addresses, phone numbers, and hidden fields are excluded.
+Choose **Report a site problem** in the popup to open an on-page review. No fields are selected by default. Select only the problematic controls and inspect the generated JSON. You can copy or download it locally, or open a prefilled public GitHub issue that you must review and submit manually. Nothing is uploaded automatically. Reports include bounded labels and allowlisted DOM attributes only; entered answers, resume filenames/data, email addresses, phone numbers, page query parameters, and hidden fields are excluded.
 
 ### 4. View the dashboard
 

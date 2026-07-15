@@ -223,7 +223,7 @@ ui.report.addEventListener("click", async () => {
   try {
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_REPORT_BROKEN" }, { frameId: 0 });
     if (!response?.ok) throw new Error(response?.error || "Could not open the report review.");
-    say("Review the sanitized report on the job page. Nothing is uploaded.", "success");
+    say("Select the broken fields and review the sanitized payload. Nothing is shared until you open and submit the GitHub report.", "success");
   } catch (error) { say(error.message, "error"); }
   finally { ui.report.disabled = false; }
 });

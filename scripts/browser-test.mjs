@@ -250,6 +250,8 @@ async function main() {
     assert.equal(reportResponse?.ok, true, "broken-field review should open through the content message path");
     const review = page.locator(".applyos-review-dialog");
     await review.waitFor({ state: "visible" });
+    const githubReport = review.locator(".applyos-review-report");
+    assert.equal(await githubReport.isDisabled(), true, "GitHub reporting requires an explicit field selection");
     assert.equal(await review.locator("input[type='checkbox']:checked").count(), 0, "diagnostic fields require explicit selection");
     assert.deepEqual(JSON.parse(await review.locator("textarea").inputValue()).fields, [], "unreviewed diagnostics contain no fields");
     for (const label of ["Email address", "Upload CV/Resume"]) {
@@ -261,8 +263,14 @@ async function main() {
     for (const privateValue of ["existing@example.test", resumeName, "+44 20 7946 0958"]) {
       assert.equal(reviewedPayload.includes(privateValue), false, `diagnostic preview excludes ${privateValue}`);
     }
+    assert.equal(await githubReport.isEnabled(), true, "reviewed fields enable the manual GitHub report action");
+    const githubUrl = await githubReport.getAttribute("data-report-url");
+    assert.match(githubUrl, /^https:\/\/github\.com\/Arkane-o7\/AutoJob\/issues\/new\?/);
+    for (const privateValue of ["existing@example.test", resumeName, "+44 20 7946 0958"]) {
+      assert.equal(githubUrl.includes(privateValue), false, `prefilled GitHub report excludes ${privateValue}`);
+    }
     await review.locator(".applyos-review-close").click();
-    console.log("PASS reviewed-report value-free structural preview and explicit field selection");
+    console.log("PASS reviewed-report value-free preview and manual GitHub issue handoff");
 
     const extensionId = new URL(worker.url()).host;
     const helper = await context.newPage();

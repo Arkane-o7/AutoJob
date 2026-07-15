@@ -73,7 +73,8 @@
 .applyos-review-dialog > footer { display: flex !important; align-items: center !important; justify-content: space-between !important; gap: 18px !important; padding: 15px 24px !important; border-top: 1px solid rgba(23,24,20,.2) !important; color: #676a60 !important; font-size: 10px !important; }
 .applyos-review-dialog footer div { display: flex !important; gap: 9px !important; }
 .applyos-review-dialog footer button { border: 1px solid #171814 !important; padding: 10px 13px !important; color: #171814 !important; background: transparent !important; cursor: pointer !important; font: 800 11px/1 "Avenir Next", sans-serif !important; }
-.applyos-review-dialog footer .applyos-review-download { background: #b9f54a !important; box-shadow: 3px 3px 0 #171814 !important; }
+.applyos-review-dialog footer .applyos-review-report { background: #b9f54a !important; box-shadow: 3px 3px 0 #171814 !important; }
+.applyos-review-dialog footer button:disabled { cursor: not-allowed !important; opacity: .42 !important; box-shadow: none !important; }
 
 .applyos-submit-prompt {
   position: fixed !important;
@@ -103,4 +104,5 @@
   .applyos-review-dialog { max-height: calc(100vh - 20px) !important; grid-template-rows: auto minmax(90px, .8fr) minmax(150px, .65fr) auto !important; }
   .applyos-review-dialog > header, .applyos-review-fields, .applyos-review-preview, .applyos-review-dialog > footer { padding-left: 14px !important; padding-right: 14px !important; }
   .applyos-review-dialog > footer { align-items: stretch !important; flex-direction: column !important; }
+  .applyos-review-dialog footer div { flex-wrap: wrap !important; }
 }

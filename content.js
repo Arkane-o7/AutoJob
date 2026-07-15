@@ -1005,7 +1005,7 @@
     const title = document.createElement("h2");
     title.textContent = "Report broken fields";
     const explanation = document.createElement("p");
-    explanation.textContent = "Select only the fields that failed. The preview contains labels and sanitized structure—never entered answers, resume data, or the page URL query. Nothing is uploaded.";
+    explanation.textContent = "Select only the fields that failed. The preview contains labels and sanitized structure—never entered answers, resume data, or the page URL query. Nothing leaves your browser unless you open the reviewed GitHub report.";
     heading.append(eyebrow, title, explanation);
     const close = document.createElement("button");
     close.type = "button";
@@ -1050,7 +1050,7 @@
 
     const actions = document.createElement("footer");
     const privacy = document.createElement("span");
-    privacy.textContent = "Review required · no server upload";
+    privacy.textContent = "Public GitHub issue · review and submit manually";
     const buttonGroup = document.createElement("div");
     const copyButton = document.createElement("button");
     copyButton.type = "button";
@@ -1059,11 +1059,21 @@
     downloadButton.type = "button";
     downloadButton.className = "applyos-review-download";
     downloadButton.textContent = "Download JSON";
-    buttonGroup.append(copyButton, downloadButton);
+    const reportButton = document.createElement("button");
+    reportButton.type = "button";
+    reportButton.className = "applyos-review-report";
+    reportButton.textContent = "Open GitHub report";
+    reportButton.disabled = true;
+    buttonGroup.append(copyButton, downloadButton, reportButton);
     actions.append(privacy, buttonGroup);
 
     const selectedPayload = () => reportPayload(checkboxes.filter((checkbox) => checkbox.checked).map((checkbox) => fields[Number(checkbox.dataset.index)]));
-    const refreshPreview = () => { preview.value = JSON.stringify(selectedPayload(), null, 2); };
+    const refreshPreview = () => {
+      const payload = selectedPayload();
+      preview.value = JSON.stringify(payload, null, 2);
+      reportButton.disabled = payload.fields.length === 0;
+      reportButton.dataset.reportUrl = payload.fields.length ? globalThis.ApplyOS.Diagnostics.githubIssueUrl(payload) : "";
+    };
     checkboxes.forEach((checkbox) => checkbox.addEventListener("change", refreshPreview));
     close.addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (event) => { if (event.target === overlay) overlay.remove(); });
@@ -1079,6 +1089,12 @@
       copyButton.textContent = copied ? "Copied" : "Select and copy preview";
     });
     downloadButton.addEventListener("click", () => downloadDiagnosticReport(selectedPayload()));
+    reportButton.addEventListener("click", () => {
+      const payload = selectedPayload();
+      if (!payload.fields.length) return;
+      const reportUrl = globalThis.ApplyOS.Diagnostics.githubIssueUrl(payload);
+      window.open(reportUrl, "_blank", "noopener,noreferrer");
+    });
     dialog.append(header, list, previewLabel, actions);
     overlay.append(dialog);
     document.documentElement.append(overlay);
