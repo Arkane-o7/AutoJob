@@ -16,6 +16,7 @@ const profile = Object.freeze({
   firstName: "Ada", lastName: "Lovelace", fullName: "Ada Lovelace", email: "ada@example.test",
   phone: "+44 20 7946 0958", currentLocation: "London, United Kingdom", city: "London",
   country: "United Kingdom", workAuthorization: "Yes", desiredStartDate: "2026-08-01",
+  visaSponsorship: "No",
   resume: {
     name: resumeName, type: "application/pdf", size: 51,
     dataUrl: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\n% ApplyOS browser regression fixture\n%%EOF").toString("base64")}`
@@ -126,6 +127,7 @@ async function snapshot(target) {
     startYear: document.querySelector("#start-year")?.value,
     microsoftAuth: document.querySelector("#microsoft-auth")?.value,
     microsoftBacklog: document.querySelector("input[name='microsoft-backlog']:checked")?.value || "",
+    microsoftSponsorshipClicks: window.__fixture.microsoftSponsorshipClicks,
     ssn: document.querySelector("#ssn")?.value, gender: document.querySelector("#gender")?.value,
     consent: document.querySelector("#privacy-consent")?.checked,
     resumeName: document.querySelector("#resume")?.files?.[0]?.name || "",
@@ -234,6 +236,15 @@ async function main() {
       const repeated = await snapshot(target);
       assert.equal(repeated.events["resume:change"] || 0, testCase.existingResume ? 0 : 1, `${testCase.id}: resume must not attach twice`);
       assert.equal(repeated.resumeName, testCase.existingResume ? "" : resumeName, `${testCase.id}: repeat fill preserves attachment state`);
+
+      if (testCase.id === "microsoft") {
+        const clickBaseline = repeated.microsoftSponsorshipClicks;
+        assert.ok(clickBaseline > 0, "microsoft: unmatched controlled dropdown is attempted during explicit autofill");
+        await target.evaluate(() => window.bumpMicrosoftControlledField());
+        await target.waitForTimeout(1800);
+        const afterRerender = await snapshot(target);
+        assert.equal(afterRerender.microsoftSponsorshipClicks, clickBaseline, "microsoft: controlled rerenders must not restart a settled dropdown attempt");
+      }
 
       if (testCase.dynamic) {
         await target.evaluate(() => window.addDynamicPhone());

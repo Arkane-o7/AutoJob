@@ -100,11 +100,16 @@
   const shadowRoots = new Set();
   const recentFills = new WeakMap();
   const correctionTimers = new WeakMap();
+  const assistFieldLedger = new Map();
   let assistObserver = null;
   let assistTimer = null;
   let assistProfile = null;
   let assistUntil = 0;
   let fillInProgress = false;
+
+  function isMicrosoftCareers() {
+    return ATSCompat?.platformForDocument?.(location.hostname, document) === "microsoft";
+  }
 
   function rule(key, patterns, excludes = []) {
     return { key, patterns, excludes };
@@ -232,6 +237,28 @@
       includeValue ? element.value : ""
     ];
     return normalize(values.filter(Boolean).join(" "));
+  }
+
+  function assistFieldKey(element) {
+    const type = String(element.type || element.getAttribute("role") || element.tagName || "control").toLowerCase();
+    const group = ["radio", "checkbox"].includes(type) ? element.name || "" : "";
+    const stableContext = normalize([
+      labelText(element),
+      element.getAttribute("aria-label"),
+      element.getAttribute("placeholder"),
+      element.getAttribute("autocomplete"),
+      element.name,
+      group
+    ].filter(Boolean).join(" ")) || normalize(element.id);
+    return `${type}:${stableContext}`;
+  }
+
+  function settleAssistField(element, status) {
+    assistFieldLedger.set(assistFieldKey(element), { status, settledAt: Date.now() });
+  }
+
+  function isSettledAssistField(element) {
+    return assistFieldLedger.has(assistFieldKey(element));
   }
 
   function fileInputContext(input) {
@@ -438,7 +465,7 @@
     return String(element.value || "") === String(value) || Boolean(String(element.value || "").trim());
   }
 
-  async function setNativeValueWithRetry(element, rawValue, retries = 3) {
+  async function setNativeValueWithRetry(element, rawValue, retries = isMicrosoftCareers() ? 2 : 3) {
     const expected = formatValueForElement(element, rawValue);
     for (let attempt = 0; attempt < retries; attempt += 1) {
       if (!element.isConnected) return false;
@@ -562,7 +589,8 @@
   }
 
   async function chooseOpenOption(rawValue, owner) {
-    for (let attempt = 0; attempt < 7; attempt += 1) {
+    const maxAttempts = isMicrosoftCareers() ? 3 : 7;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       await sleep(attempt ? 120 : 70);
       const controlledId = owner?.getAttribute("aria-controls") || owner?.getAttribute("aria-owns");
       const controlled = controlledId ? rootQuery(owner, `#${window.CSS?.escape ? CSS.escape(controlledId) : controlledId}`) : null;
@@ -595,7 +623,10 @@
       element.focus();
       element.click();
       await sleep(25);
-      if (!element.readOnly) await setNativeValueWithRetry(element, rawValue);
+      // Microsoft Careers comboboxes are controlled by React. Writing into the
+      // input before selecting an option makes React clear and re-render it,
+      // which used to feed the assist observer indefinitely.
+      if (!element.readOnly && !isMicrosoftCareers()) await setNativeValueWithRetry(element, rawValue);
       const selected = await chooseOpenOption(rawValue, element);
       return selected || hasExistingValue(element);
     }
@@ -749,6 +780,7 @@
   async function fillPage(profile, { quiet = false } = {}) {
     if (fillInProgress) return { scanned: 0, filled: 0, attached: 0, resumeFields: 0, resumeStatus: "not-found", skipped: 0, unmatchedRequired: 0, fields: [], site: detectSite() };
     fillInProgress = true;
+    if (!quiet) assistFieldLedger.clear();
     const flatProfile = flattenProfile(profile);
     const report = { scanned: 0, filled: 0, attached: 0, resumeFields: 0, resumeStatus: "not-found", skipped: 0, unmatchedRequired: 0, fields: [], site: detectSite() };
     const elements = queryAllDeep(CONTROL_SELECTOR);
@@ -758,17 +790,22 @@
       for (const element of elements) {
         const type = String(element.type || "").toLowerCase();
         if (type === "file") {
-          if (element.disabled) continue;
+          if (element.disabled) {
+            settleAssistField(element, "ignored");
+            continue;
+          }
           report.scanned += 1;
           if (isResumeFileInput(element)) {
             report.resumeFields += 1;
             if (element.files?.length || hasExistingResumeSelection(element)) {
               report.resumeStatus = "attached";
+              settleAssistField(element, "preserved");
               continue;
             }
             if (!flatProfile.resume?.dataUrl || !flatProfile.resume?.name) {
               report.resumeStatus = "missing";
               report.skipped += 1;
+              settleAssistField(element, "manual");
               continue;
             }
             const attached = await attachResume(element, flatProfile.resume);
@@ -776,34 +813,49 @@
               report.attached += 1;
               report.resumeStatus = "attached";
               report.fields.push("Resume");
+              settleAssistField(element, "filled");
             } else {
               report.resumeStatus = "failed";
               report.skipped += 1;
+              settleAssistField(element, "failed");
             }
+          } else {
+            settleAssistField(element, "manual");
           }
           continue;
         }
 
         if (!visible(element)) continue;
+        if (quiet && isSettledAssistField(element)) continue;
         report.scanned += 1;
         const isListboxButton = element.getAttribute("role") === "combobox" || element.matches("button[aria-haspopup='listbox']");
-        if (["hidden", "password", "submit", "button", "reset", "image"].includes(type) && !isListboxButton) continue;
-
-        if (hasExistingValue(element)) continue;
-        const answer = bestAnswer(element, flatProfile);
-        if (!answer) {
-          if (element.required || element.getAttribute("aria-required") === "true") report.unmatchedRequired += 1;
+        if (["hidden", "password", "submit", "button", "reset", "image"].includes(type) && !isListboxButton) {
+          settleAssistField(element, "ignored");
           continue;
         }
 
+        if (hasExistingValue(element)) {
+          settleAssistField(element, "preserved");
+          continue;
+        }
+        const answer = bestAnswer(element, flatProfile);
+        if (!answer) {
+          if (element.required || element.getAttribute("aria-required") === "true") report.unmatchedRequired += 1;
+          settleAssistField(element, "manual");
+          continue;
+        }
+
+        settleAssistField(element, "attempting");
         const didFill = await fillElement(element, answer, processedGroups);
         if (didFill) {
           report.filled += 1;
           report.fields.push(answer.key.replace(/^custom:/, "Custom: "));
           element.classList.add("applykit-filled");
           trackFilledElement(element, answer);
+          settleAssistField(element, "filled");
         } else {
           report.skipped += 1;
+          settleAssistField(element, "failed");
         }
       }
     } finally {
@@ -824,6 +876,23 @@
     });
   }
 
+  function addedControlCandidates(mutations) {
+    const candidates = [];
+    for (const mutation of mutations) {
+      if (mutation.type === "attributes") {
+        if (mutation.target instanceof Element) candidates.push(mutation.target);
+        continue;
+      }
+      for (const node of mutation.addedNodes) {
+        if (!(node instanceof Element)) continue;
+        if (node.matches?.(CONTROL_SELECTOR)) candidates.push(node);
+        candidates.push(...node.querySelectorAll?.(CONTROL_SELECTOR) || []);
+        if (node.shadowRoot) candidates.push(...node.shadowRoot.querySelectorAll(CONTROL_SELECTOR));
+      }
+    }
+    return [...new Set(candidates)].some((element) => visible(element) && !isSettledAssistField(element));
+  }
+
   function armAssistMode(profile) {
     assistProfile = profile;
     assistUntil = Date.now() + ASSIST_DURATION_MS;
@@ -833,6 +902,7 @@
         assistObserver.disconnect();
         return;
       }
+      if (fillInProgress || !addedControlCandidates(mutations)) return;
       window.clearTimeout(assistTimer);
       assistTimer = window.setTimeout(async () => {
         discoverShadowRoots(document);
