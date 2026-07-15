@@ -388,6 +388,15 @@ test("resume attachment handles unlabeled React dropzones without repeated attac
   assert.match(optionsSource, /File contents are missing from this older profile/);
 });
 
+test("dashboard drawers use inert state instead of aria-hidden focus transitions", async () => {
+  const html = await readFile(resolve("dashboard.html"), "utf8");
+  const source = await readFile(resolve("dashboard.js"), "utf8");
+  assert.doesNotMatch(html, /aria-hidden=/);
+  assert.doesNotMatch(source, /setAttribute\(["']aria-hidden/);
+  assert.match(html, /data-state="closed" inert/);
+  assert.match(source, /drawer\.inert = true/);
+});
+
 test("major ATS compatibility registry recognizes hosted application domains", async () => {
   const { ApplyOS } = await runtime();
   const cases = {

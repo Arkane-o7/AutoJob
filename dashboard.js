@@ -73,6 +73,25 @@ function titleCase(value) {
   return String(value || "").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function openDrawer(drawer) {
+  drawer.inert = false;
+  drawer.classList.add("open");
+  drawer.setAttribute("aria-modal", "true");
+  drawer.dataset.state = "open";
+  elements.scrim.classList.remove("hidden");
+}
+
+function closeDrawer(drawer, preferredFocus) {
+  if (drawer.contains(document.activeElement)) {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    if (preferredFocus?.isConnected && typeof preferredFocus.focus === "function") preferredFocus.focus({ preventScroll: true });
+  }
+  drawer.inert = true;
+  drawer.classList.remove("open");
+  drawer.setAttribute("aria-modal", "false");
+  drawer.dataset.state = "closed";
+}
+
 function toast(message) {
   elements.toast.textContent = message;
   elements.toast.classList.add("show");
@@ -201,7 +220,7 @@ function openDetail(id) {
   renderLinkedContacts(item);
   renderInterviews(item);
   $("#ai-output-wrap").classList.add("hidden");
-  elements.detail.inert = false; elements.detail.classList.add("open"); elements.detail.setAttribute("aria-hidden", "false"); elements.scrim.classList.remove("hidden");
+  openDrawer(elements.detail);
   $("#detail-role").focus();
 }
 
@@ -251,7 +270,7 @@ function openContact(id = null, applicationId = "") {
   $("#open-contact-linkedin").href = contact?.linkedin_url || "#";
   $("#contact-message").value = contact ? `Hello ${contact.name.split(/\s+/)[0]},\n\nIt was great connecting with you. I wanted to stay in touch regarding opportunities at ${contact.company || "your company"}.\n\nBest,\n${profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(" ") || ""}` : "";
   updateContactComposeLinks();
-  $("#contact-detail").inert = false; $("#contact-detail").classList.add("open"); $("#contact-detail").setAttribute("aria-hidden", "false"); elements.scrim.classList.remove("hidden");
+  openDrawer($("#contact-detail"));
   $("#contact-name").focus();
 }
 
@@ -259,8 +278,8 @@ function closeContact() {
   const detail = $("#contact-detail");
   if (!detail.classList.contains("open")) return;
   const focusTarget = contactReturnFocus?.isConnected ? contactReturnFocus : $("#contact-search");
-  if (detail.contains(document.activeElement)) focusTarget?.focus();
-  selectedContactId = null; detail.inert = true; detail.classList.remove("open"); detail.setAttribute("aria-hidden", "true");
+  closeDrawer(detail, focusTarget);
+  selectedContactId = null;
   if (!elements.detail.classList.contains("open")) elements.scrim.classList.add("hidden");
   contactReturnFocus = null;
 }
@@ -316,11 +335,8 @@ function closeDetail() {
   if (!elements.detail.classList.contains("open")) return;
   const fallback = $("#search");
   const focusTarget = detailReturnFocus?.isConnected && typeof detailReturnFocus.focus === "function" ? detailReturnFocus : fallback;
-  if (elements.detail.contains(document.activeElement)) focusTarget?.focus();
   selectedId = null;
-  elements.detail.inert = true;
-  elements.detail.classList.remove("open");
-  elements.detail.setAttribute("aria-hidden", "true");
+  closeDrawer(elements.detail, focusTarget);
   elements.scrim.classList.add("hidden");
   detailReturnFocus = null;
 }

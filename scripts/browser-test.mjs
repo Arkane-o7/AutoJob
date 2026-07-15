@@ -274,6 +274,8 @@ async function main() {
 
     const extensionId = new URL(worker.url()).host;
     const helper = await context.newPage();
+    const dashboardMessages = [];
+    helper.on("console", (message) => { if (["warning", "error"].includes(message.type())) dashboardMessages.push(message.text()); });
     await helper.goto(`chrome-extension://${extensionId}/dashboard.html`, { waitUntil: "domcontentloaded" });
     const runtime = await helper.evaluate(() => chrome.runtime.sendMessage({ type: "APPLYOS_RUNTIME_PING" }));
     assert.equal(runtime?.ok, true, "the popup runtime handshake should reach the service worker");
@@ -330,10 +332,12 @@ async function main() {
     await applicationCard.waitFor({ state: "visible" });
     await applicationCard.click();
     const detail = helper.locator("#detail");
-    assert.equal(await detail.getAttribute("aria-hidden"), "false", "open detail drawer is exposed to assistive technology");
+    assert.equal(await detail.getAttribute("aria-modal"), "true", "open detail drawer is exposed as the active modal");
+    assert.equal(await detail.getAttribute("data-state"), "open", "application drawer reports its open state");
     assert.equal(await helper.evaluate(() => document.activeElement?.id), "detail-role", "detail drawer moves focus to its first editable field");
     await helper.locator("#close-detail").click();
-    assert.equal(await detail.getAttribute("aria-hidden"), "true", "closed detail drawer is hidden from assistive technology");
+    assert.equal(await detail.getAttribute("aria-modal"), "false", "closed detail drawer is no longer modal");
+    assert.equal(await detail.getAttribute("data-state"), "closed", "application drawer reports its closed state");
     assert.equal(await detail.getAttribute("inert"), "", "closed detail drawer is removed from keyboard interaction");
     assert.equal(await helper.evaluate(() => document.activeElement?.classList.contains("job-card")), true, "closing details restores focus to the opening card");
 
@@ -349,7 +353,7 @@ async function main() {
     await helper.locator("#contact-application").selectOption(applicationId);
     await helper.locator("#contact-notes").fill("Met during the reviewed browser fixture.");
     await helper.locator("#contact-form button[type='submit']").click();
-    await helper.waitForFunction(() => document.querySelector("#contact-detail")?.getAttribute("aria-hidden") === "true");
+    await helper.waitForFunction(() => document.querySelector("#contact-detail")?.dataset.state === "closed");
     assert.equal(await contactDetail.getAttribute("inert"), "", "closed contact drawer is removed from keyboard interaction");
     const contactCard = helper.locator(".contact-card", { hasText: "Casey Recruiter" });
     await contactCard.waitFor({ state: "visible" });
@@ -420,6 +424,7 @@ async function main() {
     await optionsPage.locator("#restore-confirmation").fill("RESTORE");
     assert.equal(await optionsPage.locator("#restore-backup").isEnabled(), true, "reviewed backup can be explicitly unlocked for restore");
     await optionsPage.close();
+    assert.equal(dashboardMessages.some((message) => /aria-hidden|retained focus/i.test(message)), false, "drawer lifecycle must not hide a focused descendant");
     await helper.close();
     console.log("PASS reviewed submission, CRM, interview and encrypted backup lifecycle");
     console.log(`Browser regression complete: ${ATS_CASES.length}/${ATS_CASES.length} ATS fixtures passed using unpacked MV3 at ${extensionRoot}.`);
