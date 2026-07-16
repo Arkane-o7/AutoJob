@@ -4,9 +4,9 @@
  * Automatic step navigation was removed. Inline Add/Save actions only manage
  * editable experience records; ApplyOS never clicks Save and Continue or Submit.
  */
-(function (root) {
+(function (/** @type {any} */ root) {
     "use strict";
-    const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+    const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
     function setReactInputValue(element, rawValue) {
         if (!element || rawValue == null)
             return false;
@@ -49,7 +49,7 @@
         return Array.from(document.querySelectorAll("input, textarea, select")).filter((element) => {
             if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type))
                 return element.checked;
-            return Boolean(String(element.value || "").trim());
+            return Boolean(String("value" in element ? element.value || "" : "").trim());
         }).length;
     }
     /**
@@ -169,7 +169,7 @@
             if (!input)
                 continue;
             const label = ff.querySelector('[data-automation-id="label"]')?.textContent?.trim() ??
-                (input.labels?.[0]?.textContent?.trim()) ??
+                (input instanceof HTMLInputElement || input instanceof HTMLTextAreaElement ? input.labels?.[0]?.textContent?.trim() : undefined) ??
                 input.getAttribute('aria-label') ?? '';
             if (labelPattern.test(label))
                 return true;
@@ -266,7 +266,7 @@
                 while (el && el !== document.body) {
                     const ownFields = el.querySelectorAll(`[id^="${targetHash}--"]`).length;
                     if (ownFields >= 2)
-                        return el.parentElement ?? el;
+                        return el;
                     el = el.parentElement;
                 }
                 return sentinel.parentElement;
@@ -277,7 +277,7 @@
         let el = sentinel;
         while (el && el !== document.body) {
             if (el.querySelectorAll(`[id*="${idPrefix}-"][id*="--"]`).length >= 2) {
-                return el.parentElement ?? el;
+                return el;
             }
             el = el.parentElement;
         }
@@ -315,7 +315,7 @@
                     !b.disabled &&
                     rect.width > 0 && rect.height > 0;
             });
-        if (docSaveBtn) {
+        if (docSaveBtn instanceof HTMLElement) {
             docSaveBtn.click();
             await sleep(800);
             return true;
@@ -345,7 +345,7 @@
             // siblings and then up. This prevents matching a heading from a different
             // section (e.g., "Education" heading when looking at a WE "Add Another" button).
             const nearestHeading = findNearestPrecedingHeading(btn);
-            if (nearestHeading && sectionHeadingPattern.test(nearestHeading)) {
+            if (nearestHeading && sectionHeadingPattern.test(nearestHeading) && btn instanceof HTMLElement) {
                 btn.click();
                 await sleep(900);
                 return true;
@@ -927,6 +927,7 @@
                 break;
             }
             // Dismiss any lingering autocomplete by blurring, then re-focusing
+            if (!(input instanceof HTMLElement)) break;
             input.blur();
             await sleep(200);
             input.focus();
@@ -940,7 +941,7 @@
                 let listbox = ownedId ? document.getElementById(ownedId) : null;
                 if (!listbox) {
                     const allListboxes = Array.from(document.querySelectorAll('[role="listbox"]'));
-                    listbox = allListboxes[allListboxes.length - 1] ?? null;
+                    listbox = /** @type {HTMLElement|null} */ (allListboxes[allListboxes.length - 1] ?? null);
                 }
                 options = listbox
                     ? Array.from(listbox.querySelectorAll('[role="option"]'))
@@ -974,7 +975,7 @@
         }
         // Close any lingering skills autocomplete
         const finalInput = findSkillsInput();
-        if (finalInput) {
+        if (finalInput instanceof HTMLElement) {
             finalInput.blur();
             setReactInputValue(finalInput, '');
         }

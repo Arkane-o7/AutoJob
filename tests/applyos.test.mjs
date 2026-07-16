@@ -42,7 +42,7 @@ test("migrates legacy profile without removing it", async () => {
   assert.equal(state.resume_versions[0].name, "ada.pdf");
 });
 
-test("migrates a v2 state through v4 without losing applications or the legacy profile", async () => {
+test("migrates a v2 state through v5 without losing applications or the legacy profile", async () => {
   const profile = { firstName: "Ada", email: "ada@example.com" };
   const application = {
     id: "app_existing",
@@ -77,12 +77,12 @@ test("migrates a v2 state through v4 without losing applications or the legacy p
   });
 
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 4);
+  assert.equal(state.schema_version, 5);
   assert.equal(state.revision, 0);
   assert.equal(state.applications.length, 1);
   assert.equal(state.applications[0].id, "app_existing");
   assert.equal(state.applications[0].notes, "Keep this note");
-  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4]]));
+  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5]]));
   assert.equal(state.contacts.length, 0);
   assert.equal(state.interviews.length, 0);
   assert.equal(data.profile.email, "ada@example.com");
@@ -107,7 +107,7 @@ test("state migration is idempotent and does not increment the mutation revision
 
   assert.equal(first.revision, 0);
   assert.equal(second.revision, 0);
-  assert.equal(second.migration_history.length, 2);
+  assert.equal(second.migration_history.length, 3);
   assert.deepEqual(data.applyos_state, storedAfterFirstRead);
 });
 
@@ -243,7 +243,7 @@ test("stores corrections and reuses the best site-aware learned answer", async (
   });
   assert.equal(learned.answer, "4");
   const state = await ApplyOS.getState();
-  assert.equal(state.schema_version, 4);
+  assert.equal(state.schema_version, 5);
   assert.equal(state.learned_answers.length, 1);
   const match = ApplyOS.OfflynCore.bestLearnedAnswer("How many years have you handled large datasets", state.learned_answers, {
     site: "example.myworkdayjobs.com",
@@ -332,6 +332,112 @@ test("migrates the legacy profile into a switchable active profile", async () =>
   assert.equal((await ApplyOS.getActiveProfile()).lastName, "Hopper");
 });
 
+test("profile patches preserve fields owned by other surfaces and mark completed onboarding", async () => {
+  const original = {
+    firstName: "Grace",
+    lastName: "Hopper",
+    email: "grace@example.com",
+    employment: [{ company: "Navy", title: "Rear Admiral" }],
+    futureFeature: { enabled: true }
+  };
+  const { ApplyOS } = await runtime({ profile: original });
+  const migrated = await ApplyOS.getActiveProfile();
+  assert.equal(ApplyOS.isOnboardingComplete(migrated), true);
+  const saved = await ApplyOS.patchActiveProfile({ phone: "+1 555 0100" });
+  assert.equal(saved.employment[0].company, "Navy");
+  assert.equal(saved.futureFeature.enabled, true);
+  assert.equal(saved.phone, "+1 555 0100");
+  assert.ok(saved.onboardingCompletedAt);
+});
+
+test("authoritative answer sync forgets deleted answers and honors company scope", async () => {
+  const { ApplyOS } = await runtime();
+  await ApplyOS.syncAnswerMemory([
+    { question: "Why this role?", answer: "Systems work", scope: "global" },
+    { question: "Have you worked here?", answer: "No", scope: "company", company_domain: "microsoft.com" }
+  ], { authoritative: true, source: "profile", profileId: "default", memoryGroup: "custom:default" });
+  await ApplyOS.syncAnswerMemory([
+    { question: "Have you worked here?", answer: "No", scope: "company", company_domain: "microsoft.com" }
+  ], { authoritative: true, source: "profile", profileId: "default", memoryGroup: "custom:default" });
+  const state = await ApplyOS.getState();
+  assert.equal(state.answer_memory.some((item) => item.question === "Why this role?"), false);
+  assert.equal(await ApplyOS.findRememberedAnswer("Have you worked here?", { url: "https://jobs.google.com/apply" }), null);
+  assert.equal((await ApplyOS.findRememberedAnswer("Have you worked here?", { url: "https://apply.microsoft.com/job" })).answer, "No");
+});
+
+test("serialized graph writes retain every concurrent profile answer", async () => {
+  const { ApplyOS } = await runtime();
+  await Promise.all(Array.from({ length: 12 }, (_, index) => ApplyOS.recordGraphAnswer({
+    question: `Unique application question ${index}`,
+    answer: `Answer ${index}`,
+    source: "profile",
+    profileId: "default"
+  })));
+  const graph = await ApplyOS.ensureGraph();
+  assert.equal(graph.nodes.filter((node) => node.type === "answer").length, 12);
+});
+
+test("resume versions store immutable content hashes and application deletion cascades", async () => {
+  const { ApplyOS } = await runtime();
+  const dataUrl = "data:application/pdf;base64,JVBERi0xLjQ=";
+  const version = await ApplyOS.syncResumeVersion({ name: "resume.pdf", type: "application/pdf", size: 8, dataUrl });
+  assert.equal(version.dataUrl, dataUrl);
+  assert.match(version.sha256, /^[a-f0-9]{64}$/);
+  const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/job", source: "example.com", description: "" });
+  await ApplyOS.markApplicationApplied(application.id);
+  await ApplyOS.upsertInterview({ application_id: application.id, type: "technical" });
+  await ApplyOS.deleteApplication(application.id);
+  const state = await ApplyOS.getState();
+  assert.equal(state.applications.length, 0);
+  assert.equal(state.reminders.length, 0);
+  assert.equal(state.interviews.length, 0);
+});
+
+test("completing the final due reminder clears follow-up-due status", async () => {
+  const { ApplyOS } = await runtime();
+  const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/job", source: "example.com", description: "" });
+  await ApplyOS.markApplicationApplied(application.id, "2026-01-01T00:00:00.000Z");
+  await ApplyOS.refreshDueApplications(new Date("2026-02-01T00:00:00.000Z"));
+  let state = await ApplyOS.getState();
+  assert.equal(state.applications[0].status, "follow_up_due");
+  for (const reminder of state.reminders) await ApplyOS.completeReminder(reminder.id);
+  state = await ApplyOS.getState();
+  assert.equal(state.applications[0].status, "applied");
+  assert.equal(state.applications[0].follow_up_date, null);
+});
+
+test("a no-op due refresh does not rewrite or increment state", async () => {
+  const { ApplyOS } = await runtime();
+  const before = await ApplyOS.getState();
+  const after = await ApplyOS.refreshDueApplications(new Date("2026-01-01T00:00:00.000Z"));
+  assert.equal(after.revision, before.revision);
+});
+
+test("restored application identifiers and links are normalized before dashboard use", async () => {
+  const { ApplyOS } = await runtime({
+    applyos_state: {
+      schema_version: 5,
+      applications: [{ id: 'bad" autofocus', company: "Acme", role: "Engineer", url: "javascript:alert(1)", status: "saved", priority: "medium" }]
+    }
+  });
+  const state = await ApplyOS.getState();
+  assert.match(state.applications[0].id, /^[a-z0-9][a-z0-9:_-]+$/i);
+  assert.equal(state.applications[0].url, "");
+});
+
+test("onboarding is first-run-only and the options page is the sole full profile editor", async () => {
+  const [popup, options, onboarding, popupScript] = await Promise.all([
+    readFile(resolve("popup.html"), "utf8"),
+    readFile(resolve("options.html"), "utf8"),
+    readFile(resolve("onboarding.js"), "utf8"),
+    readFile(resolve("popup.js"), "utf8")
+  ]);
+  assert.doesNotMatch(options, /Run setup again/);
+  assert.doesNotMatch(popup, /Profile & answer memory/);
+  assert.match(onboarding, /isOnboardingComplete/);
+  assert.match(popupScript, /Edit profile/);
+});
+
 test("knowledge graph learns corrections and reinforces a reusable answer", async () => {
   const { ApplyOS } = await runtime();
   await ApplyOS.recordGraphCorrection({ question: "How many years of TypeScript experience do you have?", correctedValue: "5", canonicalField: "yearsExperience", fingerprint: "typescript-years", platform: "workday" });
@@ -345,14 +451,21 @@ test("knowledge graph learns corrections and reinforces a reusable answer", asyn
 test("browser agent rejects submit, consent, and sensitive actions", async () => {
   const { ApplyOS } = await runtime();
   const plan = ApplyOS.validateAgentPlan({ actions: [
-    { action: "fill", fieldId: "name", label: "Full name", value: "Ada Lovelace", confidence: 0.99 },
-    { action: "fill", fieldId: "ssn", label: "Social Security Number", value: "123", confidence: 0.99 },
-    { action: "fill", fieldId: "submit", label: "Submit application", value: "click", confidence: 0.99 },
-    { action: "check", fieldId: "terms", label: "I agree to terms", value: "yes", confidence: 0.99 }
-  ] });
+    { action: "fill", fieldId: "name", candidateId: "name_profile", label: "Full name", confidence: 0.99 },
+    { action: "fill", fieldId: "ssn", candidateId: "ssn_profile", label: "Social Security Number", confidence: 0.99 },
+    { action: "fill", fieldId: "submit", candidateId: "submit_profile", label: "Submit application", confidence: 0.99 },
+    { action: "check", fieldId: "terms", candidateId: "terms_profile", label: "I agree to terms", confidence: 0.99 },
+    { action: "fill", fieldId: "email", candidateId: "invented", label: "Email", confidence: 0.99 }
+  ] }, [
+    { fieldId: "name", candidates: [{ id: "name_profile" }] },
+    { fieldId: "ssn", candidates: [{ id: "ssn_profile" }] },
+    { fieldId: "submit", candidates: [{ id: "submit_profile" }] },
+    { fieldId: "terms", candidates: [{ id: "terms_profile" }] },
+    { fieldId: "email", candidates: [{ id: "email_profile" }] }
+  ]);
   assert.deepEqual([...plan.actions.map((action) => action.fieldId)], ["name"]);
   assert.equal(plan.reviewRequired, true);
-  assert.equal(plan.blockedActions, 3);
+  assert.equal(plan.blockedActions, 4);
 });
 
 test("the full Workday port has no automatic step navigation or submit action", async () => {

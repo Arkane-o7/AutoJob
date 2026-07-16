@@ -35,20 +35,17 @@ function validatePanel() {
   return true;
 }
 
-async function saveProfile() {
-  const existing = await ApplyOS.getActiveProfile();
+async function saveProfile(complete = false) {
   const values = Object.fromEntries(new FormData(form).entries());
-  const profile = { ...existing, ...values };
-  profile.fullName = `${profile.firstName || ""} ${profile.lastName || ""}`.trim();
-  profile.customAnswers = existing.customAnswers || [];
-  await ApplyOS.saveActiveProfile(profile);
-  await ApplyOS.syncProfileAnswerDefaults(profile);
+  values.fullName = `${values.firstName || ""} ${values.lastName || ""}`.trim();
+  const profile = complete ? await ApplyOS.completeOnboarding(values) : await ApplyOS.patchActiveProfile(values);
+  if (complete) await ApplyOS.syncProfileAnswerDefaults(profile);
   return profile;
 }
 
 next.addEventListener("click", async () => {
   if (!validatePanel()) return;
-  if (current === panels.length - 2) await saveProfile();
+  await saveProfile(current === panels.length - 2);
   current = Math.min(panels.length - 1, current + 1); render();
 });
 back.addEventListener("click", () => { current = Math.max(0, current - 1); render(); });
@@ -59,6 +56,10 @@ document.querySelector("#open-ai-settings").addEventListener("click", () => chro
 
 (async function initialize() {
   const profile = await ApplyOS.getActiveProfile();
+  if (ApplyOS.isOnboardingComplete(profile) && new URLSearchParams(location.search).get("quick") !== "1") {
+    location.replace(chrome.runtime.getURL("options.html"));
+    return;
+  }
   for (const element of form.elements) if (element.name && Object.hasOwn(profile, element.name)) element.value = profile[element.name] ?? "";
   render();
 })().catch(console.error);

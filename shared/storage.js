@@ -1,7 +1,7 @@
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
   const STORAGE_LOCK_NAME = "applyos-state-write";
   let localStorageQueue = Promise.resolve();
 
@@ -11,6 +11,23 @@
 
   function safeString(value, fallback = "") {
     return typeof value === "string" ? value : fallback;
+  }
+
+  function safeId(value, prefix) {
+    const text = safeString(value).trim();
+    return /^[a-z0-9][a-z0-9:_-]{0,127}$/i.test(text) ? text : ApplyOS.uid(prefix);
+  }
+
+  function safeDomain(value) {
+    const text = safeString(value).trim().toLowerCase();
+    if (!text) return "";
+    try { return new URL(text.includes("://") ? text : `https://${text}`).hostname; }
+    catch { return ""; }
+  }
+
+  function safeResumeDataUrl(value) {
+    const text = safeString(value);
+    return /^data:(application\/(?:pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document));base64,[a-z0-9+/=]+$/i.test(text) ? text : "";
   }
 
   function safeNullableString(value) {
@@ -75,7 +92,8 @@
     0: (state) => recordMigration(state, 0, 1),
     1: (state) => recordMigration(state, 1, 2),
     2: (state) => recordMigration({ ...state, revision: Math.max(0, Math.trunc(safeNumber(state.revision))) }, 2, 3),
-    3: (state) => recordMigration({ ...state, contacts: Array.isArray(state.contacts) ? state.contacts : [], interviews: Array.isArray(state.interviews) ? state.interviews : [] }, 3, 4)
+    3: (state) => recordMigration({ ...state, contacts: Array.isArray(state.contacts) ? state.contacts : [], interviews: Array.isArray(state.interviews) ? state.interviews : [] }, 3, 4),
+    4: (state) => recordMigration({ ...state }, 4, 5)
   };
 
   function migrateState(input) {
@@ -96,10 +114,10 @@
     const createdAt = safeDateString(item.created_at, now);
     return {
       ...item,
-      id: safeString(item.id) || ApplyOS.uid("app"),
+      id: safeId(item.id, "app"),
       company: safeString(item.company, "Unknown company") || "Unknown company",
       role: safeString(item.role, "Untitled role") || "Untitled role",
-      url: safeString(item.url),
+      url: safeWebUrl(item.url),
       source: safeString(item.source, "unknown") || "unknown",
       description: safeString(item.description),
       location: safeString(item.location),
@@ -128,7 +146,7 @@
     const now = ApplyOS.nowISO();
     return {
       ...item,
-      id: safeString(item.id) || ApplyOS.uid("rem"),
+      id: safeId(item.id, "rem"),
       application_id: safeString(item.application_id),
       type: item.type === "final_follow_up" ? "final_follow_up" : "follow_up",
       due_at: safeDateString(item.due_at, now),
@@ -143,11 +161,15 @@
     const question = safeString(item.question);
     return {
       ...item,
-      id: safeString(item.id) || ApplyOS.uid("ans"),
+      id: safeId(item.id, "ans"),
       question,
       answer: safeString(item.answer),
       normalized_question: safeString(item.normalized_question) || ApplyOS.normalizeQuestion(question),
-      source: ["profile", "manual", "application"].includes(item.source) ? item.source : "manual",
+      source: ["profile", "profile_default", "manual", "application"].includes(item.source) ? item.source : "manual",
+      scope: item.scope === "company" ? "company" : "global",
+      company_domain: safeDomain(item.company_domain),
+      profile_id: safeString(item.profile_id),
+      memory_group: safeString(item.memory_group),
       use_count: Math.max(0, Math.trunc(safeNumber(item.use_count))),
       created_at: safeDateString(item.created_at, now),
       updated_at: safeDateString(item.updated_at, now)
@@ -160,7 +182,7 @@
     const question = safeString(item.question);
     return {
       ...item,
-      id: safeString(item.id) || ApplyOS.uid("learned"),
+      id: safeId(item.id, "learned"),
       fingerprint: safeString(item.fingerprint),
       question,
       normalized_question: safeString(item.normalized_question) || ApplyOS.normalizeQuestion(question),
@@ -178,10 +200,12 @@
     if (!isRecord(item)) return null;
     return {
       ...item,
-      id: safeString(item.id) || ApplyOS.uid("resume"),
+      id: safeId(item.id, "resume"),
       name: safeString(item.name),
       type: safeString(item.type),
       size: Math.max(0, safeNumber(item.size)),
+      sha256: /^[a-f0-9]{64}$/i.test(safeString(item.sha256)) ? safeString(item.sha256).toLowerCase() : "",
+      dataUrl: safeResumeDataUrl(item.dataUrl),
       created_at: safeDateString(item.created_at, ApplyOS.nowISO()),
       is_current: item.is_current === true
     };
@@ -193,7 +217,7 @@
     const createdAt = safeDateString(item.created_at, now);
     return {
       ...item,
-      id: safeString(item.id) || ApplyOS.uid("contact"),
+      id: safeId(item.id, "contact"),
       name: safeString(item.name, "Unnamed contact") || "Unnamed contact",
       title: safeString(item.title),
       company: safeString(item.company),
@@ -215,7 +239,7 @@
     const createdAt = safeDateString(item.created_at, now);
     return {
       ...item,
-      id: safeString(item.id) || ApplyOS.uid("interview"),
+      id: safeId(item.id, "interview"),
       application_id: safeString(item.application_id),
       type: ApplyOS.INTERVIEW_TYPES.includes(item.type) ? item.type : "other",
       format: ApplyOS.INTERVIEW_FORMATS.includes(item.format) ? item.format : "video",
@@ -263,6 +287,15 @@
     state.resume_versions = (Array.isArray(state.resume_versions) ? state.resume_versions : []).map(normalizeResumeVersion).filter(Boolean);
     state.contacts = (Array.isArray(state.contacts) ? state.contacts : []).map(normalizeContact).filter(Boolean);
     state.interviews = (Array.isArray(state.interviews) ? state.interviews : []).map(normalizeInterview).filter(Boolean);
+    const applicationIds = new Set(state.applications.map((item) => item.id));
+    const resumeIds = new Set(state.resume_versions.map((item) => item.id));
+    state.applications = state.applications.map((item) => ({ ...item, resume_version_id: resumeIds.has(item.resume_version_id) ? item.resume_version_id : null }));
+    state.reminders = state.reminders.filter((item) => applicationIds.has(item.application_id));
+    state.contacts = state.contacts.map((item) => ({ ...item, application_ids: item.application_ids.filter((id) => applicationIds.has(id)) }));
+    const contactIds = new Set(state.contacts.map((item) => item.id));
+    state.interviews = state.interviews
+      .filter((item) => applicationIds.has(item.application_id))
+      .map((item) => ({ ...item, interviewer_contact_ids: item.interviewer_contact_ids.filter((id) => contactIds.has(id)) }));
     state.settings = { ...emptyState().settings, ...(isRecord(state.settings) ? state.settings : {}) };
     state.settings.final_follow_up_enabled = state.settings.final_follow_up_enabled !== false;
     state.settings.notification_enabled = state.settings.notification_enabled !== false;
@@ -290,13 +323,17 @@
     return normalized;
   }
 
-  function answerFromLegacy(item) {
+  function answerFromLegacy(item, metadata = {}) {
     return {
       id: ApplyOS.uid("ans"),
       question: String(item.question || "").trim(),
       answer: String(item.answer || "").trim(),
       normalized_question: ApplyOS.normalizeQuestion(item.question),
-      source: "profile",
+      source: metadata.source || item.source || "profile",
+      scope: item.scope === "company" ? "company" : "global",
+      company_domain: safeDomain(item.company_domain || item.companyDomain),
+      profile_id: safeString(metadata.profileId || item.profile_id),
+      memory_group: safeString(metadata.memoryGroup || item.memory_group),
       use_count: 0,
       created_at: ApplyOS.nowISO(),
       updated_at: ApplyOS.nowISO()
@@ -343,8 +380,11 @@
       const state = await ensureStateUnlocked();
       const result = await mutator(structuredClone(state));
       const next = isRecord(result) ? result : state;
-      next.revision = state.revision + 1;
-      return writeState(next);
+      next.revision = state.revision;
+      const normalized = normalizeState(next);
+      if (JSON.stringify(normalized) === JSON.stringify(state)) return state;
+      normalized.revision = state.revision + 1;
+      return writeState(normalized);
     });
   };
 
@@ -412,6 +452,22 @@
     return updated;
   };
 
+  ApplyOS.deleteApplication = async function deleteApplication(id) {
+    const state = await ApplyOS.mutateState((draft) => {
+      if (!draft.applications.some((item) => item.id === id)) return draft;
+      draft.applications = draft.applications.filter((item) => item.id !== id);
+      draft.reminders = draft.reminders.filter((item) => item.application_id !== id);
+      draft.interviews = draft.interviews.filter((item) => item.application_id !== id);
+      draft.contacts = draft.contacts.map((item) => ({
+        ...item,
+        application_ids: item.application_ids.filter((applicationId) => applicationId !== id)
+      }));
+      return draft;
+    });
+    await ApplyOS.removeApplicationGraph?.(id);
+    return state;
+  };
+
   ApplyOS.markApplicationApplied = async function markApplicationApplied(id, appliedAt = ApplyOS.nowISO()) {
     let updated = null;
     await ApplyOS.mutateState((state) => {
@@ -447,10 +503,25 @@
   };
 
   ApplyOS.completeReminder = async function completeReminder(id) {
-    return ApplyOS.mutateState((state) => {
-      state.reminders = state.reminders.map((item) => item.id === id ? { ...item, completed_at: ApplyOS.nowISO() } : item);
-      return state;
+    let applicationId = null;
+    const state = await ApplyOS.mutateState((draft) => {
+      const reminder = draft.reminders.find((item) => item.id === id && !item.completed_at);
+      if (!reminder) return draft;
+      applicationId = reminder.application_id;
+      reminder.completed_at = ApplyOS.nowISO();
+      const application = draft.applications.find((item) => item.id === applicationId);
+      const hasDueReminder = draft.reminders.some((item) => item.application_id === applicationId && !item.completed_at && new Date(item.due_at).getTime() <= Date.now());
+      if (application?.status === "follow_up_due" && !hasDueReminder) {
+        application.status = "applied";
+        application.updated_at = ApplyOS.nowISO();
+      }
+      const next = draft.reminders
+        .filter((item) => item.application_id === applicationId && !item.completed_at)
+        .sort((left, right) => new Date(left.due_at).getTime() - new Date(right.due_at).getTime())[0];
+      if (application) application.follow_up_date = next?.due_at || null;
+      return draft;
     });
+    return { state, application_id: applicationId };
   };
 
   ApplyOS.rescheduleFollowUp = async function rescheduleFollowUp(applicationId, dueAt) {
@@ -460,7 +531,7 @@
       if (!application) return state;
       const reminder = state.reminders
         .filter((item) => item.application_id === applicationId && item.type === "follow_up" && !item.completed_at)
-        .sort((a, b) => new Date(a.due_at) - new Date(b.due_at))[0];
+        .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0];
       const iso = dueAt ? new Date(`${String(dueAt).slice(0, 10)}T12:00:00`).toISOString() : null;
       if (reminder && iso) reminder.due_at = iso;
       else if (iso) state.reminders.push({ id: ApplyOS.uid("rem"), application_id: applicationId, type: "follow_up", due_at: iso, completed_at: null, created_at: ApplyOS.nowISO() });
@@ -479,16 +550,29 @@
     });
   };
 
-  ApplyOS.syncAnswerMemory = async function syncAnswerMemory(items = []) {
+  ApplyOS.removeProfileState = async function removeProfileState(profileId) {
     return ApplyOS.mutateState((state) => {
+      state.answer_memory = state.answer_memory.filter((item) => item.profile_id !== profileId);
+      return state;
+    });
+  };
+
+  ApplyOS.syncAnswerMemory = async function syncAnswerMemory(items = [], options = {}) {
+    return ApplyOS.mutateState((state) => {
+      const memoryGroup = safeString(options.memoryGroup);
+      if (options.authoritative && memoryGroup) {
+        state.answer_memory = state.answer_memory.filter((answer) => answer.memory_group !== memoryGroup && !(options.removeLegacyProfileEntries && answer.source === "profile" && !answer.memory_group));
+      }
       items.filter((item) => item.question && item.answer).forEach((item) => {
         const normalized = ApplyOS.normalizeQuestion(item.question);
-        const existing = state.answer_memory.find((answer) => answer.normalized_question === normalized);
+        const scope = item.scope === "company" ? "company" : "global";
+        const companyDomain = safeDomain(item.company_domain || item.companyDomain);
+        const existing = state.answer_memory.find((answer) => answer.normalized_question === normalized && answer.scope === scope && answer.company_domain === companyDomain && (!memoryGroup || answer.memory_group === memoryGroup));
         if (existing) {
           existing.answer = item.answer;
           existing.updated_at = ApplyOS.nowISO();
         } else {
-          state.answer_memory.push(answerFromLegacy(item));
+          state.answer_memory.push(answerFromLegacy(item, { source: options.source, profileId: options.profileId, memoryGroup }));
         }
       });
       return state;
@@ -508,13 +592,22 @@
       ["What is your remote work preference?", profile.remotePreference],
       ["Tell us about yourself", profile.coverLetter]
     ].filter(([, answer]) => String(answer || "").trim()).map(([question, answer]) => ({ question, answer: String(answer) }));
-    return ApplyOS.syncAnswerMemory(items);
+    const index = await ApplyOS.getProfilesIndex?.();
+    const profileId = index?.activeId || "default";
+    return ApplyOS.syncAnswerMemory(items, {
+      authoritative: true,
+      source: "profile_default",
+      profileId,
+      memoryGroup: `defaults:${profileId}`
+    });
   };
 
-  ApplyOS.findRememberedAnswer = async function findRememberedAnswer(question) {
+  ApplyOS.findRememberedAnswer = async function findRememberedAnswer(question, context = {}) {
     const state = await ApplyOS.ensureState();
+    const domain = safeDomain(context.companyDomain || context.url);
     let best = null;
     for (const item of state.answer_memory) {
+      if (item.scope === "company" && (!domain || !(domain === item.company_domain || domain.endsWith(`.${item.company_domain}`)))) continue;
       const score = ApplyOS.questionSimilarity?.(question, item.question) || 0;
       if (score > (best?.score || 0)) best = { ...item, score };
     }
@@ -556,7 +649,7 @@
         state.learned_answers.push(learned);
       }
       state.learned_answers = state.learned_answers
-        .sort((left, right) => new Date(right.updated_at) - new Date(left.updated_at))
+        .sort((left, right) => new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime())
         .slice(0, 500);
       return state;
     });
@@ -565,18 +658,37 @@
 
   ApplyOS.syncResumeVersion = async function syncResumeVersion(resume) {
     if (!resume?.name) return null;
+    const dataUrl = safeResumeDataUrl(resume.dataUrl);
+    const bytes = new TextEncoder().encode(dataUrl || `${resume.name}:${resume.size || 0}:${resume.type || ""}`);
+    const digest = root.crypto?.subtle ? await root.crypto.subtle.digest("SHA-256", bytes) : null;
+    const sha256 = digest ? Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("") : "";
     let current = null;
     await ApplyOS.mutateState((state) => {
       state.resume_versions = state.resume_versions.map((item) => ({ ...item, is_current: false }));
-      current = state.resume_versions.find((item) => item.name === resume.name && item.size === resume.size);
+      current = state.resume_versions.find((item) => sha256 ? item.sha256 === sha256 : item.name === resume.name && item.size === resume.size);
       if (current) current.is_current = true;
       else {
-        current = { id: ApplyOS.uid("resume"), name: resume.name, type: resume.type || "", size: resume.size || 0, created_at: ApplyOS.nowISO(), is_current: true };
+        current = { id: ApplyOS.uid("resume"), name: resume.name, type: resume.type || "", size: resume.size || 0, sha256, dataUrl, created_at: ApplyOS.nowISO(), is_current: true };
         state.resume_versions.push(current);
       }
+      const referenced = new Set(state.applications.map((item) => item.resume_version_id).filter(Boolean));
+      const retainedUnreferenced = state.resume_versions
+        .filter((item) => !referenced.has(item.id) && !item.is_current)
+        .sort((left, right) => new Date(right.created_at).getTime() - new Date(left.created_at).getTime())
+        .slice(0, 10);
+      const retainedIds = new Set([...referenced, current.id, ...retainedUnreferenced.map((item) => item.id)]);
+      state.resume_versions = state.resume_versions.filter((item) => retainedIds.has(item.id));
       return state;
     });
     return current;
+  };
+
+  ApplyOS.setCurrentResumeVersion = async function setCurrentResumeVersion(id) {
+    return ApplyOS.mutateState((state) => {
+      if (!state.resume_versions.some((item) => item.id === id)) return state;
+      state.resume_versions = state.resume_versions.map((item) => ({ ...item, is_current: item.id === id }));
+      return state;
+    });
   };
 
   ApplyOS.upsertContact = async function upsertContact(input = {}) {
@@ -645,7 +757,7 @@
         const id = ApplyOS.uid("demo");
         state.applications.push({
           id, company, role, url: `https://example.com/jobs/${index + 1}`, source: "demo", description: "Sample application for dashboard testing.",
-          status, priority, deadline: ApplyOS.addDays(now, deadlineDays), applied_at: ["applied", "interview", "rejected"].includes(status) ? created : null,
+          status: String(status), priority: String(priority), deadline: ApplyOS.addDays(now, Number(deadlineDays)), applied_at: ["applied", "interview", "rejected"].includes(String(status)) ? created : null,
           follow_up_date: status === "applied" ? ApplyOS.addDays(now, 2) : null, resume_version_id: null, notes: "Mock record — safe to edit or delete.",
           match_score: score, matched_skills: ["javascript", "sql"], missing_skills: ["kubernetes"], suggested_keywords: ["kubernetes"],
           created_at: created, updated_at: created, captured_at: created, location: "Remote", extraction_confidence: { overall: 1 }

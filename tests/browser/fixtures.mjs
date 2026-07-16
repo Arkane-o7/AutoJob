@@ -18,7 +18,7 @@ export const ATS_CASES = Object.freeze([
 ]);
 
 const ATS_MARKUP = Object.freeze({
-  workday: '<div data-automation-id="progressBar"></div><h2 data-automation-id="applicationPageTitle">Application Questions</h2>',
+  workday: '<div data-automation-id="progressBar"></div><h2 data-automation-id="applicationPageTitle">My Experience</h2><section id="work-experience-inline"><h3>Work Experience</h3><div data-automation-id="formField"><label for="workExperience-fixture--jobTitle">Job Title</label><input id="workExperience-fixture--jobTitle"></div><div data-automation-id="formField"><label for="workExperience-fixture--company">Company</label><input id="workExperience-fixture--company"></div><button id="inline-save" data-automation-id="saveButton" type="button">Save</button></section>',
   greenhouse: '<div class="greenhouse-job-board" aria-hidden="true"></div>',
   lever: '<div class="lever-job-application" aria-hidden="true"></div>',
   ashby: '<div data-ashby-job-posting aria-hidden="true"></div>',
@@ -72,11 +72,12 @@ function formMarkup(type) {
 }
 
 const TRACKING_SCRIPT = `
-window.__fixture={events:{},drops:[],submitCount:0,nextClickCount:0,submitClickCount:0,microsoftSponsorshipClicks:0,microsoftStrayOptionClicks:0,record(id,event){const key=id+':'+event;this.events[key]=(this.events[key]||0)+1}};
+window.__fixture={events:{},drops:[],submitCount:0,nextClickCount:0,submitClickCount:0,inlineSaveCount:0,microsoftSponsorshipClicks:0,microsoftStrayOptionClicks:0,record(id,event){const key=id+':'+event;this.events[key]=(this.events[key]||0)+1}};
 for(const control of document.querySelectorAll('input,textarea,select'))for(const event of ['input','change'])control.addEventListener(event,()=>window.__fixture.record(control.id,event));
 const resume=document.querySelector('#resume');if(resume)resume.addEventListener('change',()=>{document.querySelector('#resume-widget').textContent=resume.files?.[0]?.name||'No file attached'});
 const dropzone=document.querySelector('#resume-dropzone');if(dropzone)for(const event of ['dragenter','dragover','drop'])dropzone.addEventListener(event,entry=>{entry.preventDefault();window.__fixture.drops.push(event)});
 document.querySelector('#next-action')?.addEventListener('click',()=>window.__fixture.nextClickCount++);document.querySelector('#submit-action')?.addEventListener('click',()=>window.__fixture.submitClickCount++);
+document.querySelector('#inline-save')?.addEventListener('click',()=>{window.__fixture.inlineSaveCount++;document.querySelector('#work-experience-inline')?.remove()});
 document.querySelector('#fixture-form')?.addEventListener('submit',event=>{event.preventDefault();window.__fixture.submitCount++});
 const microsoftAuth=document.querySelector('#microsoft-auth');const microsoftList=document.querySelector('#microsoft-auth-list');if(microsoftAuth&&microsoftList){microsoftAuth.addEventListener('click',()=>{const open=microsoftAuth.getAttribute('aria-expanded')!=='true';microsoftAuth.setAttribute('aria-expanded',String(open));microsoftList.hidden=!open});for(const option of microsoftList.querySelectorAll('[role="option"]'))option.addEventListener('click',()=>{microsoftAuth.value=option.textContent.trim();microsoftAuth.setAttribute('aria-expanded','false');microsoftList.hidden=true;option.setAttribute('aria-selected','true');microsoftAuth.dispatchEvent(new Event('input',{bubbles:true}));microsoftAuth.dispatchEvent(new Event('change',{bubbles:true}))})}
 const microsoftState=document.querySelector('#microsoft-state');const microsoftStateList=document.querySelector('#microsoft-state-list');if(microsoftState&&microsoftStateList){microsoftState.addEventListener('click',()=>{const open=microsoftState.getAttribute('aria-expanded')!=='true';microsoftState.setAttribute('aria-expanded',String(open));microsoftStateList.hidden=!open});for(const option of microsoftStateList.querySelectorAll('[role="option"]'))option.addEventListener('click',()=>{microsoftState.value=option.textContent.trim();microsoftState.setAttribute('aria-expanded','false');microsoftStateList.hidden=true;option.setAttribute('aria-selected','true');microsoftState.dispatchEvent(new Event('input',{bubbles:true}));microsoftState.dispatchEvent(new Event('change',{bubbles:true}))})}

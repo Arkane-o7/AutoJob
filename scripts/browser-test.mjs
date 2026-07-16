@@ -18,6 +18,7 @@ const profile = Object.freeze({
   address: "12 Analytical Engine Way", address2: "Flat 3", postalCode: "SW1A 1AA",
   country: "United Kingdom", workAuthorization: "Yes", desiredStartDate: "2026-08-01",
   visaSponsorship: "No",
+  currentCompany: "Analytical Engines", currentTitle: "Programmer", employmentStartDate: "2024-01", jobDescription: "Built reliable computing systems.",
   resume: {
     name: resumeName, type: "application/pdf", size: 51,
     dataUrl: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\n% ApplyOS browser regression fixture\n%%EOF").toString("base64")}`
@@ -64,20 +65,18 @@ async function waitForExtensionInitialization(worker) {
 }
 
 async function sendFill(worker) {
-  return worker.evaluate(() => new Promise((resolveMessage, rejectMessage) => {
-    let attempts = 0;
-    const trySend = () => chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-      if (!tab?.id) return rejectMessage(new Error("No active fixture tab"));
-      chrome.tabs.sendMessage(tab.id, { type: "APPLYKIT_FILL" }, (response) => {
-        const error = chrome.runtime.lastError;
-        if (error && /Receiving end does not exist/i.test(error.message) && attempts++ < 50) {
-          setTimeout(trySend, 100);
-        } else if (error) rejectMessage(new Error(`${error.message} (active tab: ${tab.url || "unknown"})`));
-        else resolveMessage(response);
-      });
-    });
-    trySend();
-  }));
+  return worker.evaluate(async () => {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id) throw new Error("No active fixture tab");
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      try { return { ok: true, report: await messageAllFrames(tab.id, "APPLYKIT_FILL") }; }
+      catch (error) {
+        if (!/Receiving end does not exist|No application frame/i.test(error.message) || attempt === 49) throw error;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+      }
+    }
+    throw new Error("Application frames were not ready");
+  });
 }
 
 async function activeTabMessage(worker, message) {
@@ -155,7 +154,7 @@ async function snapshot(target) {
     resumeWidget: document.querySelector("#resume-widget")?.textContent,
     events: { ...window.__fixture.events }, drops: [...window.__fixture.drops],
     submitCount: window.__fixture.submitCount, nextClickCount: window.__fixture.nextClickCount,
-    submitClickCount: window.__fixture.submitClickCount
+    submitClickCount: window.__fixture.submitClickCount, inlineSaveCount: window.__fixture.inlineSaveCount
   }));
 }
 
@@ -187,6 +186,7 @@ function assertSafeFill(testCase, response, state) {
   if (testCase.id === "workday") {
     assert.deepEqual([state.startMonth, state.startDay, state.startYear], ["8", "1", "2026"], "workday: compound date fields");
     for (const id of ["start-month", "start-day", "start-year"]) assert.ok(state.events[`${id}:change`] >= 1, `workday: ${id} change event`);
+    assert.equal(state.inlineSaveCount, 1, "workday: only the scoped inline experience Save button is clicked");
   }
   if (testCase.id === "microsoft") {
     assert.equal(state.microsoftAddress, "12 Analytical Engine Way", "microsoft: street address from profile");
@@ -208,6 +208,7 @@ function assertSafeFill(testCase, response, state) {
   assert.equal(state.submitCount, 0, `${testCase.id}: form must not submit`);
   assert.equal(state.nextClickCount, 0, `${testCase.id}: Save and Continue must not be clicked`);
   assert.equal(state.submitClickCount, 0, `${testCase.id}: submit button must not be clicked`);
+  if (testCase.frame) assert.ok(response.report.frameCount >= 2, `${testCase.id}: top and application frames should be aggregated`);
 }
 
 async function main() {
@@ -294,6 +295,15 @@ async function main() {
         const events = await target.evaluate(() => ({ ...window.__fixture.events }));
         assert.ok(events["dynamic-phone:input"] >= 1, `${testCase.id}: assist mode fills late-rendered field`);
         assert.ok(events["dynamic-phone:change"] >= 1, `${testCase.id}: late field change event fires`);
+        await target.evaluate(() => history.pushState({}, "", "/not-an-application"));
+        await target.waitForTimeout(1000);
+        await target.evaluate(() => {
+          const container = document.createElement("div");
+          container.innerHTML = '<label for="post-route-phone">Phone number</label><input id="post-route-phone" type="tel">';
+          document.querySelector("#fixture-form").append(container);
+        });
+        await target.waitForTimeout(1500);
+        assert.equal(await target.locator("#post-route-phone").inputValue(), "", `${testCase.id}: assist mode stops when an SPA changes route`);
       }
       console.log(`PASS ${testCase.id.padEnd(15)} values, events, resume, privacy and no-navigation invariants`);
     }
@@ -353,6 +363,32 @@ async function main() {
     await popupProbe.close();
     console.log("PASS popup fits the 420x600 Chrome surface without a scroll container");
 
+    await worker.evaluate(async () => {
+      const stored = await chrome.storage.local.get("profile_browser_test");
+      const value = { ...stored.profile_browser_test, structuredFutureField: { preserved: true } };
+      await chrome.storage.local.set({ profile_browser_test: value, profile: value });
+    });
+    const profileProbe = await context.newPage();
+    await profileProbe.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
+    await profileProbe.locator("#profile-form").waitFor({ state: "visible" });
+    assert.equal(await profileProbe.getByText("Run setup again").count(), 0, "the full profile editor must not expose a competing setup editor");
+    await profileProbe.locator("button[type='submit']").click();
+    await profileProbe.waitForFunction(() => document.querySelector("#save-status")?.textContent === "Saved just now");
+    const savedProfileState = await worker.evaluate(async () => {
+      const profile = await ApplyOS.getActiveProfile();
+      const state = await ApplyOS.getState();
+      return { profile, resume: state.resume_versions.find((item) => item.id === profile.currentResumeVersionId) };
+    });
+    assert.equal(savedProfileState.profile.structuredFutureField.preserved, true, "profile form saves preserve fields owned by future or imported schema versions");
+    assert.ok(savedProfileState.profile.onboardingCompletedAt, "saving the canonical profile completes first-run setup");
+    assert.match(savedProfileState.resume?.sha256 || "", /^[a-f0-9]{64}$/, "saved resume versions retain a content hash");
+    const onboardingProbe = await context.newPage();
+    await onboardingProbe.goto(`chrome-extension://${extensionId}/onboarding.html`, { waitUntil: "domcontentloaded" });
+    await onboardingProbe.waitForURL(`chrome-extension://${extensionId}/options.html`);
+    await onboardingProbe.close();
+    await profileProbe.close();
+    console.log("PASS canonical profile round-trip preserves structured data and completed onboarding redirects");
+
     const helper = await context.newPage();
     const dashboardMessages = [];
     helper.on("console", (message) => { if (["warning", "error"].includes(message.type())) dashboardMessages.push(message.text()); });
@@ -408,6 +444,10 @@ async function main() {
     assert.equal(confirmedState.application.status, "applied", "affirmative review marks the application applied");
     assert.equal(confirmedState.reminders.length, 2, "affirmative review schedules 7/14-day reminders");
     await helper.reload({ waitUntil: "domcontentloaded" });
+    const completeReminder = helper.locator(".upcoming-done").first();
+    await completeReminder.waitFor({ state: "visible" });
+    await completeReminder.click();
+    assert.equal(await worker.evaluate(async (id) => (await ApplyOS.getState()).reminders.filter((item) => item.application_id === id && item.completed_at).length, applicationId), 1, "dashboard Done completes a reminder instead of leaving it due forever");
     const applicationCard = helper.locator(`#board .job-card[data-id="${applicationId}"]`);
     await applicationCard.waitFor({ state: "visible" });
     await applicationCard.click();

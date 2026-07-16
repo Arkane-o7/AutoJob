@@ -100,7 +100,8 @@ function toast(message) {
 
 function populateSelect(select, values, label) {
   const current = select.value;
-  select.innerHTML = `<option value="">All ${label}</option>` + values.map((value) => `<option value="${escapeHTML(value)}">${escapeHTML(value)}</option>`).join("");
+  const all = new Option(`All ${label}`, "");
+  select.replaceChildren(all, ...values.map((value) => new Option(String(value), String(value))));
   select.value = current;
 }
 
@@ -155,8 +156,13 @@ function renderUpcoming() {
   const deadlines = state.applications.filter((item) => item.deadline && new Date(item.deadline).getTime() >= now - 86400000).map((item) => ({ application: item, kind: "deadline", at: item.deadline }));
   const interviews = state.interviews.filter((item) => !item.completed_at && item.scheduled_at && new Date(item.scheduled_at).getTime() >= now - 86400000).map((item) => ({ ...item, application: state.applications.find((app) => app.id === item.application_id), kind: "interview", at: item.scheduled_at }));
   const items = [...reminders, ...deadlines, ...interviews].filter((item) => item.application).sort((a, b) => new Date(a.at) - new Date(b.at)).slice(0, 8);
-  elements.upcoming.innerHTML = items.length ? items.map((item) => `<button class="upcoming-card ${item.kind === "deadline" ? "deadline" : ""}" data-id="${item.application.id}" type="button"><strong>${escapeHTML(item.application.role)}</strong><span>${item.kind === "deadline" ? "Deadline" : item.kind === "interview" ? "Interview" : "Follow-up"} · ${dateLabel(item.at)}</span></button>`).join("") : `<span class="upcoming-card"><strong>Nothing urgent</strong><span>Your next actions will appear here.</span></span>`;
-  elements.upcoming.querySelectorAll("button").forEach((button) => button.addEventListener("click", () => openDetail(button.dataset.id)));
+  elements.upcoming.innerHTML = items.length ? items.map((item) => `<div class="upcoming-card ${item.kind === "deadline" ? "deadline" : ""}"><button class="upcoming-open" data-id="${item.application.id}" type="button"><strong>${escapeHTML(item.application.role)}</strong><span>${item.kind === "deadline" ? "Deadline" : item.kind === "interview" ? "Interview" : "Follow-up"} · ${escapeHTML(dateLabel(item.at))}</span></button>${item.kind === "follow-up" ? `<button class="upcoming-done" data-reminder-id="${item.id}" type="button">Done</button>` : ""}</div>`).join("") : `<span class="upcoming-card"><strong>Nothing urgent</strong><span>Your next actions will appear here.</span></span>`;
+  elements.upcoming.querySelectorAll(".upcoming-open").forEach((button) => button.addEventListener("click", () => openDetail(button.dataset.id)));
+  elements.upcoming.querySelectorAll(".upcoming-done").forEach((button) => button.addEventListener("click", async () => {
+    await ApplyOS.completeReminder(button.dataset.reminderId);
+    await load();
+    toast("Follow-up completed");
+  }));
 }
 
 function contactCardHTML(contact) {
@@ -393,6 +399,15 @@ $("#detail-form").addEventListener("submit", async (event) => {
   await load(); openDetail(selectedId); toast("Application updated");
 });
 $("#detail-applied").addEventListener("click", async () => { await ApplyOS.markApplicationApplied(selectedId); await load(); openDetail(selectedId); toast("Applied · follow-ups scheduled for 7 and 14 days"); });
+$("#delete-application").addEventListener("click", async () => {
+  const application = state.applications.find((item) => item.id === selectedId);
+  if (!application || !confirm(`Delete ${application.role} at ${application.company}? Its reminders and interview workspaces will also be deleted.`)) return;
+  const id = selectedId;
+  closeDetail();
+  await ApplyOS.deleteApplication(id);
+  await load();
+  toast("Application deleted");
+});
 $("#generate-draft").addEventListener("click", () => {
   const application = state.applications.find((item) => item.id === selectedId); if (!application) return;
   const draft = ApplyOS.generateFollowUpDraft(application, profile, $("#draft-type").value); $("#draft-subject").value = draft.subject; $("#draft-body").value = draft.body; updateDraftComposeLinks(); $("#draft").classList.remove("hidden");

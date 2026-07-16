@@ -9,7 +9,7 @@ ApplyOS retains its interface and legacy-profile compatibility while incorporati
 The original extension was a Manifest V3, plain-JavaScript extension with three surfaces:
 
 - `options.html` stored one legacy `profile` object—including resume data and custom answers—in `chrome.storage.local`.
-- `popup.js` sent `APPLYKIT_FILL` to `content.js` on the active tab.
+- `popup.js` asks the background worker to run a reviewed fill pass; the worker targets every application frame explicitly and aggregates one report.
 - `content.js` detected form fields from labels, ARIA metadata, names, placeholders, nearby text, ATS attributes, custom controls, open shadow roots, and subframes. It filled empty fields, attached the saved resume when allowed, and watched later multi-step fields.
 
 There was no service worker, CRM schema, storage abstraction, job-page extractor, reminder engine, or dashboard. ApplyOS preserves the legacy `profile`, message name, keyboard shortcut, and autofill path, then adds a parallel versioned `applyos_state` store. Migration copies answer and resume metadata into the new store without deleting or rewriting the old profile.
@@ -20,7 +20,7 @@ The new modules are:
 - `shared/offlyn-core.js`: MIT-attributed ATS recognition, semantic field classification, type/value safeguards, and correction matching adapted to the ApplyOS profile schema.
 - `shared/ats-compat.js`: a registry-based compatibility layer for ATS field context, custom dropdown options, and resume dropzones. Greenhouse legacy/React patterns are BSD-attributed adaptations from Job App Filler; the remaining adapters use ApplyOS heuristics.
 - `shared/profiles.js`: multi-profile index, active-profile switching, legacy `profile` mirroring, completeness checks, and resume-text normalization.
-- `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, reminders, contacts, interviews, answer memory, resume versions, and settings. Schema v4 records its revision and migration history while preserving legacy data.
+- `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, reminders, contacts, interviews, scoped answer memory, immutable resume versions, and settings. Schema v5 records its revision and migration history while preserving legacy data.
 - `shared/matching.js`: deterministic, local skill/keyword matching with matched skills, gaps, keywords, experience hints, and answer prompts.
 - `shared/followup.js`: editable 7-day and optional 14-day reminders, interview thank-you drafts, and review-only Gmail, Outlook, and local-email-app compose links.
 - `shared/ai.js`: zero-setup Smart Draft fallbacks for cover letters, resume focus plans, and keyword gaps, plus optional localhost-only Ollama enhancement.
@@ -31,7 +31,7 @@ The new modules are:
 - `shared/submission.js`: conservative confirmation scoring that requires both recent user submit intent and strong confirmation-page evidence.
 - `shared/backup.js`: password-derived AES-256-GCM export/import for the complete local workspace, decrypted summary review, safe version checks, and a one-step local restore checkpoint.
 - `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. It has no email credentials or send capability.
-- `onboarding.*`: five-step profile, resume-text, safety, and local-AI setup flow.
+- `onboarding.*`: first-run quick setup that patches the canonical profile without replacing fields owned by Profile & Settings.
 - `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, review-only compose handoffs, match guidance, profile switching, and the local-AI studio.
 - `types/applyos.ts`: TypeScript contracts for captured jobs, applications, contacts, interviews, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
 
@@ -41,7 +41,7 @@ The new modules are:
 2. Open `chrome://extensions` in Chrome and enable **Developer mode**.
 3. If ApplyOS is already loaded, click its reload icon. Otherwise click **Load unpacked** and choose this project folder (or the generated `dist` folder).
 4. Refresh any job pages that were already open so the updated content scripts load.
-5. Pin **ApplyOS** and choose **Setup** once to complete onboarding. Use **Profile & answer memory** for the full editor.
+5. Pin **ApplyOS** and choose **Finish setup** once. After completion the same button becomes **Edit profile** and opens the canonical **Profile & Settings** editor.
 
 All application, contact, interview, profile, answer, and resume data stays in `chrome.storage.local`. ApplyOS has no backend or analytics. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
 
@@ -89,7 +89,7 @@ Choose **Dashboard** from the popup. Switch between Board and List, search, filt
 
 ### 5. See or edit a reminder
 
-Applied records show the next follow-up in the popup and dashboard. Due reminders move an `applied` record to `follow_up_due` and appear in Next Actions and the extension badge. Edit **Next follow-up** in the application detail drawer to reschedule it.
+Applied records show the next follow-up in the popup and dashboard. Due reminders move an `applied` record to `follow_up_due` and appear in Next Actions and the extension badge. Edit **Next follow-up** in the application detail drawer to reschedule it, or choose **Done** in Next Actions to complete it.
 
 ### 6. Generate a follow-up draft
 
@@ -105,15 +105,15 @@ Open an application and choose **Add interview**. Record the round, format, sche
 
 ### 9. Use Smart Drafts
 
-Open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These work immediately without accounts, model downloads, terminal commands, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Answers → Advanced**, but it is never part of onboarding or required for core functionality.
+Open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These work immediately without accounts, model downloads, terminal commands, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Settings → Advanced**, but it is never part of onboarding or required for core functionality.
 
 ### 10. Export or restore an encrypted backup
 
-Open **Profile & Answers → Encrypted backup**. Choose a password of at least 10 characters and download the `.applyos` file. The file includes the complete local workspace, including saved resume files, and is encrypted before download. To restore, select the file, enter its password, review the decrypted record counts, type `RESTORE`, and confirm. A successful restore keeps one local undo checkpoint. ApplyOS never stores or recovers the backup password.
+Open **Profile & Settings → Encrypted backup**. Choose a password of at least 10 characters and download the `.applyos` file. The file includes the complete local workspace, including saved resume files, and is encrypted before download. To restore, select the file, enter its password, review the decrypted record counts, type `RESTORE`, and confirm. A successful restore keeps one local undo checkpoint. ApplyOS never stores or recovers the backup password.
 
 ## Answer memory
 
-Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized into answer memory and the local knowledge graph. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
+Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized authoritatively into answer memory and the local knowledge graph, so deleting an answer forgets it. Employer-history and relationship answers can be restricted to one company domain. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
 
 ## Development checks
 

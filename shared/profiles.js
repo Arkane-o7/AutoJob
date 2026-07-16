@@ -1,11 +1,14 @@
 /* Multi-profile compatibility layer adapted from Offlyn Apply's MIT-licensed profile model. */
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
   const INDEX_KEY = "profilesIndex";
   const PROFILE_PREFIX = "profile_";
+  const PROFILE_SCHEMA_VERSION = 2;
+  const PROFILE_LOCK_NAME = "applyos-profile-write";
   const COLORS = ["#b7ff3c", "#5c7cff", "#ff5c35", "#9f7aea", "#17b897", "#e6ad19", "#e6538c", "#667085"];
+  let profileQueue = Promise.resolve();
 
   function profileKey(id) {
     return `${PROFILE_PREFIX}${id}`;
@@ -20,6 +23,37 @@
 
   function slug(value) {
     return String(value || "profile").toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "") || "profile";
+  }
+
+  function withProfileLock(task) {
+    const locks = root.navigator?.locks;
+    if (locks && typeof locks.request === "function") return locks.request(PROFILE_LOCK_NAME, { mode: "exclusive" }, task);
+    const run = profileQueue.then(task, task);
+    profileQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
+  function hasOnboardingIdentity(profile = {}) {
+    return Boolean(String(profile.firstName || "").trim() && String(profile.lastName || "").trim() && String(profile.email || "").trim());
+  }
+
+  function migrateProfile(profile = {}) {
+    const value = profile && typeof profile === "object" && !Array.isArray(profile) ? { ...profile } : {};
+    if (value.resume && typeof value.resume === "object") {
+      const name = String(value.resume.name || "");
+      const type = String(value.resume.type || "");
+      const size = Math.max(0, Number(value.resume.size || 0));
+      const allowed = /\.(?:pdf|docx?)$/i.test(name) && (!type || /pdf|msword|officedocument/.test(type));
+      const dataUrl = typeof value.resume.dataUrl === "string" && /^data:application\/(?:pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document);base64,/i.test(value.resume.dataUrl)
+        ? value.resume.dataUrl
+        : "";
+      value.resume = allowed && size <= 8 * 1024 * 1024 ? { name, type, size, dataUrl } : null;
+    }
+    value.profileSchemaVersion = PROFILE_SCHEMA_VERSION;
+    if (!value.onboardingCompletedAt && hasOnboardingIdentity(value)) {
+      value.onboardingCompletedAt = value.updatedAt || new Date().toISOString();
+    }
+    return value;
   }
 
   ApplyOS.ensureProfiles = async function ensureProfiles() {
@@ -39,17 +73,39 @@
   ApplyOS.getActiveProfile = async function getActiveProfile() {
     const index = await ApplyOS.ensureProfiles();
     const stored = await chrome.storage.local.get([profileKey(index.activeId), ApplyOS.PROFILE_KEY]);
-    return stored[profileKey(index.activeId)] || stored[ApplyOS.PROFILE_KEY] || {};
+    const original = stored[profileKey(index.activeId)] || stored[ApplyOS.PROFILE_KEY] || {};
+    const profile = migrateProfile(original);
+    if (JSON.stringify(original) !== JSON.stringify(profile)) {
+      await chrome.storage.local.set({ [profileKey(index.activeId)]: profile, [ApplyOS.PROFILE_KEY]: profile });
+    }
+    return profile;
   };
 
-  ApplyOS.saveActiveProfile = async function saveActiveProfile(profile) {
-    const index = await ApplyOS.ensureProfiles();
-    const value = { ...profile, updatedAt: new Date().toISOString() };
-    await chrome.storage.local.set({
-      [profileKey(index.activeId)]: value,
-      [ApplyOS.PROFILE_KEY]: value
+  ApplyOS.patchActiveProfile = async function patchActiveProfile(patch = {}) {
+    return withProfileLock(async () => {
+      const index = await ApplyOS.ensureProfiles();
+      const stored = await chrome.storage.local.get([profileKey(index.activeId), ApplyOS.PROFILE_KEY]);
+      const current = migrateProfile(stored[profileKey(index.activeId)] || stored[ApplyOS.PROFILE_KEY] || {});
+      const value = migrateProfile({ ...current, ...patch, updatedAt: new Date().toISOString() });
+      await chrome.storage.local.set({
+        [profileKey(index.activeId)]: value,
+        [ApplyOS.PROFILE_KEY]: value
+      });
+      return value;
     });
-    return value;
+  };
+
+  // Kept as a compatibility alias. Normal product surfaces must patch so a
+  // partial form can never erase fields owned by another surface or version.
+  ApplyOS.saveActiveProfile = ApplyOS.patchActiveProfile;
+
+  ApplyOS.replaceActiveProfile = async function replaceActiveProfile(profile = {}) {
+    return withProfileLock(async () => {
+      const index = await ApplyOS.ensureProfiles();
+      const value = migrateProfile({ ...profile, updatedAt: new Date().toISOString() });
+      await chrome.storage.local.set({ [profileKey(index.activeId)]: value, [ApplyOS.PROFILE_KEY]: value });
+      return value;
+    });
   };
 
   ApplyOS.getProfileById = async function getProfileById(id) {
@@ -70,12 +126,15 @@
   };
 
   ApplyOS.setActiveProfile = async function setActiveProfile(id) {
-    const index = await ApplyOS.ensureProfiles();
-    if (!index.profiles.some((item) => item.id === id)) throw new Error("Profile not found");
-    index.activeId = id;
-    const profile = await ApplyOS.getProfileById(id) || {};
-    await chrome.storage.local.set({ [INDEX_KEY]: index, [ApplyOS.PROFILE_KEY]: profile });
-    return profile;
+    return withProfileLock(async () => {
+      const index = await ApplyOS.ensureProfiles();
+      if (!index.profiles.some((item) => item.id === id)) throw new Error("Profile not found");
+      index.activeId = id;
+      const profile = await ApplyOS.getProfileById(id) || {};
+      await chrome.storage.local.set({ [INDEX_KEY]: index, [ApplyOS.PROFILE_KEY]: profile });
+      if (profile.currentResumeVersionId) await ApplyOS.setCurrentResumeVersion?.(profile.currentResumeVersionId);
+      return profile;
+    });
   };
 
   ApplyOS.updateProfileMeta = async function updateProfileMeta(id, patch) {
@@ -95,6 +154,8 @@
     const active = await ApplyOS.getProfileById(index.activeId) || {};
     await chrome.storage.local.remove(profileKey(id));
     await chrome.storage.local.set({ [INDEX_KEY]: index, [ApplyOS.PROFILE_KEY]: active });
+    await ApplyOS.removeProfileState?.(id);
+    await ApplyOS.removeProfileGraph?.(id);
     return index;
   };
 
@@ -106,6 +167,14 @@
     ];
     const missing = fields.filter(([, value]) => !String(value || "").trim()).map(([label]) => label);
     return { percentage: Math.round(((fields.length - missing.length) / fields.length) * 100), missing, complete: missing.length === 0 };
+  };
+
+  ApplyOS.isOnboardingComplete = function isOnboardingComplete(profile = {}) {
+    return Boolean(profile.onboardingCompletedAt || hasOnboardingIdentity(profile));
+  };
+
+  ApplyOS.completeOnboarding = async function completeOnboarding(patch = {}) {
+    return ApplyOS.patchActiveProfile({ ...patch, onboardingCompletedAt: new Date().toISOString() });
   };
 
   ApplyOS.profileResumeText = function profileResumeText(profile = {}) {

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ApplyOS — Profile</title>
+    <title>ApplyOS — Profile & Settings</title>
     <link rel="stylesheet" href="options.css">
   </head>
   <body>
@@ -20,7 +20,8 @@
         <div class="profile-manager">
           <label><span>ACTIVE PROFILE</span><select id="profile-select"></select></label>
           <button id="new-profile" type="button">+ New profile</button>
-          <button id="open-onboarding" type="button">Run setup again</button>
+          <button id="rename-profile" type="button">Rename profile</button>
+          <button id="delete-profile" type="button">Delete profile</button>
         </div>
         <nav aria-label="Profile sections">
           <a href="#identity">01 — Identity</a>
@@ -113,12 +114,14 @@
             <label><span>Willing to work onsite?</span><select name="willingToWorkOnsite"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
             <label><span>Willing to travel?</span><select name="travelWillingness"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
             <label><span>Security clearance</span><input name="securityClearance" placeholder="e.g. None or Secret"></label>
-            <label><span>Previously worked for employer?</span><select name="previouslyWorkedForCompany"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-            <label><span>Know / related to an employee?</span><select name="knowsEmployeeAtCompany"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-            <label class="wide"><span>Prior employer details, if Yes</span><textarea name="priorCompanyDetails" placeholder="Company, subsidiary, role, and dates"></textarea></label>
-            <label class="wide"><span>Employee connection details, if Yes</span><textarea name="employeeConnectionDetails" placeholder="Name and relationship"></textarea></label>
             <label><span>How did you hear about the job?</span><input name="jobSource" placeholder="e.g. LinkedIn"></label>
             <label class="wide"><span>General cover letter / introduction</span><textarea name="coverLetter" placeholder="Use a general version here; tailor it for important applications."></textarea></label>
+          </div>
+          <div class="reminder-settings">
+            <strong>FOLLOW-UP DEFAULTS</strong>
+            <label><input id="enable-final-follow-up" type="checkbox"> Schedule an optional final follow-up 14 days after applying</label>
+            <label><input id="enable-notifications" type="checkbox"> Show follow-ups due on the ApplyOS toolbar badge</label>
+            <small>Changes apply to new applications. Every reminder remains editable and nothing is sent automatically.</small>
           </div>
           <div class="safety-note"><strong>Intentionally manual</strong><span>ApplyOS does not autofill demographic, disability, veteran, government-ID, birth-date, assessment, CAPTCHA, or consent fields.</span></div>
         </section>
@@ -139,7 +142,7 @@
         <section id="answers">
           <div class="section-number">07</div>
           <div class="section-heading"><p>FOR REPEATED QUESTIONS</p><h2>Custom answers</h2></div>
-          <p class="section-copy">Add phrases from questions you see often—including skill-specific experience such as “years handling 100 TB of data.” Answers can be text, numbers, or the exact label of a dropdown option.</p>
+          <p class="section-copy">Add phrases from questions you see often—including skill-specific experience such as “years handling 100 TB of data.” Use company-only scope for employer-history, employee-relationship, and company-specific answers.</p>
           <div id="custom-answers"></div>
           <button id="add-answer" type="button" class="add-answer">+ Add a question and answer</button>
         </section>

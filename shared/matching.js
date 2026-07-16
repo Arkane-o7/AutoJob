@@ -1,7 +1,7 @@
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
   const STOPWORDS = new Set("a an and are as at be been but by can company could did do does for from had has have how i if in into is it job may more most not of on or our role should so than that the their them they this to us we what when where which who will with you your years work working".split(" "));
   const SKILLS = {
     javascript: ["javascript", "js", "ecmascript"],

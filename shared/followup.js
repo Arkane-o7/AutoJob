@@ -1,7 +1,7 @@
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
 
   ApplyOS.buildFollowUpReminders = function buildFollowUpReminders(application, appliedAt = new Date()) {
     const base = appliedAt instanceof Date ? appliedAt : new Date(appliedAt);

@@ -52,6 +52,34 @@ function createAnswerRow(answer = {}) {
   text.value = answer.answer || "";
   answerLabel.append(text);
 
+  const scopeWrap = document.createElement("div");
+  scopeWrap.className = "answer-scope-wrap";
+  const scopeLabel = document.createElement("label");
+  const scopeTitle = document.createElement("span");
+  scopeTitle.textContent = "Where to reuse";
+  const scope = document.createElement("select");
+  scope.className = "custom-answer-scope";
+  scope.append(new Option("Any employer", "global"), new Option("One company only", "company"));
+  scope.value = answer.scope === "company" ? "company" : "global";
+  scopeLabel.append(scopeTitle, scope);
+  const domainLabel = document.createElement("label");
+  domainLabel.className = "answer-domain";
+  const domainTitle = document.createElement("span");
+  domainTitle.textContent = "Company domain";
+  const domain = document.createElement("input");
+  domain.className = "custom-answer-domain";
+  domain.placeholder = "e.g. microsoft.com";
+  domain.value = answer.company_domain || answer.companyDomain || "";
+  domainLabel.append(domainTitle, domain);
+  const updateScope = () => {
+    const companyOnly = scope.value === "company";
+    domainLabel.classList.toggle("hidden", !companyOnly);
+    domain.required = companyOnly;
+  };
+  scope.addEventListener("change", updateScope);
+  updateScope();
+  scopeWrap.append(scopeLabel, domainLabel);
+
   const remove = document.createElement("button");
   remove.className = "delete-answer";
   remove.type = "button";
@@ -62,7 +90,7 @@ function createAnswerRow(answer = {}) {
     markUnsaved();
   });
 
-  row.append(questionLabel, answerLabel, remove);
+  row.append(questionLabel, answerLabel, scopeWrap, remove);
   customAnswers.append(row);
 }
 
@@ -96,7 +124,7 @@ function fileToDataUrl(file) {
 
 async function initialize() {
   profilesIndex = await ApplyOS.getProfilesIndex();
-  const profile = await ApplyOS.getActiveProfile();
+  const [profile, state] = await Promise.all([ApplyOS.getActiveProfile(), ApplyOS.getState()]);
   const profileSelect = document.querySelector("#profile-select");
   profileSelect.replaceChildren(...profilesIndex.profiles.map((meta) => {
     const option = document.createElement("option"); option.value = meta.id; option.textContent = meta.targetRole ? `${meta.name} · ${meta.targetRole}` : meta.name; return option;
@@ -116,6 +144,8 @@ async function initialize() {
   document.querySelector("#embedding-model").value = config.embeddingModel;
   if (config.enabled) { document.querySelector("#ai-result").textContent = `Connected · Ollama ${config.version || "ready"}`; document.querySelector("#ai-result").className = "success"; }
   document.querySelector("#undo-restore").classList.toggle("hidden", !(await ApplyOS.hasRestoreCheckpoint()));
+  document.querySelector("#enable-final-follow-up").checked = state.settings.final_follow_up_enabled !== false;
+  document.querySelector("#enable-notifications").checked = state.settings.notification_enabled !== false;
 }
 
 resumeInput.addEventListener("change", async () => {
@@ -164,17 +194,40 @@ form.addEventListener("submit", async (event) => {
   data.customAnswers = Array.from(customAnswers.querySelectorAll(".answer-row"))
     .map((row) => ({
       question: row.querySelector(".custom-question").value.trim(),
-      answer: row.querySelector(".custom-answer").value.trim()
+      answer: row.querySelector(".custom-answer").value.trim(),
+      scope: row.querySelector(".custom-answer-scope").value,
+      company_domain: row.querySelector(".custom-answer-domain").value.trim().toLowerCase()
     }))
     .filter((item) => item.question && item.answer);
   data.updatedAt = new Date().toISOString();
 
   try {
-    await ApplyOS.saveActiveProfile(data);
-    await ApplyOS.syncAnswerMemory(data.customAnswers);
-    await ApplyOS.syncProfileAnswerDefaults(data);
-    await Promise.all(data.customAnswers.map((item) => ApplyOS.recordGraphAnswer({ question: item.question, answer: item.answer, source: "profile", confidence: 1 })));
-    await ApplyOS.syncResumeVersion(data.resume);
+    const profileId = profilesIndex?.activeId || "default";
+    const savedProfile = await ApplyOS.completeOnboarding(data);
+    await ApplyOS.updateSettings({
+      final_follow_up_enabled: document.querySelector("#enable-final-follow-up").checked,
+      notification_enabled: document.querySelector("#enable-notifications").checked
+    });
+    await ApplyOS.syncAnswerMemory(data.customAnswers, {
+      authoritative: true,
+      removeLegacyProfileEntries: true,
+      source: "profile",
+      profileId,
+      memoryGroup: `custom:${profileId}`
+    });
+    await ApplyOS.syncProfileAnswerDefaults(savedProfile);
+    await ApplyOS.reconcileProfileGraphAnswers(profileId, data.customAnswers);
+    await Promise.all(data.customAnswers.map((item) => ApplyOS.recordGraphAnswer({
+      question: item.question,
+      answer: item.answer,
+      source: "profile",
+      profileId,
+      scope: item.scope,
+      companyDomain: item.company_domain,
+      confidence: 1
+    })));
+    const resumeVersion = await ApplyOS.syncResumeVersion(data.resume);
+    if (resumeVersion) await ApplyOS.patchActiveProfile({ currentResumeVersionId: resumeVersion.id });
     savedResume = data.resume;
     pendingResume = null;
     saveStatus.textContent = "Saved just now";
@@ -194,7 +247,21 @@ document.querySelector("#new-profile").addEventListener("click", async () => {
   const targetRole = window.prompt("Optional target role", "") || "";
   await ApplyOS.createProfile(name.trim(), targetRole.trim(), profilesIndex?.activeId); window.location.reload();
 });
-document.querySelector("#open-onboarding").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html") }));
+document.querySelector("#rename-profile").addEventListener("click", async () => {
+  const current = profilesIndex.profiles.find((item) => item.id === profilesIndex.activeId);
+  const name = window.prompt("Rename this profile", current?.name || "");
+  if (!name?.trim()) return;
+  const targetRole = window.prompt("Target role", current?.targetRole || "") ?? current?.targetRole ?? "";
+  await ApplyOS.updateProfileMeta(profilesIndex.activeId, { name: name.trim(), targetRole: targetRole.trim() });
+  window.location.reload();
+});
+document.querySelector("#delete-profile").addEventListener("click", async () => {
+  const current = profilesIndex.profiles.find((item) => item.id === profilesIndex.activeId);
+  if (profilesIndex.profiles.length <= 1) { window.alert("The final profile cannot be deleted."); return; }
+  if (!window.confirm(`Delete the profile “${current?.name || "this profile"}”? Applications will remain in the CRM.`)) return;
+  await ApplyOS.deleteProfile(profilesIndex.activeId);
+  window.location.reload();
+});
 document.querySelector("#test-ai").addEventListener("click", async (event) => {
   const button = event.currentTarget; const result = document.querySelector("#ai-result"); button.disabled = true; result.className = ""; result.textContent = "Checking…";
   const endpoint = document.querySelector("#ai-endpoint").value.trim();

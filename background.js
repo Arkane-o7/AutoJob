@@ -34,9 +34,41 @@ function canonicalPageUrl(value) {
   } catch { return ""; }
 }
 
+async function messageAllFrames(tabId, type) {
+  const frames = await chrome.webNavigation.getAllFrames({ tabId });
+  const settled = await Promise.allSettled((frames || [{ frameId: 0 }]).map(async ({ frameId }) => {
+    const response = await chrome.tabs.sendMessage(tabId, { type }, { frameId });
+    if (!response?.ok) throw new Error(response?.error || `Frame ${frameId} did not complete.`);
+    return { frameId, report: response.report || {} };
+  }));
+  const completed = settled.filter((result) => result.status === "fulfilled").map((result) => result.value);
+  if (!completed.length) {
+    const firstError = settled.find((result) => result.status === "rejected");
+    throw firstError?.reason || new Error("No application frame could be reached.");
+  }
+  const reports = completed.map((item) => item.report);
+  const resumePriority = ["attached", "already-attached", "failed", "missing", "not-found"];
+  const report = {
+    scanned: reports.reduce((sum, item) => sum + Number(item.scanned || 0), 0),
+    filled: reports.reduce((sum, item) => sum + Number(item.filled || 0), 0),
+    attached: reports.reduce((sum, item) => sum + Number(item.attached || 0), 0),
+    skipped: reports.reduce((sum, item) => sum + Number(item.skipped || 0), 0),
+    blockedActions: reports.reduce((sum, item) => sum + Number(item.blockedActions || 0), 0),
+    unmatchedRequired: reports.reduce((sum, item) => sum + Number(item.unmatchedRequired || 0), 0),
+    missingProfileFields: [...new Set(reports.flatMap((item) => item.missingProfileFields || []))],
+    fields: [...new Set(reports.flatMap((item) => item.fields || []))],
+    site: reports.find((item) => item.site)?.site || "This form",
+    resumeStatus: resumePriority.find((status) => reports.some((item) => item.resumeStatus === status)) || "not-found",
+    reviewRequired: true,
+    frameCount: completed.length,
+    frameErrors: settled.length - completed.length
+  };
+  return report;
+}
+
 async function updateBadge(refreshStatuses = true) {
   const state = refreshStatuses ? await ApplyOS.refreshDueApplications() : await ApplyOS.getState();
-  const due = state.reminders.filter((item) => !item.completed_at && new Date(item.due_at) <= new Date()).length;
+  const due = state.settings.notification_enabled === false ? 0 : state.reminders.filter((item) => !item.completed_at && new Date(item.due_at) <= new Date()).length;
   await chrome.action.setBadgeBackgroundColor({ color: "#ff5c35" });
   await chrome.action.setBadgeText({ text: due ? String(Math.min(due, 99)) : "" });
   await chrome.action.setTitle({ title: due ? `ApplyOS · ${due} follow-up${due === 1 ? "" : "s"} due` : "ApplyOS" });
@@ -68,6 +100,13 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "APPLYOS_FILL_TAB" || message?.type === "APPLYOS_AGENT_TAB") {
+    if (!Number.isInteger(message.tabId)) { sendResponse({ ok: false, error: "Missing active application tab." }); return false; }
+    messageAllFrames(message.tabId, message.type === "APPLYOS_FILL_TAB" ? "APPLYKIT_FILL" : "APPLYOS_AGENT_ASSIST")
+      .then((report) => sendResponse({ ok: true, report }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === "APPLYOS_RUNTIME_PING") {
     sendResponse({
       ok: true,

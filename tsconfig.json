@@ -2,9 +2,14 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
-    "strict": true,
+    "strict": false,
+    "allowJs": true,
+    "checkJs": true,
+    "noImplicitAny": false,
+    "moduleDetection": "force",
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["types/**/*.ts"]
+  "include": ["types/**/*.ts", "shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/profiles.js", "shared/storage.js", "shared/graph.js", "shared/agent.js", "shared/backup.js", "shared/offlyn-core.js", "shared/ats-compat.js", "shared/workday.js", "background.js", "capture.js", "content.js"],
+  "exclude": ["dist/**", "tests/**", "scripts/**"]
 }

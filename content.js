@@ -64,10 +64,6 @@
     rule("remotePreference", ["remote preference", "workplace preference", "preferred work arrangement", "work model"]),
     rule("travelWillingness", ["willing to travel", "travel requirement", "travel percentage"]),
     rule("securityClearance", ["security clearance", "clearance level", "active clearance"]),
-    rule("previouslyWorkedForCompany", ["ever worked for", "previously worked for", "former employee", "worked for this company", "worked for copart"]),
-    rule("priorCompanyDetails", ["which copart company", "which company subcontractor or subsidiary", "if yes which company", "previous employer details"]),
-    rule("knowsEmployeeAtCompany", ["related to or know anyone", "know anyone that works", "relative employed", "family member works", "employee connection"]),
-    rule("employeeConnectionDetails", ["provide the name of the person", "name of the employee", "person you are related to", "referral name"]),
     rule("jobSource", ["how did you hear about us", "how did you hear about this job", "source of application", "job source"]),
     rule("coverLetter", ["cover letter", "letter of motivation", "motivation letter", "additional information", "message to hiring", "tell us about yourself"])
   ];
@@ -105,6 +101,7 @@
   let assistTimer = null;
   let assistProfile = null;
   let assistUntil = 0;
+  let assistPageKey = "";
   let fillInProgress = false;
 
   function isMicrosoftCareers() {
@@ -125,7 +122,18 @@
       .trim();
   }
 
-  function discoverShadowRoots(root = document) {
+  function currentCompanyDomain() {
+    return location.hostname.toLowerCase().replace(/^www\./, "");
+  }
+
+  function answerMatchesPageScope(answer = {}) {
+    if (answer.scope !== "company") return true;
+    const expected = String(answer.company_domain || answer.companyDomain || "").toLowerCase().replace(/^www\./, "");
+    const current = currentCompanyDomain();
+    return Boolean(expected && (current === expected || current.endsWith(`.${expected}`)));
+  }
+
+  function discoverShadowRoots(/** @type {Document|ShadowRoot} */ root = document) {
     for (const element of root.querySelectorAll?.("*") || []) {
       if (element.shadowRoot && !shadowRoots.has(element.shadowRoot)) {
         shadowRoots.add(element.shadowRoot);
@@ -334,7 +342,7 @@
     const employment = profile.employment?.[0] || {};
     const education = profile.education?.[0] || {};
     const parsedLocation = locationParts(profile.currentLocation);
-    return {
+    const flat = {
       ...profile,
       address: profile.address || profile.streetAddress || "",
       address2: profile.address2 || profile.addressLine2 || "",
@@ -361,10 +369,12 @@
       gpa: education.gpa || profile.gpa,
       desiredStartMonth: datePart(profile.desiredStartDate, "month"),
       desiredStartDay: datePart(profile.desiredStartDate, "day"),
-      desiredStartYear: datePart(profile.desiredStartDate, "year"),
-      priorCompanyDetails: normalize(profile.previouslyWorkedForCompany) === "no" ? "" : profile.priorCompanyDetails,
-      employeeConnectionDetails: normalize(profile.knowsEmployeeAtCompany) === "no" ? "" : profile.employeeConnectionDetails
+      desiredStartYear: datePart(profile.desiredStartDate, "year")
     };
+    // Employer-history and employee-relationship answers are never global
+    // profile facts. They must come through company-scoped answer memory.
+    for (const key of ["previouslyWorkedForCompany", "priorCompanyDetails", "knowsEmployeeAtCompany", "employeeConnectionDetails"]) delete flat[key];
+    return flat;
   }
 
   function missingProfileKey(element, flatProfile) {
@@ -502,7 +512,7 @@
     }
 
     for (const custom of flatProfile.customAnswers || []) {
-      if (!custom.question?.trim() || !custom.answer?.trim()) continue;
+      if (!custom.question?.trim() || !custom.answer?.trim() || !answerMatchesPageScope(custom)) continue;
       const score = customScore(context, custom.question);
       if (score && (!best || score > best.score)) best = { key: `custom:${custom.question}`, value: custom.answer, score, context };
     }
@@ -1012,17 +1022,32 @@
     return [...new Set(candidates)].some((element) => visible(element) && !isSettledAssistField(element));
   }
 
+  function currentAssistPageKey() {
+    return `${location.origin}${location.pathname}${location.search}${location.hash}`;
+  }
+
+  function stopAssistMode() {
+    assistObserver?.disconnect();
+    assistObserver = null;
+    window.clearTimeout(assistTimer);
+    assistTimer = null;
+    assistProfile = null;
+    assistUntil = 0;
+    assistPageKey = "";
+  }
+
   function armAssistMode(profile) {
     assistProfile = profile;
     assistUntil = Date.now() + ASSIST_DURATION_MS;
+    assistPageKey = currentAssistPageKey();
     assistObserver?.disconnect();
     // The Microsoft application is rendered as one controlled form. Its
     // autosave and Fluent UI portals generate mutations for every interaction,
     // so mutation-assisted refills are unsafe and unnecessary on this site.
     if (isMicrosoftCareers()) return;
     assistObserver = new MutationObserver((mutations) => {
-      if (Date.now() > assistUntil) {
-        assistObserver.disconnect();
+      if (Date.now() > assistUntil || currentAssistPageKey() !== assistPageKey) {
+        stopAssistMode();
         return;
       }
       if (fillInProgress || !addedControlCandidates(mutations)) return;
@@ -1031,7 +1056,7 @@
         discoverShadowRoots(document);
         for (const root of allRoots()) observeRoot(root);
         const report = await fillPage(assistProfile, { quiet: true });
-        if (report.filled || report.attached) showResultToast(report, true);
+        if (report.filled || report.attached) showResultToast(report);
       }, 350);
     });
     for (const root of allRoots()) observeRoot(root);
@@ -1043,17 +1068,18 @@
     const profile = activeProfile && Object.keys(activeProfile).length ? activeProfile : stored.profile;
     const { applyos_state: state, applyos_graph: graph } = stored;
     if (!profile) throw new Error("Profile not configured");
-    const remembered = (state?.answer_memory || []).map(({ question, answer }) => ({ question, answer }));
+    const remembered = (state?.answer_memory || []).filter(answerMatchesPageScope).map(({ question, answer, scope, company_domain }) => ({ question, answer, scope, company_domain }));
+    const scopedProfileAnswers = (profile.customAnswers || []).filter(answerMatchesPageScope);
     const mergedProfile = {
       ...profile,
       _learnedAnswers: [
         ...(state?.learned_answers || []),
-        ...((graph?.nodes || []).filter((node) => node.type === "answer").map((node) => ({
+        ...((graph?.nodes || []).filter((node) => node.type === "answer" && answerMatchesPageScope(node)).map((node) => ({
           id: node.id, fingerprint: node.id, question: node.question, normalized_question: ApplyOS.normalizeQuestion(node.question), answer: node.answer,
           canonical_field: node.canonical_field, field_type: node.prompt_type || "text", site: node.platforms?.[0] || "unknown", use_count: node.use_count || 1, updated_at: node.updated_at
         })))
       ],
-      customAnswers: [...(profile.customAnswers || []), ...remembered]
+      customAnswers: [...scopedProfileAnswers, ...remembered]
     };
     const report = await fillPage(mergedProfile);
     const workdayReport = globalThis.ApplyOS?.Workday?.isPage?.()
@@ -1069,28 +1095,38 @@
     return report;
   }
 
-  function collectAgentFields() {
+  function collectAgentFields(profile) {
     let sequence = 0;
-    return queryAllDeep(CONTROL_SELECTOR).filter((element) => {
+    const candidateLookup = new Map();
+    const flatProfile = flattenProfile(profile);
+    const fields = queryAllDeep(CONTROL_SELECTOR).filter((element) => {
       if (!visible(element) || hasExistingValue(element)) return false;
       const type = String(element.type || "").toLowerCase();
       return !["hidden", "password", "submit", "button", "reset", "image", "file"].includes(type);
     }).map((element) => {
       const label = descriptor(element);
-      if (!label || BLOCKED_CONTEXT.test(label) || SENSITIVE_CONTEXT.test(label) || CONSENT_CONTEXT.test(label)) return null;
+      if (!label || isBlockedField(element, label) || SENSITIVE_CONTEXT.test(label) || CONSENT_CONTEXT.test(label)) return null;
       const fieldId = `field_${Date.now()}_${sequence++}`;
       element.dataset.applyosAgentId = fieldId;
       const options = element instanceof HTMLSelectElement
         ? Array.from(element.options, (option) => option.textContent || option.value).filter(Boolean).slice(0, 40)
         : [];
-      return { fieldId, label, type: element.type || element.getAttribute("role") || element.tagName.toLowerCase(), required: Boolean(element.required || element.getAttribute("aria-required") === "true"), options };
+      const answer = bestAnswer(element, flatProfile);
+      const candidates = [];
+      if (answer) {
+        const candidateId = `${fieldId}_candidate_0`;
+        candidateLookup.set(candidateId, { ...answer, fieldId });
+        candidates.push({ id: candidateId, source: answer.key });
+      }
+      return { fieldId, label, type: element.type || element.getAttribute("role") || element.tagName.toLowerCase(), required: Boolean(element.required || element.getAttribute("aria-required") === "true"), options, candidates };
     }).filter(Boolean).slice(0, 80);
+    return { fields, candidateLookup };
   }
 
   async function runAgentAssist() {
-    const { profile } = await chrome.storage.local.get("profile");
+    const profile = await globalThis.ApplyOS?.getActiveProfile?.();
     if (!profile) throw new Error("Profile not configured");
-    const fields = collectAgentFields();
+    const { fields, candidateLookup } = collectAgentFields(profile);
     if (!fields.length) return { scanned: 0, filled: 0, skipped: 0, blockedActions: 0, reviewRequired: true, site: detectSite() };
     const job = window === window.top && globalThis.ApplyOS?.captureJob ? globalThis.ApplyOS.captureJob() : {};
     const plan = await globalThis.ApplyOS.generateAgentPlan(fields, profile, job);
@@ -1100,7 +1136,9 @@
       const element = document.querySelector(`[data-applyos-agent-id="${CSS.escape(action.fieldId)}"]`);
       if (!element || !globalThis.ApplyOS.isSafeAgentAction(action)) { report.skipped += 1; continue; }
       if (action.action === "skip") { report.skipped += 1; continue; }
-      const answer = { key: `local-ai:${action.label}`, value: action.value, context: action.label, classification: { shouldPersist: false, canonicalField: null } };
+      const candidate = candidateLookup.get(action.candidateId);
+      if (!candidate || candidate.fieldId !== action.fieldId) { report.skipped += 1; continue; }
+      const answer = { ...candidate, key: `local-ai:${candidate.key}`, context: action.label, classification: { ...candidate.classification, shouldPersist: false } };
       if (await fillElement(element, answer, processedGroups)) {
         report.filled += 1; element.classList.add("applykit-filled");
       } else report.skipped += 1;
@@ -1120,10 +1158,10 @@
     toast.className = "applykit-toast";
     toast.setAttribute("role", "status");
     const missingProfile = report.missingProfileFields?.length
-      ? ` Add ${report.missingProfileFields.join(", ")} in Profile & answer memory.`
+      ? ` Add ${report.missingProfileFields.join(", ")} in Profile & Settings.`
       : "";
     toast.textContent = report.resumeStatus === "missing"
-      ? "ApplyOS found a resume upload field, but no resume file is saved in your profile. Add one in Profile & answer memory."
+      ? "ApplyOS found a resume upload field, but no resume file is saved in your profile. Add one in Profile & Settings."
       : report.resumeStatus === "failed"
         ? "ApplyOS found the resume upload field but could not attach the saved file. Please attach it manually and review the form."
         : report.filled || report.attached
@@ -1400,7 +1438,7 @@
       if (!event.isTrusted || submissionSession?.suppressed) return;
       const control = event.target instanceof Element ? event.target.closest("button, input[type='submit'], [role='button']") : null;
       if (!control || control.closest(".applyos-submit-prompt, .applyos-review-overlay")) return;
-      const label = control.getAttribute("aria-label") || control.value || control.textContent || "";
+      const label = control.getAttribute("aria-label") || (control instanceof HTMLInputElement ? control.value : "") || control.textContent || "";
       if (globalThis.ApplyOS.Submission.isSubmitIntentLabel(label)) noteTrustedSubmitIntent().catch(() => {});
     }, true);
     document.addEventListener("submit", (event) => {
@@ -1425,6 +1463,13 @@
     event.preventDefault();
     fillFromStorage().catch((error) => console.warn("ApplyOS autofill failed", error));
   });
+
+  window.addEventListener("pagehide", stopAssistMode);
+  window.addEventListener("popstate", () => { if (assistPageKey && currentAssistPageKey() !== assistPageKey) stopAssistMode(); });
+  window.addEventListener("hashchange", () => { if (assistPageKey && currentAssistPageKey() !== assistPageKey) stopAssistMode(); });
+  window.setInterval(() => {
+    if (assistPageKey && currentAssistPageKey() !== assistPageKey) stopAssistMode();
+  }, 750);
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "APPLYOS_SESSION_UPDATED") {

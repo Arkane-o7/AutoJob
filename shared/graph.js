@@ -1,9 +1,11 @@
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
   const GRAPH_KEY = "applyos_graph";
   const GRAPH_VERSION = 1;
+  const GRAPH_LOCK_NAME = "applyos-graph-write";
+  let graphQueue = Promise.resolve();
 
   function normalize(value) {
     return String(value || "").toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").replace(/\s+/g, " ").trim();
@@ -41,6 +43,14 @@
     return normalized;
   }
 
+  function withGraphLock(task) {
+    const locks = root.navigator?.locks;
+    if (locks && typeof locks.request === "function") return locks.request(GRAPH_LOCK_NAME, { mode: "exclusive" }, task);
+    const run = graphQueue.then(task, task);
+    graphQueue = run.then(() => undefined, () => undefined);
+    return run;
+  }
+
   ApplyOS.GRAPH_KEY = GRAPH_KEY;
   ApplyOS.ensureGraph = async function ensureGraph() {
     const stored = await chrome.storage.local.get(GRAPH_KEY);
@@ -48,9 +58,12 @@
   };
 
   ApplyOS.mutateGraph = async function mutateGraph(mutator) {
-    const current = await ApplyOS.ensureGraph();
-    const next = (await mutator(structuredClone(current))) || current;
-    return writeGraph(next);
+    return withGraphLock(async () => {
+      const stored = await chrome.storage.local.get(GRAPH_KEY);
+      const current = stored[GRAPH_KEY] ? normalizeGraph(stored[GRAPH_KEY]) : emptyGraph();
+      const next = (await mutator(structuredClone(current))) || current;
+      return writeGraph(next);
+    });
   };
 
   ApplyOS.recordGraphAnswer = async function recordGraphAnswer(entry = {}) {
@@ -61,7 +74,9 @@
     await ApplyOS.mutateGraph((graph) => {
       const now = ApplyOS.nowISO?.() || new Date().toISOString();
       const canonical = entry.canonicalField || null;
-      const existing = graph.nodes.find((node) => node.type === "answer" && (
+      const entryScope = entry.scope === "company" ? "company" : "global";
+      const entryDomain = entryScope === "company" ? String(entry.companyDomain || "").toLowerCase().replace(/^www\./, "") : "";
+      const existing = graph.nodes.find((node) => node.type === "answer" && (node.scope || "global") === entryScope && String(node.company_domain || "") === entryDomain && (
         (canonical && node.canonical_field === canonical && normalize(node.answer) === normalize(answer)) ||
         (similarity(node.question, question) >= 0.9 && normalize(node.answer) === normalize(answer))
       ));
@@ -71,6 +86,9 @@
         existing.confidence = Math.max(Number(existing.confidence || 0.5), Number(entry.confidence || 0.7));
         existing.use_count = Number(existing.use_count || 0) + 1;
         existing.platforms = [...new Set([...(existing.platforms || []), entry.platform].filter(Boolean))];
+        if (entry.profileId) existing.profile_id = entry.profileId;
+        existing.scope = entryScope;
+        existing.company_domain = entryDomain;
         existing.updated_at = now;
         saved = existing;
       } else {
@@ -78,6 +96,9 @@
           id: ApplyOS.uid?.("graph") || `graph_${Date.now()}`,
           type: "answer", question, answer, canonical_field: canonical,
           prompt_type: entry.promptType || "free_text_short", source: entry.source || "memory",
+          profile_id: entry.profileId || null,
+          scope: entryScope,
+          company_domain: entryDomain,
           confidence: Number(entry.confidence || 0.7), use_count: 1,
           platforms: entry.platform ? [entry.platform] : [], created_at: now, updated_at: now
         };
@@ -92,6 +113,34 @@
       return graph;
     });
     return saved;
+  };
+
+  ApplyOS.reconcileProfileGraphAnswers = async function reconcileProfileGraphAnswers(profileId, items = []) {
+    const keep = new Set(items.map((item) => `${normalize(item.question)}\u0000${normalize(item.answer)}\u0000${item.scope === "company" ? "company" : "global"}\u0000${String(item.company_domain || "").toLowerCase().replace(/^www\./, "")}`));
+    return ApplyOS.mutateGraph((graph) => {
+      const removed = new Set(graph.nodes
+        .filter((node) => node.type === "answer" && node.source === "profile" && (!node.profile_id || node.profile_id === profileId) && !keep.has(`${normalize(node.question)}\u0000${normalize(node.answer)}\u0000${node.scope || "global"}\u0000${String(node.company_domain || "")}`))
+        .map((node) => node.id));
+      graph.nodes = graph.nodes.filter((node) => !removed.has(node.id));
+      graph.edges = graph.edges.filter((edge) => !removed.has(edge.from));
+      return graph;
+    });
+  };
+
+  ApplyOS.removeProfileGraph = async function removeProfileGraph(profileId) {
+    return ApplyOS.mutateGraph((graph) => {
+      const removed = new Set(graph.nodes.filter((node) => node.profile_id === profileId).map((node) => node.id));
+      graph.nodes = graph.nodes.filter((node) => !removed.has(node.id));
+      graph.edges = graph.edges.filter((edge) => !removed.has(edge.from));
+      return graph;
+    });
+  };
+
+  ApplyOS.removeApplicationGraph = async function removeApplicationGraph(applicationId) {
+    return ApplyOS.mutateGraph((graph) => {
+      graph.edges = graph.edges.filter((edge) => edge.to !== applicationId && edge.from !== applicationId);
+      return graph;
+    });
   };
 
   ApplyOS.recordGraphCorrection = async function recordGraphCorrection(entry = {}) {

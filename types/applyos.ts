@@ -110,7 +110,11 @@ export interface AnswerMemoryItem {
   question: string;
   answer: string;
   normalized_question: string;
-  source: "profile" | "manual" | "application";
+  source: "profile" | "profile_default" | "manual" | "application";
+  scope: "global" | "company";
+  company_domain: string;
+  profile_id: string;
+  memory_group: string;
   use_count: number;
   created_at: string;
   updated_at: string;
@@ -135,6 +139,8 @@ export interface ResumeVersion {
   name: string;
   type: string;
   size: number;
+  sha256: string;
+  dataUrl: string;
   created_at: string;
   is_current: boolean;
 }
@@ -269,9 +275,12 @@ export interface UserProfile {
   resumeText?: string;
   employment?: EmploymentEntry[];
   education?: EducationEntry[];
-  customAnswers?: Array<{ question: string; answer: string }>;
+  customAnswers?: Array<{ question: string; answer: string; scope?: "global" | "company"; company_domain?: string }>;
   resume?: { name: string; type: string; size: number; dataUrl: string } | null;
   updatedAt?: string;
+  profileSchemaVersion?: number;
+  onboardingCompletedAt?: string;
+  currentResumeVersionId?: string;
   [key: string]: unknown;
 }
 

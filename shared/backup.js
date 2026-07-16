@@ -1,7 +1,7 @@
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
   const FORMAT = "applyos-encrypted-backup";
   const PAYLOAD_FORMAT = "applyos-data";
   const BACKUP_VERSION = 1;

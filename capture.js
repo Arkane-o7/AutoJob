@@ -1,9 +1,9 @@
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
   if (window !== window.top) return;
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
 
   const SITE_SELECTORS = {
     linkedin: {
@@ -211,7 +211,7 @@
     let best = { text: "", score: 0 };
     for (const element of document.querySelectorAll("main, article, section, [role='main'], #content, #main")) {
       if (element.closest("nav, header, footer")) continue;
-      const text = clean(element.innerText || element.textContent || "").slice(0, 60000);
+      const text = clean((element instanceof HTMLElement ? element.innerText : "") || element.textContent || "").slice(0, 60000);
       if (text.length < 250) continue;
       const signals = (text.match(/\b(?:responsibilities|requirements|qualifications|experience|skills|about the role|what you will do|who you are|benefits)\b/gi) || []).length;
       const score = Math.min(text.length, 12000) + signals * 1200;

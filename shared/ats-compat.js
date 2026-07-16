@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const ApplyOS = globalThis.ApplyOS = globalThis.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (globalThis.ApplyOS = globalThis.ApplyOS || {});
 
   // Greenhouse selector and interaction patterns are adapted from Job App Filler
   // (BSD-3-Clause), revision 6d6062cb98bbe70c2946d9d43b519a01b19da448.

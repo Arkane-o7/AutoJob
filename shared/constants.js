@@ -1,9 +1,9 @@
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
 
-  ApplyOS.SCHEMA_VERSION = 4;
+  ApplyOS.SCHEMA_VERSION = 5;
   ApplyOS.STORAGE_KEY = "applyos_state";
   ApplyOS.PROFILE_KEY = "profile";
   ApplyOS.APPLICATION_STATUSES = [

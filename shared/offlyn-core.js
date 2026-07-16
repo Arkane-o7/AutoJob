@@ -3,11 +3,11 @@
  * Offlyn Apply is Copyright (c) 2026 Offlyn and licensed under the MIT License.
  * See THIRD_PARTY_NOTICES.md and licenses/OFFLYN_APPLY_MIT.txt.
  */
-(function (root) {
+(function (/** @type {any} */ root) {
   "use strict";
 
-  const ApplyOS = root.ApplyOS = root.ApplyOS || {};
-  const OfflynCore = ApplyOS.OfflynCore = ApplyOS.OfflynCore || {};
+  const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
+  const OfflynCore = /** @type {any} */ (ApplyOS.OfflynCore = ApplyOS.OfflynCore || {});
 
   const PLATFORM_DOMAINS = {
     workday: ["workday.com", "myworkdayjobs.com", "myworkdaysite.com"],
@@ -61,6 +61,7 @@
   const CONSENT = /consent|i agree|agree to|terms of|privacy policy|accept cookies|marketing communication|promotional communication/i;
   const JUNK = /^(?:select\.{0,3}|type to search|search|filter|attach|upload|choose\.{0,3}|browse|button|submit|reset|captcha|close|cancel|clear|next|back|continue|open|add|file|no file chosen)$/i;
 
+  /** @type {Array<[string, string, RegExp, RegExp?]>} */
   const CLASSIFICATION_RULES = [
     ["firstName", "profile_field", /first name|firstname|given name|\bfname\b/i],
     ["lastName", "profile_field", /last name|lastname|surname|family name|\blname\b/i],
