@@ -399,6 +399,15 @@ test("dashboard drawers use inert state instead of aria-hidden focus transitions
   assert.match(source, /drawer\.inert = true/);
 });
 
+test("popup stays within Chrome's surface without exposing a native scrollbar", async () => {
+  const css = await readFile(resolve("popup.css"), "utf8");
+  assert.match(css, /html,body\s*\{[^}]*height:600px;[^}]*overflow:hidden;/s);
+  assert.match(css, /main\s*\{[^}]*height:600px;[^}]*overflow:hidden;/s);
+  assert.match(css, /\.result:empty\s*\{[^}]*display:none;/s);
+  assert.doesNotMatch(css, /overflow-y:auto/);
+  assert.doesNotMatch(css, /min-height:650px/);
+});
+
 test("major ATS compatibility registry recognizes hosted application domains", async () => {
   const { ApplyOS } = await runtime();
   const cases = {

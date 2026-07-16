@@ -51,6 +51,18 @@ async function waitForWorker(context) {
   return context.serviceWorkers()[0] || context.waitForEvent("serviceworker", { timeout: 15000 });
 }
 
+async function waitForExtensionInitialization(worker) {
+  await worker.evaluate(async () => {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const stored = await chrome.storage.local.get(["applyos_state", "profilesIndex", "applyos_graph"]);
+      if (stored.applyos_state && stored.profilesIndex && stored.applyos_graph) return;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    }
+    throw new Error("ApplyOS service worker initialization timed out");
+  });
+}
+
 async function sendFill(worker) {
   return worker.evaluate(() => new Promise((resolveMessage, rejectMessage) => {
     let attempts = 0;
@@ -220,6 +232,7 @@ async function main() {
     });
     const worker = await waitForWorker(context);
     assert.match(worker.url(), /^chrome-extension:\/\//, "unpacked MV3 service worker should run");
+    await waitForExtensionInitialization(worker);
     await worker.evaluate(async (fakeProfile) => {
       await chrome.storage.local.clear();
       await chrome.storage.local.set({
@@ -313,6 +326,33 @@ async function main() {
     console.log("PASS reviewed-report value-free preview and manual GitHub issue handoff");
 
     const extensionId = new URL(worker.url()).host;
+    const popupProbe = await context.newPage();
+    await popupProbe.setViewportSize({ width: 420, height: 600 });
+    await popupProbe.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
+    await popupProbe.waitForTimeout(250);
+    const popupMetrics = await popupProbe.evaluate(() => {
+      document.querySelector("#record-controls")?.classList.remove("hidden");
+      document.querySelector("#agent")?.classList.remove("hidden");
+      const confidence = document.querySelector("#confidence");
+      if (confidence) confidence.textContent = "96% extraction confidence. Review the editable title and company before saving.";
+      const result = document.querySelector("#result");
+      if (result) result.textContent = "Microsoft Careers: found the resume upload field but could not attach the saved file. Attach it manually and review the form. Application tracking needs one extension reload: open chrome://extensions, find ApplyOS, and click Reload.";
+      const main = document.querySelector("main");
+      return {
+        documentHeight: document.documentElement.scrollHeight,
+        bodyHeight: document.body.scrollHeight,
+        mainHeight: main?.clientHeight || 0,
+        mainContentHeight: main?.scrollHeight || 0,
+        mainOverflow: main ? getComputedStyle(main).overflowY : "missing"
+      };
+    });
+    assert.equal(popupMetrics.documentHeight, 600, "popup document should remain at Chrome's 600px maximum");
+    assert.equal(popupMetrics.bodyHeight, 600, "popup body should not create an outer scroll surface");
+    assert.equal(popupMetrics.mainOverflow, "hidden", "popup must not expose a native scrollbar");
+    assert.ok(popupMetrics.mainContentHeight <= popupMetrics.mainHeight, `popup content must fit without clipping (${popupMetrics.mainContentHeight}/${popupMetrics.mainHeight})`);
+    await popupProbe.close();
+    console.log("PASS popup fits the 420x600 Chrome surface without a scroll container");
+
     const helper = await context.newPage();
     const dashboardMessages = [];
     helper.on("console", (message) => { if (["warning", "error"].includes(message.type())) dashboardMessages.push(message.text()); });
