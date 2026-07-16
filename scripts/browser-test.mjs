@@ -136,7 +136,8 @@ async function snapshot(target) {
     microsoftSponsorshipClicks: window.__fixture.microsoftSponsorshipClicks,
     microsoftSponsorshipExpanded: document.querySelector("#microsoft-sponsorship")?.getAttribute("aria-expanded"),
     microsoftStrayOptionClicks: window.__fixture.microsoftStrayOptionClicks,
-    ssn: document.querySelector("#ssn")?.value, gender: document.querySelector("#gender")?.value,
+    ssn: document.querySelector("#ssn")?.value, verificationCode: document.querySelector("#verification-code")?.value,
+    gender: document.querySelector("#gender")?.value,
     consent: document.querySelector("#privacy-consent")?.checked,
     resumeName: document.querySelector("#resume")?.files?.[0]?.name || "",
     resumeWidget: document.querySelector("#resume-widget")?.textContent,
@@ -155,6 +156,7 @@ function assertSafeFill(testCase, response, state) {
   assert.equal(state.country, "United Kingdom", `${testCase.id}: native ATS select`);
   assert.equal(state.email, "existing@example.test", `${testCase.id}: existing value must not be overwritten`);
   assert.equal(state.ssn, "", `${testCase.id}: SSN must remain blank`);
+  assert.equal(state.verificationCode, "", `${testCase.id}: verification code must remain blank`);
   assert.equal(state.gender, "", `${testCase.id}: demographic data must remain blank`);
   assert.equal(state.consent, false, `${testCase.id}: consent must remain unchecked`);
   if (testCase.existingResume) {
@@ -220,7 +222,14 @@ async function main() {
     assert.match(worker.url(), /^chrome-extension:\/\//, "unpacked MV3 service worker should run");
     await worker.evaluate(async (fakeProfile) => {
       await chrome.storage.local.clear();
-      await chrome.storage.local.set({ profile: fakeProfile });
+      await chrome.storage.local.set({
+        profile: { ...fakeProfile, firstName: "Stale", address: "", city: "", state: "", postalCode: "" },
+        profilesIndex: {
+          activeId: "browser_test",
+          profiles: [{ id: "browser_test", name: "Browser test", targetRole: "", color: "#b7ff3c", createdAt: Date.now() }]
+        },
+        profile_browser_test: fakeProfile
+      });
     }, profile);
 
     const page = await context.newPage();

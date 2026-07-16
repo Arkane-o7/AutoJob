@@ -246,6 +246,29 @@
     return normalize(values.filter(Boolean).join(" "));
   }
 
+  function blockedFieldContext(element, context) {
+    // Microsoft Careers deliberately puts autocomplete="one-time-code" on
+    // ordinary contact fields to suppress the browser's native autofill. The
+    // attribute is not the field's meaning, so use the human-facing metadata
+    // for the safety check in that case. A real OTP/verification field still
+    // contains those terms in its label, placeholder, name, or id and remains
+    // blocked.
+    if (normalize(element.getAttribute("autocomplete")) !== "one time code") return context;
+    return normalize([
+      labelText(element),
+      element.getAttribute("aria-label"),
+      element.getAttribute("placeholder"),
+      element.getAttribute("title"),
+      element.name,
+      element.id,
+      isMicrosoftCareers() ? "" : ATSCompat?.fieldContext?.(element)
+    ].filter(Boolean).join(" "));
+  }
+
+  function isBlockedField(element, context) {
+    return BLOCKED_CONTEXT.test(blockedFieldContext(element, context));
+  }
+
   function assistFieldKey(element) {
     const type = String(element.type || element.getAttribute("role") || element.tagName || "control").toLowerCase();
     const group = ["radio", "checkbox"].includes(type) ? element.name || "" : "";
@@ -346,7 +369,7 @@
 
   function missingProfileKey(element, flatProfile) {
     const context = descriptor(element);
-    if (!context || BLOCKED_CONTEXT.test(context) || SENSITIVE_CONTEXT.test(context) || CONSENT_CONTEXT.test(context)) return null;
+    if (!context || isBlockedField(element, context) || SENSITIVE_CONTEXT.test(context) || CONSENT_CONTEXT.test(context)) return null;
     const autocompleteKey = AUTOCOMPLETE_KEYS[normalize(element.getAttribute("autocomplete"))];
     if (autocompleteKey && !hasAnswer(flatProfile[autocompleteKey])) return autocompleteKey;
     const fieldType = String(element.type || element.getAttribute("role") || element.tagName || "text").toLowerCase();
@@ -412,7 +435,7 @@
 
   function bestAnswer(element, flatProfile) {
     const context = descriptor(element);
-    if (!context || BLOCKED_CONTEXT.test(context) || SENSITIVE_CONTEXT.test(context) || CONSENT_CONTEXT.test(context)) return null;
+    if (!context || isBlockedField(element, context) || SENSITIVE_CONTEXT.test(context) || CONSENT_CONTEXT.test(context)) return null;
     const fieldType = String(element.type || element.getAttribute("role") || element.tagName || "text").toLowerCase();
     let classification = OfflynCore?.classifyField(context, fieldType, element.name || element.id || "") || {
       canonicalField: null, promptType: "free_text_short", shouldAutofill: true, shouldPersist: false, confidence: 0.3
@@ -1015,7 +1038,10 @@
   }
 
   async function fillFromStorage() {
-    const { profile, applyos_state: state, applyos_graph: graph } = await chrome.storage.local.get(["profile", "applyos_state", "applyos_graph"]);
+    const stored = await chrome.storage.local.get(["profile", "applyos_state", "applyos_graph"]);
+    const activeProfile = await globalThis.ApplyOS?.getActiveProfile?.();
+    const profile = activeProfile && Object.keys(activeProfile).length ? activeProfile : stored.profile;
+    const { applyos_state: state, applyos_graph: graph } = stored;
     if (!profile) throw new Error("Profile not configured");
     const remembered = (state?.answer_memory || []).map(({ question, answer }) => ({ question, answer }));
     const mergedProfile = {
