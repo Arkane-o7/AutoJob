@@ -222,6 +222,8 @@ test("Offlyn-derived classifier recognizes ATS fields and keeps sensitive answer
   const { ApplyOS } = await runtime();
   assert.equal(ApplyOS.OfflynCore.platformForHost("copart.wd12.myworkdayjobs.com"), "workday");
   assert.equal(ApplyOS.OfflynCore.isJobUrl("https://example.com/careers/engineering/software-intern"), true);
+  const address = ApplyOS.OfflynCore.classifyField("Address", "text", "Contact_Information_q_address");
+  assert.equal(address.canonicalField, "address");
   const authorization = ApplyOS.OfflynCore.classifyField("Are you legally permitted to work in this country?", "select-one", "workAuth");
   assert.equal(authorization.canonicalField, "workAuthorization");
   assert.equal(authorization.shouldAutofill, true);

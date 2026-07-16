@@ -23,7 +23,7 @@
     rule("preferredName", ["preferred name", "nickname", "known as", "chosen name"]),
     rule("email", ["email address", "email", "e mail"]),
     rule("phone", ["phone number", "phone", "mobile number", "mobile", "telephone", "tel"], ["country code", "dial code", "calling code"]),
-    rule("address", ["street address", "address line 1", "address1", "home address", "mailing address", "street"], ["email", "web", "url"]),
+    rule("address", ["street address", "address line 1", "address1", "home address", "mailing address", "street", "address"], ["email", "web", "url", "address line 2", "address2"]),
     rule("address2", ["address line 2", "address2", "apartment", "apt suite", "suite unit"]),
     rule("currentLocation", ["current location", "present location", "where are you currently located", "where are you based"]),
     rule("city", ["city", "town", "locality", "municipality"]),
@@ -196,6 +196,9 @@
     if (ariaLabelledby) {
       ariaLabelledby.split(/\s+/).forEach((id) => parts.push(rootQuery(element, `#${window.CSS?.escape ? CSS.escape(id) : id}`)?.innerText || ""));
     }
+    if (isMicrosoftCareers() && parts.some((part) => String(part || "").trim())) {
+      return parts.filter(Boolean).join(" ");
+    }
     const container = nearbyContainer(element);
     const legend = container?.querySelector(":scope > legend");
     if (legend) parts.push(legend.innerText);
@@ -286,11 +289,36 @@
       && acceptedResumeTypes.some((value) => value.includes("doc"));
   }
 
+  function canonicalLocationPart(value) {
+    const trimmed = String(value || "").trim();
+    const aliases = new Map([
+      ["telengana", "Telangana"]
+    ]);
+    return aliases.get(normalize(trimmed)) || trimmed;
+  }
+
+  function locationParts(value) {
+    const parts = String(value || "").split(",").map((part) => canonicalLocationPart(part)).filter(Boolean);
+    if (parts.length < 3) return { city: "", state: "", country: "" };
+    return {
+      city: parts.slice(0, -2).join(", "),
+      state: parts.at(-2) || "",
+      country: parts.at(-1) || ""
+    };
+  }
+
   function flattenProfile(profile) {
     const employment = profile.employment?.[0] || {};
     const education = profile.education?.[0] || {};
+    const parsedLocation = locationParts(profile.currentLocation);
     return {
       ...profile,
+      address: profile.address || profile.streetAddress || "",
+      address2: profile.address2 || profile.addressLine2 || "",
+      city: profile.city || parsedLocation.city,
+      state: canonicalLocationPart(profile.state || parsedLocation.state),
+      postalCode: profile.postalCode || profile.zipCode || profile.zip || "",
+      country: profile.country || parsedLocation.country,
       currentLocation: profile.currentLocation || [profile.city, profile.state, profile.country].filter(Boolean).join(", "),
       currentCompany: employment.company || profile.currentCompany,
       currentTitle: employment.title || profile.currentTitle,
@@ -314,6 +342,30 @@
       priorCompanyDetails: normalize(profile.previouslyWorkedForCompany) === "no" ? "" : profile.priorCompanyDetails,
       employeeConnectionDetails: normalize(profile.knowsEmployeeAtCompany) === "no" ? "" : profile.employeeConnectionDetails
     };
+  }
+
+  function missingProfileKey(element, flatProfile) {
+    const context = descriptor(element);
+    if (!context || BLOCKED_CONTEXT.test(context) || SENSITIVE_CONTEXT.test(context) || CONSENT_CONTEXT.test(context)) return null;
+    const autocompleteKey = AUTOCOMPLETE_KEYS[normalize(element.getAttribute("autocomplete"))];
+    if (autocompleteKey && !hasAnswer(flatProfile[autocompleteKey])) return autocompleteKey;
+    const fieldType = String(element.type || element.getAttribute("role") || element.tagName || "text").toLowerCase();
+    const classification = OfflynCore?.classifyField(context, fieldType, element.name || element.id || "");
+    if (classification?.shouldAutofill && classification.canonicalField && !hasAnswer(flatProfile[classification.canonicalField])) {
+      return classification.canonicalField;
+    }
+    let best = null;
+    for (const entry of RULES) {
+      if (hasAnswer(flatProfile[entry.key]) || entry.excludes.some((term) => context.includes(normalize(term)))) continue;
+      const score = Math.max(...entry.patterns.map((pattern) => scorePhrase(context, pattern)));
+      if (score && (!best || score > best.score)) best = { key: entry.key, score };
+    }
+    return best?.score >= 58 ? best.key : null;
+  }
+
+  function profileFieldLabel(key) {
+    return ({ address: "street address", address2: "address line 2", city: "city", state: "state / province", postalCode: "postal code", country: "country" })[key]
+      || String(key || "profile details").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
   }
 
   function datePart(value, part) {
@@ -362,10 +414,22 @@
     const context = descriptor(element);
     if (!context || BLOCKED_CONTEXT.test(context) || SENSITIVE_CONTEXT.test(context) || CONSENT_CONTEXT.test(context)) return null;
     const fieldType = String(element.type || element.getAttribute("role") || element.tagName || "text").toLowerCase();
-    const classification = OfflynCore?.classifyField(context, fieldType, element.name || element.id || "") || {
+    let classification = OfflynCore?.classifyField(context, fieldType, element.name || element.id || "") || {
       canonicalField: null, promptType: "free_text_short", shouldAutofill: true, shouldPersist: false, confidence: 0.3
     };
     if (!classification.shouldAutofill) return null;
+
+    if (isMicrosoftCareers()) {
+      const exactKey = /legally authorized to work/.test(context)
+        ? "workAuthorization"
+        : /require.{0,80}sponsorship|sponsorship.{0,80}(?:work visa|work permit|immigration)/.test(context)
+          ? "visaSponsorship"
+          : null;
+      if (exactKey && hasAnswer(flatProfile[exactKey])) {
+        classification = { ...classification, canonicalField: exactKey, promptType: "enum_auth", shouldAutofill: true, shouldPersist: true, confidence: 1 };
+        return prepareAnswer(element, { key: exactKey, value: flatProfile[exactKey], score: 220, context }, classification);
+      }
+    }
 
     const learned = OfflynCore?.bestLearnedAnswer(context, flatProfile._learnedAnswers || [], {
       site: location.hostname,
@@ -804,11 +868,11 @@
   document.addEventListener("change", queueCorrectionLearning, true);
 
   async function fillPage(profile, { quiet = false } = {}) {
-    if (fillInProgress) return { scanned: 0, filled: 0, attached: 0, resumeFields: 0, resumeStatus: "not-found", skipped: 0, unmatchedRequired: 0, fields: [], site: detectSite() };
+    if (fillInProgress) return { scanned: 0, filled: 0, attached: 0, resumeFields: 0, resumeStatus: "not-found", skipped: 0, unmatchedRequired: 0, missingProfileFields: [], fields: [], site: detectSite() };
     fillInProgress = true;
     if (!quiet) assistFieldLedger.clear();
     const flatProfile = flattenProfile(profile);
-    const report = { scanned: 0, filled: 0, attached: 0, resumeFields: 0, resumeStatus: "not-found", skipped: 0, unmatchedRequired: 0, fields: [], site: detectSite() };
+    const report = { scanned: 0, filled: 0, attached: 0, resumeFields: 0, resumeStatus: "not-found", skipped: 0, unmatchedRequired: 0, missingProfileFields: [], fields: [], site: detectSite() };
     const elements = queryAllDeep(CONTROL_SELECTOR);
     const processedGroups = new Set();
 
@@ -866,7 +930,11 @@
         }
         const answer = bestAnswer(element, flatProfile);
         if (!answer) {
-          if (element.required || element.getAttribute("aria-required") === "true") report.unmatchedRequired += 1;
+          if (element.required || element.getAttribute("aria-required") === "true") {
+            report.unmatchedRequired += 1;
+            const missingKey = missingProfileKey(element, flatProfile);
+            if (missingKey) report.missingProfileFields.push(profileFieldLabel(missingKey));
+          }
           settleAssistField(element, "manual");
           continue;
         }
@@ -887,6 +955,8 @@
     } finally {
       fillInProgress = false;
     }
+
+    report.missingProfileFields = [...new Set(report.missingProfileFields)];
 
     window.setTimeout(() => queryAllDeep(".applykit-filled").forEach((element) => element.classList.remove("applykit-filled")), 3500);
     if (!quiet) showResultToast(report);
@@ -1023,13 +1093,16 @@
     const toast = document.createElement("div");
     toast.className = "applykit-toast";
     toast.setAttribute("role", "status");
+    const missingProfile = report.missingProfileFields?.length
+      ? ` Add ${report.missingProfileFields.join(", ")} in Profile & answer memory.`
+      : "";
     toast.textContent = report.resumeStatus === "missing"
       ? "ApplyOS found a resume upload field, but no resume file is saved in your profile. Add one in Profile & answer memory."
       : report.resumeStatus === "failed"
         ? "ApplyOS found the resume upload field but could not attach the saved file. Please attach it manually and review the form."
         : report.filled || report.attached
-      ? `ApplyOS filled ${report.filled} field${report.filled === 1 ? "" : "s"}${report.attached ? ` + ${report.attached} resume` : ""}. Assist mode is watching the next steps.`
-      : `ApplyOS found no confident matches. ${report.unmatchedRequired || 0} required field${report.unmatchedRequired === 1 ? "" : "s"} may need review.`;
+      ? `ApplyOS filled ${report.filled} field${report.filled === 1 ? "" : "s"}${report.attached ? ` + ${report.attached} resume` : ""}. Review the remaining fields.${missingProfile}`
+      : `ApplyOS found no confident matches. ${report.unmatchedRequired || 0} required field${report.unmatchedRequired === 1 ? "" : "s"} may need review.${missingProfile}`;
     document.documentElement.append(toast);
     window.setTimeout(() => toast.remove(), 5500);
   }

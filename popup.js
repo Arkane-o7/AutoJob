@@ -204,14 +204,15 @@ ui.fill.addEventListener("click", async () => {
     const tracking = application ? await startApplicationSession() : { ok: true, skipped: true };
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYKIT_FILL" });
     if (!response?.ok) throw new Error(response?.error || "This page could not be filled.");
-    const { filled, attached, scanned, unmatchedRequired = 0, resumeStatus = "not-found", site = "This form" } = response.report;
+    const { filled, attached, scanned, unmatchedRequired = 0, missingProfileFields = [], resumeStatus = "not-found", site = "This form" } = response.report;
+    const missingProfile = missingProfileFields.length ? ` Add ${missingProfileFields.join(", ")} in Profile & answer memory.` : "";
     const resultMessage = resumeStatus === "missing"
       ? `${site}: found the resume upload field, but no resume is saved. Add one in Profile & answer memory.`
       : resumeStatus === "failed"
         ? `${site}: found the resume upload field but could not attach the saved file. Attach it manually and review the form.`
         : filled || attached
-      ? `${site}: filled ${filled} field${filled === 1 ? "" : "s"}${attached ? ` and attached ${attached} resume` : ""}. Review every answer before submitting.`
-      : `No confident matches among ${scanned} visible fields. ${unmatchedRequired} required field${unmatchedRequired === 1 ? "" : "s"} still need review.`;
+      ? `${site}: filled ${filled} field${filled === 1 ? "" : "s"}${attached ? ` and attached ${attached} resume` : ""}. Review every answer before submitting.${missingProfile}`
+      : `No confident matches among ${scanned} visible fields. ${unmatchedRequired} required field${unmatchedRequired === 1 ? "" : "s"} still need review.${missingProfile}`;
     say(tracking.ok ? resultMessage : trackingReloadNotice(resultMessage), tracking.ok && (filled || attached) ? "success" : resumeStatus === "failed" || resumeStatus === "missing" || !tracking.ok ? "error" : "");
   } catch (error) { say(error.message, "error"); }
   finally { ui.fill.disabled = false; }

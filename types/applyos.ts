@@ -29,6 +29,7 @@ export type ATSPlatform =
   | "recruitee"
   | "teamtailor"
   | "personio"
+  | "microsoft"
   | "workday"
   | "generic";
 
@@ -254,6 +255,13 @@ export interface UserProfile {
   fullName?: string;
   email?: string;
   phone?: string;
+  phoneCountryCode?: string;
+  address?: string;
+  address2?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+  country?: string;
   currentLocation?: string;
   linkedin?: string;
   github?: string;

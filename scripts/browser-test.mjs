@@ -14,7 +14,8 @@ const requiredBrowser = process.env.APPLYOS_REQUIRE_BROWSER === "1";
 const resumeName = "ada-lovelace-test-resume.pdf";
 const profile = Object.freeze({
   firstName: "Ada", lastName: "Lovelace", fullName: "Ada Lovelace", email: "ada@example.test",
-  phone: "+44 20 7946 0958", currentLocation: "London, United Kingdom", city: "London",
+  phone: "+44 20 7946 0958", currentLocation: "London, Greater London, United Kingdom",
+  address: "12 Analytical Engine Way", address2: "Flat 3", postalCode: "SW1A 1AA",
   country: "United Kingdom", workAuthorization: "Yes", desiredStartDate: "2026-08-01",
   visaSponsorship: "No",
   resume: {
@@ -126,6 +127,11 @@ async function snapshot(target) {
     startMonth: document.querySelector("#start-month")?.value, startDay: document.querySelector("#start-day")?.value,
     startYear: document.querySelector("#start-year")?.value,
     microsoftAuth: document.querySelector("#microsoft-auth")?.value,
+    microsoftAddress: document.querySelector("#Contact_Information_q_address")?.value,
+    microsoftAddress2: document.querySelector("#Contact_Information_q_addressLine2")?.value,
+    microsoftCity: document.querySelector("#Contact_Information_q_city")?.value,
+    microsoftPostalCode: document.querySelector("#Contact_Information_q_zip")?.value,
+    microsoftState: document.querySelector("#microsoft-state")?.value,
     microsoftBacklog: document.querySelector("input[name='microsoft-backlog']:checked")?.value || "",
     microsoftSponsorshipClicks: window.__fixture.microsoftSponsorshipClicks,
     microsoftSponsorshipExpanded: document.querySelector("#microsoft-sponsorship")?.getAttribute("aria-expanded"),
@@ -169,6 +175,14 @@ function assertSafeFill(testCase, response, state) {
     for (const id of ["start-month", "start-day", "start-year"]) assert.ok(state.events[`${id}:change`] >= 1, `workday: ${id} change event`);
   }
   if (testCase.id === "microsoft") {
+    assert.equal(state.microsoftAddress, "12 Analytical Engine Way", "microsoft: street address from profile");
+    assert.equal(state.microsoftAddress2, "Flat 3", "microsoft: address line 2 from profile");
+    assert.equal(state.microsoftCity, "London", "microsoft: city derived from the current-location label");
+    assert.equal(state.microsoftPostalCode, "SW1A 1AA", "microsoft: postal code from profile");
+    assert.equal(state.microsoftState, "Greater London", "microsoft: state derived from the current-location label and selected in its own listbox");
+    for (const id of ["Contact_Information_q_address", "Contact_Information_q_addressLine2", "Contact_Information_q_city", "Contact_Information_q_zip", "microsoft-state"]) {
+      assert.ok(state.events[`${id}:change`] >= 1, `microsoft: ${id} change event should fire`);
+    }
     assert.equal(state.microsoftAuth, "Yes", "microsoft: Fluent UI combobox option should be selected through its controlled listbox");
     assert.equal(state.microsoftBacklog, "No", "microsoft: readonly-styled radio group remains interactable");
     assert.ok(state.events["microsoft-auth:change"] >= 1, "microsoft: combobox change event should fire");
@@ -232,7 +246,8 @@ async function main() {
       const response = await sendFill(worker);
       assert.equal(response?.ok, true, `${testCase.id}: response failed (${response?.error || "unknown error"})`);
       if (!testCase.existingResume) await target.waitForFunction((name) => document.querySelector("#resume")?.files?.[0]?.name === name, resumeName);
-      assertSafeFill(testCase, response, await snapshot(target));
+      const firstState = await snapshot(target);
+      assertSafeFill(testCase, response, firstState);
       assert.equal(page.url(), url, `${testCase.id}: autofill must not navigate`);
 
       const secondResponse = await sendFill(worker);

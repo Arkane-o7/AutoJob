@@ -71,7 +71,7 @@
     ["phone", "profile_field", /\bphone\b|\bmobile\b|\bcell\b|\btelephone\b|\btel\b/i, /country|code|extension/i],
     ["fullName", "profile_field", /full name|your name|applicant name|candidate name|legal name/i, /company|school|university|first|last|email/i],
     ["address2", "profile_field", /address line 2|address2|apartment|\bapt\b|suite|unit/i],
-    ["address", "profile_field", /street address|address line 1|address1|mailing address/i],
+    ["address", "profile_field", /street address|address line 1|address1|mailing address|\baddress\b/i, /e-?mail|web|url|ip address/i],
     ["currentLocation", "profile_field", /current location|present location|where are you (?:currently )?(?:located|based)/i],
     ["city", "profile_field", /\bcity\b|\btown\b|locality|municipality/i],
     ["state", "enum_state", /\bstate\b|province|region/i, /statement|status|visa/i],
