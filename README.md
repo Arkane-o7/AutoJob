@@ -4,6 +4,19 @@ ApplyOS is a private, review-first Chrome extension that combines job capture, a
 
 ApplyOS retains its interface and legacy-profile compatibility while incorporating licensed implementation work adapted from [Offlyn Apply](https://github.com/offlyn-ai/offlyn-apply) and [Job App Filler](https://github.com/berellevy/job_app_filler). See `THIRD_PARTY_NOTICES.md` and `licenses/` for attribution and license terms.
 
+## Product and data model
+
+- [Product feature map](docs/product-feature-map.md) explains the candidate CRM,
+  contacts/networking, interviews, Smart Tools, current safety boundaries,
+  planned online account, and exact licensed-source attribution.
+- [Data and privacy boundaries](docs/data-and-privacy-boundaries.md) separates
+  the current local private workspace from planned opt-in cloud sync and a
+  future, separately approved recruiter-facing candidate publication.
+
+The current release remains local-only. An online account, LinkedIn sign-in,
+cloud sync, recruiter search, paid cloud AI, and billing are planned concepts,
+not implemented features.
+
 ## Existing architecture and the upgrade
 
 The original extension was a Manifest V3, plain-JavaScript extension with three surfaces:
@@ -114,6 +127,30 @@ Open **Profile & Settings → Encrypted backup**. Choose a password of at least 
 ## Answer memory
 
 Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized authoritatively into answer memory and the local knowledge graph, so deleting an answer forgets it. Employer-history and relationship answers can be restricted to one company domain. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
+
+## Future AI and billing (TODO — not implemented)
+
+- [ ] Add a provider-agnostic server AI gateway; keep provider secrets and model
+      routing out of the extension.
+- [ ] Require explicit cloud-AI opt-in and define prompt redaction, retention,
+      deletion, and no-training commitments before transmitting profile or
+      resume data.
+- [ ] Keep current offline Smart Tools and optional local Ollama available
+      without a paid plan.
+- [ ] Add server-owned plans, entitlements, feature flags, quotas, and an
+      idempotent usage and cost ledger before any metered AI release.
+- [ ] Integrate Stripe Checkout, Customer Portal, and signed webhook processing
+      server-side; never put Stripe secret keys or price authority in the
+      extension.
+- [ ] Enforce subscription state and usage limits server-side, including webhook
+      retries, duplicate events, refunds, cancellations, grace periods, and
+      abuse controls.
+- [ ] Add billing and AI observability and tests without logging prompts,
+      resumes, payment details, authentication tokens, or other sensitive data.
+
+Pricing, providers, and launch timing remain undecided. No cloud AI, paid plan,
+entitlement, usage metering, payment processing, or Stripe integration exists in
+the current release.
 
 ## Development checks
 
