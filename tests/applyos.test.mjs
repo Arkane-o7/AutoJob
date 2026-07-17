@@ -434,7 +434,9 @@ test("onboarding is first-run-only and the options page is the sole full profile
   ]);
   assert.doesNotMatch(options, /Run setup again/);
   assert.doesNotMatch(popup, /Profile & answer memory/);
-  assert.match(onboarding, /isOnboardingComplete/);
+  assert.match(onboarding, /TOUR_VERSION = 1/);
+  assert.match(onboarding, /tour\.completedAt/);
+  assert.match(onboarding, /location\.replace\(chrome\.runtime\.getURL\("options\.html"\)\)/);
   assert.match(popupScript, /Edit profile/);
 });
 

@@ -18,7 +18,16 @@ const steps = [...document.querySelectorAll("#steps li")];
 const back = document.querySelector("#back");
 const next = document.querySelector("#next");
 const progress = document.querySelector("#progress");
+const TOUR_KEY = "applyos_tour_progress";
+const TOUR_VERSION = 1;
 let current = 0;
+
+async function saveTourProgress(patch = {}) {
+  const stored = await chrome.storage.local.get(TOUR_KEY);
+  const value = { version: TOUR_VERSION, lastStep: current, completedAt: null, dismissedAt: null, ...(stored[TOUR_KEY] || {}), ...patch };
+  await chrome.storage.local.set({ [TOUR_KEY]: value });
+  return value;
+}
 
 function render() {
   panels.forEach((panel, index) => panel.classList.toggle("active", index === current));
@@ -46,20 +55,27 @@ async function saveProfile(complete = false) {
 next.addEventListener("click", async () => {
   if (!validatePanel()) return;
   await saveProfile(current === panels.length - 2);
-  current = Math.min(panels.length - 1, current + 1); render();
+  current = Math.min(panels.length - 1, current + 1);
+  await saveTourProgress({ lastStep: current, ...(current === panels.length - 1 ? { completedAt: new Date().toISOString() } : {}) });
+  render();
 });
-back.addEventListener("click", () => { current = Math.max(0, current - 1); render(); });
+back.addEventListener("click", async () => { current = Math.max(0, current - 1); await saveTourProgress({ lastStep: current }); render(); });
 
 document.querySelector("#open-dashboard").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
 document.querySelector("#open-profile").addEventListener("click", () => chrome.runtime.openOptionsPage());
 document.querySelector("#open-ai-settings").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("options.html#local-ai") }));
+document.querySelector("#open-account").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("account.html") }));
 
 (async function initialize() {
-  const profile = await ApplyOS.getActiveProfile();
-  if (ApplyOS.isOnboardingComplete(profile) && new URLSearchParams(location.search).get("quick") !== "1") {
+  const [profile, stored] = await Promise.all([ApplyOS.getActiveProfile(), chrome.storage.local.get(TOUR_KEY)]);
+  const tour = stored[TOUR_KEY] || {};
+  const params = new URLSearchParams(location.search);
+  const forced = params.get("quick") === "1" || params.get("tour") === "1";
+  if (tour.version === TOUR_VERSION && tour.completedAt && !forced) {
     location.replace(chrome.runtime.getURL("options.html"));
     return;
   }
   for (const element of form.elements) if (element.name && Object.hasOwn(profile, element.name)) element.value = profile[element.name] ?? "";
+  current = forced && params.get("start") === "1" ? 0 : Math.min(Math.max(0, Number(tour.lastStep || 0)), panels.length - 1);
   render();
 })().catch(console.error);

@@ -7,15 +7,23 @@ ApplyOS retains its interface and legacy-profile compatibility while incorporati
 ## Product and data model
 
 - [Product feature map](docs/product-feature-map.md) explains the candidate CRM,
-  contacts/networking, interviews, Smart Tools, current safety boundaries,
-  planned online account, and exact licensed-source attribution.
+  contacts/networking, interviews, Smart Tools, account/sync controls, and
+  exact licensed-source attribution.
 - [Data and privacy boundaries](docs/data-and-privacy-boundaries.md) separates
-  the current local private workspace from planned opt-in cloud sync and a
-  future, separately approved recruiter-facing candidate publication.
+  the local private workspace from opt-in private sync and a separately
+  approved recruiter-facing candidate publication.
+- [Cloud deployment guide](docs/cloud-deployment.md) covers Supabase, LinkedIn
+  OIDC, extension redirect URLs, Edge Functions, database checks, privacy
+  disclosures, and the production release gate.
 
-The current release remains local-only. An online account, LinkedIn sign-in,
-cloud sync, recruiter search, paid cloud AI, and billing are planned concepts,
-not implemented features.
+Local mode remains the default and requires no account. Version 0.10 adds an
+optional LinkedIn-authenticated Supabase account, owner-only snapshot sync,
+separate resume-file consent, private support reports, cloud export/deletion,
+and a candidate publication that is private until the user deliberately marks
+that reviewed card eligible for a future recruiter product. Production cloud features remain
+disabled until a deployer supplies a project URL, publishable key, LinkedIn
+application, policies, and hosted legal disclosures. Recruiter accounts/search,
+cloud AI, paid plans, and billing are not implemented.
 
 ## Existing architecture and the upgrade
 
@@ -43,8 +51,10 @@ The new modules are:
 - `shared/diagnostics.js`: privacy-safe broken-field snapshots containing only reviewed labels and allowlisted DOM structure—never entered values or file contents.
 - `shared/submission.js`: conservative confirmation scoring that requires both recent user submit intent and strong confirmation-page evidence.
 - `shared/backup.js`: password-derived AES-256-GCM export/import for the complete local workspace, decrypted summary review, safe version checks, and a one-step local restore checkpoint.
-- `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, and localhost Ollama requests. It has no email credentials or send capability.
-- `onboarding.*`: first-run quick setup that patches the canonical profile without replacing fields owned by Profile & Settings.
+- `shared/cloud.js`: optional LinkedIn OIDC/PKCE account sessions isolated in the service-worker origin, durable snapshot retries, version conflicts, owner-only cloud restore with one-step undo, consent-gated resume Storage uploads, candidate publication, support submission, export, sign-out, and deletion.
+- `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, cloud/account message boundaries, and localhost Ollama requests. It has no email credentials or send capability.
+- `onboarding.*`: a resumable, versioned first-run feature tour that patches the canonical profile without replacing fields owned by Profile & Settings.
+- `account.*`: account, sync, resume consent, candidate publication, export/deletion, and tutorial replay controls with local mode as the default.
 - `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, review-only compose handoffs, match guidance, profile switching, and the local-AI studio.
 - `types/applyos.ts`: TypeScript contracts for captured jobs, applications, contacts, interviews, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
 
@@ -56,7 +66,7 @@ The new modules are:
 4. Refresh any job pages that were already open so the updated content scripts load.
 5. Pin **ApplyOS** and choose **Finish setup** once. After completion the same button becomes **Edit profile** and opens the canonical **Profile & Settings** editor.
 
-All application, contact, interview, profile, answer, and resume data stays in `chrome.storage.local`. ApplyOS has no backend or analytics. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
+By default, application, contact, interview, profile, answer, and resume data stays in `chrome.storage.local`; ApplyOS has no analytics. If a configured user signs in and explicitly enables sync, a private account copy is transmitted over HTTPS. Resume bytes require a second opt-in and use a private per-user Storage path. Candidate publication requires another separate action. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
 
 ## Test the complete workflow
 
@@ -94,7 +104,25 @@ Detection never changes an application status on its own. It requires a recent t
 
 ### Report a site problem
 
-Choose **Report a site problem** in the popup to open an on-page review. No fields are selected by default. Select only the problematic controls and inspect the generated JSON. You can copy or download it locally, or open a prefilled public GitHub issue that you must review and submit manually. Nothing is uploaded automatically. Reports include bounded labels and allowlisted DOM attributes only; entered answers, resume filenames/data, email addresses, phone numbers, page query parameters, and hidden fields are excluded.
+Choose **Report a site problem** in the popup to open an on-page review. No fields are selected by default. Describe the problem, select only the problematic controls, and inspect the generated JSON. Signed-in users can explicitly submit that reviewed payload to a private, authenticated, validating, and rate-limited support endpoint and receive a private reference code. Signed-out/unconfigured users can copy or download it locally. Reports include bounded labels and allowlisted DOM attributes only; entered answers, resume filenames/data, email addresses, phone numbers, page query parameters, and hidden fields are excluded. The extension never reveals or links to the source repository.
+
+### Optional account and sync
+
+Open **Account & sync** from the popup or dashboard. The product works locally
+without an account. In a configured production build, **Continue with LinkedIn**
+opens a user-initiated Chrome identity flow. LinkedIn supplies basic sign-in
+identity only; ApplyOS does not import connections, messages, posts, contacts,
+or employment history, and sign-in is not identity verification.
+
+Private workspace sync remains off until the user accepts the in-product
+disclosure. Resume-file upload is a separate checkbox. Writes use a durable
+local retry record, idempotent change ID, and server version; a version mismatch
+pauses with a conflict instead of overwriting either copy. **Use cloud copy**
+and **Replace cloud with local** both require typed confirmation; a cloud restore
+creates a one-step local undo checkpoint.
+Candidate publication has a separate private/future-recruiter-eligible switch
+and never exposes the private application workspace. Recruiter accounts and
+search are not yet launched.
 
 ### 4. View the dashboard
 
@@ -164,9 +192,9 @@ npm run test:browser:dist
 npm run verify
 ```
 
-`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, encrypted backup round trips and rollback, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, and review-only draft generation.
+`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, encrypted backup round trips and rollback, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, review-only draft generation, cloud-origin validation, token isolation, and static RLS/publication contracts.
 
-`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed diagnostics and post-submit confirmation, contact creation, compose handoffs, interview preparation, and thank-you drafting. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
+`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed private diagnostics and post-submit confirmation, popup sizing, account privacy defaults, contact creation, compose handoffs, interview preparation, and thank-you drafting. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
 
 ## Safety boundaries and limitations
 
@@ -175,4 +203,4 @@ npm run verify
 - Closed shadow roots and inaccessible cross-origin frames cannot be inspected.
 - Employer-specific custom widgets may still need manual entry; low-confidence job metadata is explicitly surfaced for review.
 - PDF/DOCX binary contents are not parsed. Matching and AI use pasted resume text plus the structured profile; saved files remain local for attachment.
-- Encrypted backups cannot be recovered without their password. Cloud accounts and cross-device sync are not included; those require a separately designed authentication, encryption, conflict-resolution, export, and deletion service.
+- Encrypted backups cannot be recovered without their password. Cloud snapshot sync is local-first and version-gated; it is not end-to-end encrypted, collaborative real-time sync, or an automatic merge engine. Production use requires deploying and validating the supplied backend, provider configuration, privacy policy, retention process, and deletion flow.

@@ -11,8 +11,9 @@
       <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
       <nav class="section-tabs" aria-label="Dashboard sections"><button class="active" data-section="applications" type="button">Applications</button><button data-section="contacts" type="button">Contacts</button></nav>
       <div class="header-actions">
-        <span class="privacy">LOCAL DATA</span>
+        <span class="privacy">LOCAL-FIRST</span>
         <select id="active-profile" aria-label="Active profile"></select>
+        <button id="account" class="outline" type="button">Account & sync</button>
         <button id="profile" class="outline" type="button">Profile & answers</button>
       </div>
     </header>
@@ -111,7 +112,7 @@
         <input id="contact-id" type="hidden">
         <label class="hero-field"><span>NAME</span><input id="contact-name" required placeholder="Recruiter or contact name"></label>
         <label class="hero-field company-field"><span>TITLE / COMPANY</span><input id="contact-title" placeholder="Recruiter, Engineering Manager…"></label>
-        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Application</span><select id="contact-application"><option value="">General networking</option></select></label><label><span>Last contacted</span><input id="contact-last" type="date"></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
+        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Applications (optional)</span><select id="contact-application" multiple size="4" aria-describedby="contact-application-help"></select><small id="contact-application-help">Choose every application this person is connected to. Leave all unselected for general networking.</small></label><label><span>Last contacted</span><input id="contact-last" type="date"></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
         <label><span>Notes</span><textarea id="contact-notes" placeholder="How you met, context, promises, next conversation…"></textarea></label>
         <div class="detail-actions"><button class="primary" type="submit">Save contact</button><button id="delete-contact" class="outline danger hidden" type="button">Delete</button><a id="open-contact-linkedin" class="outline link-button hidden" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>
       </form>

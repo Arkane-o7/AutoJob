@@ -200,8 +200,39 @@ export interface ApplyOSState {
   settings: {
     final_follow_up_enabled: boolean;
     notification_enabled: boolean;
+    cloud_sync_enabled?: boolean;
+    resume_sync_enabled?: boolean;
   };
   migrated_at: string;
+}
+
+export interface CloudConfig {
+  projectUrl: string;
+  publishableKey: string;
+  provider: "linkedin_oidc";
+  supportFunction: string;
+  deleteFunction: string;
+}
+
+export interface CloudSyncMeta {
+  enabled: boolean;
+  status: "off" | "pending" | "syncing" | "synced" | "conflict" | "error";
+  serverVersion: number;
+  lastSyncedAt: string | null;
+  conflict: { serverVersion: number; detectedAt: string } | null;
+}
+
+export interface CandidatePublication {
+  visibility: "private" | "recruiters";
+  headline: string;
+  target_roles: string[];
+  location: string;
+  skills: string[];
+  experience_summary: string;
+  portfolio_url: string;
+  linkedin_url: string;
+  published_at: string | null;
+  updated_at: string;
 }
 
 export interface BackupSummary {

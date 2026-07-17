@@ -8,7 +8,8 @@ const files = [
   "manifest.json", "background.js", "capture.js", "content.js", "content.css",
   "popup.html", "popup.css", "popup.js", "options.html", "options.css", "options.js",
   "dashboard.html", "dashboard.css", "dashboard.js", "THIRD_PARTY_NOTICES.md"
-  , "onboarding.html", "onboarding.css", "onboarding.js"
+  , "onboarding.html", "onboarding.css", "onboarding.js",
+  "account.html", "account.css", "account.js"
 ];
 
 await rm(out, { recursive: true, force: true });

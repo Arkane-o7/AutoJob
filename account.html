@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>ApplyOS — Account & Sync</title>
+  <link rel="stylesheet" href="account.css">
+</head>
+<body>
+  <header class="masthead"><a class="brand" href="dashboard.html"><span>A.</span> APPLYOS</a><nav><a href="dashboard.html">Dashboard ↗</a><a href="options.html">Profile & Settings ↗</a></nav></header>
+  <main>
+    <aside>
+      <p class="eyebrow">ACCOUNT & SYNC</p>
+      <h1>Your workspace,<br><em>under your control.</em></h1>
+      <p>LinkedIn is used only to sign in. ApplyOS never imports your connections, messages, employment history, or contacts.</p>
+      <div class="privacy-seal"><b>3 DATA ZONES</b><span>Local private</span><span>Cloud private, opt-in</span><span>Recruiter card, separately published</span></div>
+    </aside>
+
+    <div class="stack">
+      <section class="account-card hero-card">
+        <div><p class="eyebrow">IDENTITY</p><h2 id="identity-title">Continue locally</h2><p id="identity-copy">Cloud is optional. Autofill, CRM, Smart Tools, and encrypted backup continue to work without an account.</p></div>
+        <div class="identity-actions"><button id="sign-in">Continue with LinkedIn <span>↗</span></button><button id="sign-out" class="outline hidden">Sign out</button></div>
+      </section>
+
+      <details id="developer-config" class="config-card">
+        <summary><span>DEPLOYMENT CONFIGURATION</span><b>Production builds only</b><i>+</i></summary>
+        <div class="config-body">
+          <p>The Supabase project URL and publishable key are safe client configuration. Provider secrets and service-role keys must remain server-side.</p>
+          <label><span>Supabase project URL</span><input id="project-url" placeholder="https://your-project.supabase.co"></label>
+          <label><span>Publishable key</span><input id="publishable-key" autocomplete="off" placeholder="sb_publishable_…"></label>
+          <button id="save-config">Save client configuration</button>
+        </div>
+      </details>
+
+      <section class="account-card" id="sync-section">
+        <div class="section-head"><div><p class="eyebrow">PRIVATE CLOUD WORKSPACE</p><h2>Optional cross-device sync</h2></div><span id="sync-state" class="state-pill">OFF</span></div>
+        <div class="notice"><b>Before enabling</b><p>Applications, profiles, answers, contacts, interviews, reminders, and settings will be transmitted over HTTPS and stored in your private account. They are not recruiter-visible.</p></div>
+        <label class="choice"><input id="sync-consent" type="checkbox"><span><b>I understand and want private cloud sync</b><small>You can turn this off without deleting local data.</small></span></label>
+        <label class="choice"><input id="resume-consent" type="checkbox"><span><b>Include saved resume files</b><small>Optional. Resume metadata can sync without uploading file contents.</small></span></label>
+        <div class="button-row"><button id="save-sync">Save sync choice</button><button id="sync-now" class="outline">Sync now</button><button id="restore-cloud" class="outline">Use cloud copy</button><button id="use-local" class="outline">Replace cloud with local</button><button id="undo-cloud" class="outline">Undo cloud restore</button></div>
+        <p id="sync-detail" class="status-line">No cloud sync has run.</p>
+      </section>
+
+      <section class="account-card" id="publication-section">
+        <div class="section-head"><div><p class="eyebrow">FUTURE RECRUITER DISCOVERY</p><h2>Candidate publication</h2></div><span class="state-pill private">PRIVATE</span></div>
+        <p class="section-copy">This is a separate card. Recruiters can never see applications, contacts, notes, interviews, answer memory, or the private profile behind it.</p>
+        <div class="grid">
+          <label class="wide"><span>Headline</span><input id="pub-headline" maxlength="160" placeholder="Backend engineer focused on reliable data systems"></label>
+          <label><span>Target roles</span><input id="pub-roles" placeholder="Backend Engineer, Platform Engineer"></label>
+          <label><span>Coarse location</span><input id="pub-location" placeholder="Hyderabad, India"></label>
+          <label class="wide"><span>Skills</span><input id="pub-skills" placeholder="Python, PostgreSQL, AWS"></label>
+          <label class="wide"><span>Experience summary</span><textarea id="pub-summary" rows="5" maxlength="2000"></textarea></label>
+          <label><span>Portfolio URL</span><input id="pub-portfolio" type="url"></label>
+          <label><span>LinkedIn URL</span><input id="pub-linkedin" type="url"></label>
+        </div>
+        <label class="choice danger-choice"><input id="publish-consent" type="checkbox"><span><b>Make only this reviewed card eligible for future recruiter search</b><small>Recruiter accounts/search are not launched. Turning this off immediately returns the card to private.</small></span></label>
+        <button id="save-publication">Save reviewed publication</button>
+        <p id="publication-status" class="status-line"></p>
+      </section>
+
+      <section class="account-card danger-zone">
+        <p class="eyebrow">ACCOUNT CONTROL</p><h2>Export and deletion</h2>
+        <p>Encrypted local backup remains available in Profile & Settings. Account deletion removes the cloud account and cloud records; it does not delete this browser’s local workspace.</p>
+        <div class="button-row"><button id="replay-tour" class="outline">Replay feature tour</button><button id="download-cloud" class="outline">Download cloud JSON</button><button id="open-backup" class="outline">Open encrypted backup</button><button id="delete-account" class="danger">Delete cloud account</button></div>
+      </section>
+      <p id="result" class="result" role="status" aria-live="polite"></p>
+    </div>
+  </main>
+  <script src="account.js"></script>
+</body>
+</html>

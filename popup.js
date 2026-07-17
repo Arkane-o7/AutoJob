@@ -1,4 +1,4 @@
-const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "dashboard", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
+const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "dashboard", "account", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
 let activeTab = null;
 let profile = {};
 let detectedJob = null;
@@ -225,7 +225,7 @@ ui.report.addEventListener("click", async () => {
   try {
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_REPORT_BROKEN" }, { frameId: 0 });
     if (!response?.ok) throw new Error(response?.error || "Could not open the report review.");
-    say("Select the broken fields and review the sanitized payload. Nothing is shared until you open and submit the GitHub report.", "success");
+    say("Select the broken fields and review the sanitized payload. Nothing is shared until you explicitly send the private report.", "success");
   } catch (error) { say(error.message, "error"); }
   finally { ui.report.disabled = false; }
 });
@@ -253,6 +253,7 @@ ui.status.addEventListener("change", async () => {
 });
 
 ui.dashboard.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
+ui.account.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("account.html") }));
 ui.onboarding.addEventListener("click", () => {
   if (ApplyOS.isOnboardingComplete(profile)) chrome.runtime.openOptionsPage();
   else chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html?quick=1") });

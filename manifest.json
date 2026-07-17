@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "ApplyOS",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "description": "A private, review-first job application CRM and autofill assistant.",
-  "permissions": ["storage", "unlimitedStorage", "activeTab", "alarms", "webNavigation"],
-  "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*"],
+  "permissions": ["storage", "unlimitedStorage", "activeTab", "alarms", "webNavigation", "identity"],
+  "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*", "https://*.supabase.co/*", "http://localhost:54321/*", "http://127.0.0.1:54321/*"],
   "background": {
     "service_worker": "background.js"
   },

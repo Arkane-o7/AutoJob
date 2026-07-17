@@ -4,6 +4,7 @@ html,body { width:420px; height:600px; overflow:hidden; }
 body { margin:0; color:var(--ink); background:linear-gradient(rgba(23,24,20,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(23,24,20,.04) 1px,transparent 1px),var(--paper); background-size:24px 24px; font-family:"Avenir Next","Century Gothic",sans-serif; }
 main { height:600px; min-height:0; padding:14px 20px; display:flex; flex-direction:column; overflow:hidden; }
 header,footer,.page-state,.primary,.secondary { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.header-nav { display:flex; align-items:center; gap:10px; }
 .brand { display:flex; align-items:center; gap:9px; font-size:12px; font-weight:800; letter-spacing:.16em; }
 .mark { display:grid; place-items:center; width:27px; height:27px; color:var(--acid); background:var(--ink); font:italic 17px/1 Georgia,serif; letter-spacing:0; }
 .nav-button,.text-button { padding:0 0 2px; border:0; border-bottom:1px solid currentColor; color:var(--ink); background:transparent; font:700 10px/1.2 "Avenir Next",sans-serif; cursor:pointer; }

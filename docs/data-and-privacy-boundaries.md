@@ -1,13 +1,14 @@
 # ApplyOS data and privacy boundaries
 
-ApplyOS currently stores its workspace locally. Planned accounts and sync must
-preserve that local-first behavior and create an explicit boundary between a
-candidate's private job search and any future recruiter product.
+ApplyOS stores its workspace locally by default. A configured production build
+can also keep an owner-only cloud copy after explicit consent. The account and
+publication design preserves a strict boundary between a candidate's private
+job search and any future recruiter product.
 
 ## Zone 1: Local private workspace
 
-This is the current product and the source of truth while cloud sync is absent
-or disabled. It lives in `chrome.storage.local` and includes:
+This is the default product and source of truth while cloud sync is absent or
+disabled. It lives in `chrome.storage.local` and includes:
 
 - job-search profiles and active-profile metadata;
 - applications, descriptions, priorities, statuses, deadlines, and notes;
@@ -19,16 +20,16 @@ or disabled. It lives in `chrome.storage.local` and includes:
 - local settings, optional localhost Ollama configuration, and encrypted backup
   checkpoints.
 
-No recruiter, employer, or other user may read this workspace. The current
-release has no ApplyOS backend or analytics. Explicit Gmail, Outlook, LinkedIn,
-job, and meeting links navigate to those services but do not give ApplyOS access
-to the user's external account.
+No recruiter, employer, or other user may read this workspace. ApplyOS has no
+analytics. Explicit Gmail, Outlook, LinkedIn, job, and meeting links navigate to
+those services but do not give ApplyOS access to the user's external account.
 
 ## Zone 2: Opt-in cloud private workspace
 
-This zone is planned, not implemented. It may contain an owner-only synchronized
-copy of selected Zone 1 records after the user signs in and affirmatively enables
-sync.
+The version 0.10 runtime and supplied Supabase backend implement an owner-only
+synchronized snapshot of selected Zone 1 records after the user signs in and
+affirmatively enables sync. It is disabled when no production project is
+configured.
 
 Required rules:
 
@@ -38,8 +39,8 @@ Required rules:
 - data is encrypted in transit and protected by provider storage controls;
 - PostgreSQL Row Level Security proves per-user ownership for every exposed row;
 - privileged credentials and provider secrets never ship in the extension;
-- sync uses durable outbox records, idempotency, versions, tombstones, and
-  deterministic conflict handling rather than client-clock last-write-wins;
+- sync uses a durable client retry record, idempotent change IDs, server versions,
+  and explicit conflict handling rather than client-clock last-write-wins;
 - account switching cannot mix one user's local workspace with another's;
 - users can export and delete their cloud account and data; and
 - privacy, retention, support-access, and deletion behavior are documented
@@ -51,9 +52,11 @@ plaintext. Provider encryption at rest is not the same promise.
 
 ## Zone 3: Opt-in recruiter publication
 
-This zone is also planned, not implemented. It is a separate searchable snapshot
-that a candidate deliberately creates, previews, publishes, updates, pauses, or
-withdraws.
+The candidate can create and withdraw this separate publication record. It is
+private by default and can be marked eligible only after a separate reviewed
+choice. No recruiter-facing read policy exists yet. Recruiter organizations,
+verification, search, and shortlist products are still planned and must use
+this record rather than Zone 1 or Zone 2.
 
 Potential publishable fields are limited to values the candidate explicitly
 selects, such as:
@@ -104,17 +107,17 @@ is not permission to expose private job-search activity.
 
 ## Support-report boundary
 
-Private support reporting is planned to accept only a user-reviewed, sanitized
-diagnostic payload through an authenticated, validating, rate-limited endpoint.
+Private support reporting accepts only a user-reviewed, sanitized diagnostic
+payload through an authenticated, validating, rate-limited endpoint.
 It must not include field values, resume data, auth tokens, full URLs/query
 parameters, screenshots, or general browsing telemetry. Support access and
 retention are separate from recruiter publication.
 
-## Claims that must change when cloud sync launches
+## Production cloud release gate
 
-Before production sync is enabled, audit and update:
+Before production sync is enabled, deploy and verify the backend, then audit:
 
-- `README.md` local-only and no-backend statements;
+- all product claims about local-only/default and optional cloud behavior;
 - onboarding privacy and consent copy;
 - popup/account sync status and first-upload disclosure;
 - dashboard privacy labels;
@@ -125,5 +128,7 @@ Before production sync is enabled, audit and update:
   and prominent in-product disclosure; and
 - this document and `docs/product-feature-map.md`.
 
-Do not update these claims early. The current release should continue to state
-that its implemented workspace is local until real opt-in cloud behavior ships.
+The implementation must not be marketed as available until the provider setup,
+two-account RLS tests, private support path, resume consent, export/deletion,
+legal disclosures, and Chrome Web Store review are complete. See
+[`cloud-deployment.md`](cloud-deployment.md).

@@ -313,27 +313,28 @@ async function main() {
     assert.equal(reportResponse?.ok, true, "broken-field review should open through the content message path");
     const review = page.locator(".applyos-review-dialog");
     await review.waitFor({ state: "visible" });
-    const githubReport = review.locator(".applyos-review-report");
-    assert.equal(await githubReport.isDisabled(), true, "GitHub reporting requires an explicit field selection");
+    const privateReport = review.locator(".applyos-review-report");
+    assert.equal(await privateReport.isDisabled(), true, "private reporting requires reviewed fields and a description");
     assert.equal(await review.locator("input[type='checkbox']:checked").count(), 0, "diagnostic fields require explicit selection");
-    assert.deepEqual(JSON.parse(await review.locator("textarea").inputValue()).fields, [], "unreviewed diagnostics contain no fields");
+    assert.deepEqual(JSON.parse(await review.locator(".applyos-review-preview textarea").inputValue()).fields, [], "unreviewed diagnostics contain no fields");
     for (const label of ["Email address", "Upload CV/Resume"]) {
       await review.locator("label", { hasText: label }).locator("input[type='checkbox']").check();
     }
-    const reviewedPayload = await review.locator("textarea").inputValue();
+    const reviewedPayload = await review.locator(".applyos-review-preview textarea").inputValue();
     assert.match(reviewedPayload, /Email address/);
     assert.match(reviewedPayload, /Upload CV\/Resume/);
     for (const privateValue of ["existing@example.test", resumeName, "+44 20 7946 0958"]) {
       assert.equal(reviewedPayload.includes(privateValue), false, `diagnostic preview excludes ${privateValue}`);
     }
-    assert.equal(await githubReport.isEnabled(), true, "reviewed fields enable the manual GitHub report action");
-    const githubUrl = await githubReport.getAttribute("data-report-url");
-    assert.match(githubUrl, /^https:\/\/github\.com\/Arkane-o7\/AutoJob\/issues\/new\?/);
-    for (const privateValue of ["existing@example.test", resumeName, "+44 20 7946 0958"]) {
-      assert.equal(githubUrl.includes(privateValue), false, `prefilled GitHub report excludes ${privateValue}`);
-    }
+    assert.equal(await privateReport.isDisabled(), true, "selected fields alone do not send a report without user context");
+    await review.locator(".applyos-review-details textarea").first().fill("The reviewed email and resume fields were not filled.");
+    assert.equal(await privateReport.isEnabled(), true, "reviewed fields plus description enable private submission");
+    assert.equal(await privateReport.getAttribute("data-report-url"), null, "private reports expose no repository URL");
+    await privateReport.click();
+    await review.locator("footer > span").waitFor({ state: "visible" });
+    assert.match(await review.locator("footer > span").textContent(), /Sign in|not configured/i, "signed-out users receive a private-report fallback without losing copy/download");
     await review.locator(".applyos-review-close").click();
-    console.log("PASS reviewed-report value-free preview and manual GitHub issue handoff");
+    console.log("PASS reviewed-report value-free preview and private support fallback");
 
     const extensionId = new URL(worker.url()).host;
     const popupProbe = await context.newPage();
@@ -363,6 +364,22 @@ async function main() {
     await popupProbe.close();
     console.log("PASS popup fits the 420x600 Chrome surface without a scroll container");
 
+    const accountProbe = await context.newPage();
+    const accountMessages = [];
+    accountProbe.on("console", (message) => { if (["warning", "error"].includes(message.type())) accountMessages.push(message.text()); });
+    await accountProbe.goto(`chrome-extension://${extensionId}/account.html`, { waitUntil: "domcontentloaded" });
+    await accountProbe.locator("#identity-title").waitFor({ state: "visible" });
+    await accountProbe.waitForFunction(() => document.querySelector("#sign-in")?.disabled === true);
+    assert.equal(await accountProbe.locator("#identity-title").textContent(), "Continue locally", "account page preserves fully functional local-only mode");
+    assert.equal(await accountProbe.locator("#sign-in").isDisabled(), true, "LinkedIn sign-in stays disabled until a production cloud project is configured");
+    assert.equal(await accountProbe.locator("#sync-consent").isChecked(), false, "cloud sync is off by default");
+    assert.equal(await accountProbe.locator("#publish-consent").isChecked(), false, "recruiter discovery is separately private by default");
+    assert.match(await accountProbe.locator("body").innerText(), /Local private[\s\S]*Cloud private, opt-in[\s\S]*Recruiter card, separately published/, "account page explains the three data zones");
+    assert.equal((await accountProbe.locator("body").innerText()).includes("github.com/Arkane-o7"), false, "account and support surfaces never expose the source repository");
+    assert.deepEqual(accountMessages, [], `account page should not emit console warnings or errors: ${accountMessages.join(" | ")}`);
+    await accountProbe.close();
+    console.log("PASS account page defaults to local, private, and unconfigured-safe behavior");
+
     await worker.evaluate(async () => {
       const stored = await chrome.storage.local.get("profile_browser_test");
       const value = { ...stored.profile_browser_test, structuredFutureField: { preserved: true } };
@@ -382,6 +399,7 @@ async function main() {
     assert.equal(savedProfileState.profile.structuredFutureField.preserved, true, "profile form saves preserve fields owned by future or imported schema versions");
     assert.ok(savedProfileState.profile.onboardingCompletedAt, "saving the canonical profile completes first-run setup");
     assert.match(savedProfileState.resume?.sha256 || "", /^[a-f0-9]{64}$/, "saved resume versions retain a content hash");
+    await worker.evaluate(async () => chrome.storage.local.set({ applyos_tour_progress: { version: 1, lastStep: 8, completedAt: new Date().toISOString(), dismissedAt: null } }));
     const onboardingProbe = await context.newPage();
     await onboardingProbe.goto(`chrome-extension://${extensionId}/onboarding.html`, { waitUntil: "domcontentloaded" });
     await onboardingProbe.waitForURL(`chrome-extension://${extensionId}/options.html`);

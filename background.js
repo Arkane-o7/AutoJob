@@ -1,4 +1,4 @@
-importScripts("shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/profiles.js", "shared/ai.js", "shared/graph.js", "shared/submission.js", "shared/storage.js");
+importScripts("shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/profiles.js", "shared/ai.js", "shared/graph.js", "shared/submission.js", "shared/storage.js", "shared/cloud-config.js", "shared/cloud.js");
 
 const SESSION_STORAGE_KEY = "applyos_application_sessions";
 let sessionWriteQueue = Promise.resolve();
@@ -79,6 +79,7 @@ async function initialize() {
   await ApplyOS.ensureProfiles();
   await ApplyOS.ensureGraph();
   chrome.alarms.create("applyos-follow-ups", { periodInMinutes: 60 });
+  chrome.alarms.create("applyos-cloud-sync", { periodInMinutes: 15 });
   await updateBadge();
 }
 
@@ -90,9 +91,18 @@ chrome.runtime.onInstalled.addListener((details) => {
 chrome.runtime.onStartup.addListener(() => initialize().catch(console.error));
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === "applyos-follow-ups") updateBadge().catch(console.error);
+  if (alarm.name === "applyos-cloud-sync") {
+    ApplyOS.getState().then((state) => state.settings.cloud_sync_enabled ? ApplyOS.syncCloudNow().catch(() => {}) : null).catch(() => {});
+  }
 });
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[ApplyOS.STORAGE_KEY]) updateBadge(false).catch(console.error);
+  if (area === "local" && Object.keys(changes).some((key) => key === ApplyOS.STORAGE_KEY || key === "profilesIndex" || key === ApplyOS.PROFILE_KEY || key.startsWith("profile_"))) {
+    chrome.storage.local.get("applyos_sync_meta").then((stored) => {
+      const current = stored.applyos_sync_meta || {};
+      if (current.enabled) return chrome.storage.local.set({ applyos_sync_meta: { ...current, status: "pending", dirtyAt: new Date().toISOString() } });
+    }).catch(() => {});
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -100,6 +110,73 @@ chrome.tabs.onRemoved.addListener((tabId) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "APPLYOS_CLOUD_STATUS") {
+    ApplyOS.cloudStatus().then((status) => sendResponse({ ok: true, status })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_CONFIGURE") {
+    ApplyOS.saveCloudConfig(message.config).then((config) => sendResponse({ ok: true, config })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_SIGN_IN") {
+    ApplyOS.signInWithLinkedIn().then((status) => sendResponse({ ok: true, status })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_SIGN_OUT") {
+    ApplyOS.signOutCloud().then((status) => sendResponse({ ok: true, status })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_SYNC") {
+    ApplyOS.syncCloudNow({ force: Boolean(message.force) }).then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_PREFERENCES") {
+    const enabled = Boolean(message.enabled);
+    ApplyOS.updateSettings({ cloud_sync_enabled: enabled, resume_sync_enabled: Boolean(message.includeResumes) })
+      .then(async () => {
+        const stored = await chrome.storage.local.get("applyos_sync_meta");
+        const next = { ...(stored.applyos_sync_meta || {}), enabled, status: enabled ? "pending" : "off" };
+        await chrome.storage.local.remove("applyos_sync_outbox");
+        await chrome.storage.local.set({ applyos_sync_meta: next });
+        sendResponse({ ok: true, sync: next });
+      }).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_RESOLVE_LOCAL") {
+    chrome.storage.local.remove("applyos_sync_outbox")
+      .then(() => ApplyOS.syncCloudNow({ force: true }))
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_SNAPSHOT") {
+    ApplyOS.getCloudSnapshot().then((snapshot) => sendResponse({ ok: true, snapshot })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_RESTORE") {
+    ApplyOS.restoreCloudSnapshot().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_UNDO_RESTORE") {
+    ApplyOS.undoCloudRestore().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_PUBLICATION_GET") {
+    ApplyOS.getCandidatePublication().then((publication) => sendResponse({ ok: true, publication })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_PUBLICATION_SAVE") {
+    ApplyOS.saveCandidatePublication(message.publication).then((publication) => sendResponse({ ok: true, publication })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_SUPPORT_SUBMIT") {
+    ApplyOS.submitSupportReport(message.report).then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CLOUD_DELETE_ACCOUNT") {
+    ApplyOS.deleteCloudAccount().then((result) => sendResponse({ ok: true, result })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === "APPLYOS_FILL_TAB" || message?.type === "APPLYOS_AGENT_TAB") {
     if (!Number.isInteger(message.tabId)) { sendResponse({ ok: false, error: "Missing active application tab." }); return false; }
     messageAllFrames(message.tabId, message.type === "APPLYOS_FILL_TAB" ? "APPLYKIT_FILL" : "APPLYOS_AGENT_ASSIST")

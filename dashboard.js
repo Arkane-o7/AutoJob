@@ -230,8 +230,9 @@ function openDetail(id) {
   $("#detail-role").focus();
 }
 
-function applicationOptions(selected = "") {
-  return `<option value="">General networking</option>` + state.applications.map((item) => `<option value="${item.id}" ${item.id === selected ? "selected" : ""}>${escapeHTML(item.company)} · ${escapeHTML(item.role)}</option>`).join("");
+function applicationOptions(selected = []) {
+  const selectedIds = new Set(Array.isArray(selected) ? selected : [selected].filter(Boolean));
+  return state.applications.map((item) => `<option value="${item.id}" ${selectedIds.has(item.id) ? "selected" : ""}>${escapeHTML(item.company)} · ${escapeHTML(item.role)}</option>`).join("");
 }
 
 function linkedContacts(applicationId) {
@@ -267,7 +268,7 @@ function openContact(id = null, applicationId = "") {
   $("#contact-relationship").value = contact?.relationship || "recruiter";
   $("#contact-email").value = contact?.email || "";
   $("#contact-linkedin").value = contact?.linkedin_url || "";
-  $("#contact-application").innerHTML = applicationOptions(contact?.application_ids?.[0] || applicationId);
+  $("#contact-application").innerHTML = applicationOptions(contact?.application_ids?.length ? contact.application_ids : [applicationId].filter(Boolean));
   $("#contact-last").value = ApplyOS.toDateInput(contact?.last_contacted_at);
   $("#contact-next").value = ApplyOS.toDateInput(contact?.next_action_at);
   $("#contact-notes").value = contact?.notes || "";
@@ -384,6 +385,7 @@ $("#contacts-empty-add").addEventListener("click", () => openContact());
 $("#add-linked-contact").addEventListener("click", () => { const applicationId = selectedId; closeDetail(); openContact(null, applicationId); });
 $("#mock").addEventListener("click", async () => { await ApplyOS.seedMockData(); await load(); toast("Sample applications added"); });
 $("#profile").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$("#account").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("account.html") }));
 $("#active-profile").addEventListener("change", async (event) => { await ApplyOS.setActiveProfile(event.target.value); window.location.reload(); });
 $("#close-detail").addEventListener("click", closeDetail);
 $("#close-contact").addEventListener("click", closeContact);
@@ -417,13 +419,13 @@ $("#copy-draft").addEventListener("click", async () => { await navigator.clipboa
 
 $("#contact-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const applicationId = $("#contact-application").value;
+  const applicationIds = Array.from($("#contact-application").selectedOptions, (option) => option.value).filter(Boolean);
   const previous = state.contacts.find((item) => item.id === selectedContactId);
   await ApplyOS.upsertContact({
     id: selectedContactId || undefined,
     name: $("#contact-name").value.trim(), title: $("#contact-title").value.trim(), company: $("#contact-company").value.trim(),
     email: $("#contact-email").value.trim(), linkedin_url: $("#contact-linkedin").value.trim(), relationship: $("#contact-relationship").value,
-    application_ids: applicationId ? [applicationId] : [], notes: $("#contact-notes").value.trim(),
+    application_ids: applicationIds, notes: $("#contact-notes").value.trim(),
     last_contacted_at: $("#contact-last").value ? new Date(`${$("#contact-last").value}T12:00:00`).toISOString() : null,
     next_action_at: $("#contact-next").value ? new Date(`${$("#contact-next").value}T12:00:00`).toISOString() : null,
     created_at: previous?.created_at

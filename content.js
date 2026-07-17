@@ -1242,7 +1242,7 @@
     const title = document.createElement("h2");
     title.textContent = "Report broken fields";
     const explanation = document.createElement("p");
-    explanation.textContent = "Select only the fields that failed. The preview contains labels and sanitized structure—never entered answers, resume data, or the page URL query. Nothing leaves your browser unless you open the reviewed GitHub report.";
+    explanation.textContent = "Select only the fields that failed. The preview contains labels and sanitized structure—never entered answers, resume data, or the page URL query. Nothing leaves your browser until you explicitly send the private report.";
     heading.append(eyebrow, title, explanation);
     const close = document.createElement("button");
     close.type = "button";
@@ -1276,6 +1276,26 @@
       list.append(empty);
     }
 
+    const details = document.createElement("div");
+    details.className = "applyos-review-details";
+    const descriptionLabel = document.createElement("label");
+    descriptionLabel.textContent = "What went wrong?";
+    const description = document.createElement("textarea");
+    description.maxLength = 2000;
+    description.placeholder = "Example: Work authorization dropdown stayed empty after autofill.";
+    descriptionLabel.append(description);
+    const expectedLabel = document.createElement("label");
+    expectedLabel.textContent = "Expected behavior (optional)";
+    const expected = document.createElement("textarea");
+    expected.maxLength = 2000;
+    expectedLabel.append(expected);
+    const actualLabel = document.createElement("label");
+    actualLabel.textContent = "Actual behavior (optional)";
+    const actual = document.createElement("textarea");
+    actual.maxLength = 2000;
+    actualLabel.append(actual);
+    details.append(descriptionLabel, expectedLabel, actualLabel);
+
     const previewLabel = document.createElement("label");
     previewLabel.className = "applyos-review-preview";
     const previewTitle = document.createElement("span");
@@ -1287,7 +1307,7 @@
 
     const actions = document.createElement("footer");
     const privacy = document.createElement("span");
-    privacy.textContent = "Public GitHub issue · review and submit manually";
+    privacy.textContent = "Private ApplyOS support · authenticated and rate-limited";
     const buttonGroup = document.createElement("div");
     const copyButton = document.createElement("button");
     copyButton.type = "button";
@@ -1299,19 +1319,20 @@
     const reportButton = document.createElement("button");
     reportButton.type = "button";
     reportButton.className = "applyos-review-report";
-    reportButton.textContent = "Open GitHub report";
+    reportButton.textContent = "Send private report";
     reportButton.disabled = true;
     buttonGroup.append(copyButton, downloadButton, reportButton);
     actions.append(privacy, buttonGroup);
 
     const selectedPayload = () => reportPayload(checkboxes.filter((checkbox) => checkbox.checked).map((checkbox) => fields[Number(checkbox.dataset.index)]));
+    const submissionEnvelope = () => globalThis.ApplyOS.Diagnostics.supportEnvelope(selectedPayload(), { description: description.value, expected_behavior: expected.value, actual_behavior: actual.value });
     const refreshPreview = () => {
       const payload = selectedPayload();
       preview.value = JSON.stringify(payload, null, 2);
-      reportButton.disabled = payload.fields.length === 0;
-      reportButton.dataset.reportUrl = payload.fields.length ? globalThis.ApplyOS.Diagnostics.githubIssueUrl(payload) : "";
+      reportButton.disabled = payload.fields.length === 0 || !description.value.trim();
     };
     checkboxes.forEach((checkbox) => checkbox.addEventListener("change", refreshPreview));
+    description.addEventListener("input", refreshPreview);
     close.addEventListener("click", () => overlay.remove());
     overlay.addEventListener("click", (event) => { if (event.target === overlay) overlay.remove(); });
     copyButton.addEventListener("click", async () => {
@@ -1326,13 +1347,23 @@
       copyButton.textContent = copied ? "Copied" : "Select and copy preview";
     });
     downloadButton.addEventListener("click", () => downloadDiagnosticReport(selectedPayload()));
-    reportButton.addEventListener("click", () => {
+    reportButton.addEventListener("click", async () => {
       const payload = selectedPayload();
-      if (!payload.fields.length) return;
-      const reportUrl = globalThis.ApplyOS.Diagnostics.githubIssueUrl(payload);
-      window.open(reportUrl, "_blank", "noopener,noreferrer");
+      if (!payload.fields.length || !description.value.trim()) return;
+      reportButton.disabled = true;
+      reportButton.textContent = "Sending…";
+      const response = await chrome.runtime.sendMessage({ type: "APPLYOS_SUPPORT_SUBMIT", report: submissionEnvelope() }).catch((error) => ({ ok: false, error: error.message }));
+      if (response?.ok) {
+        privacy.textContent = `Private report ${response.result.referenceCode} received`;
+        reportButton.textContent = "Sent";
+        copyButton.textContent = "Copy for your records";
+      } else {
+        privacy.textContent = response?.error || "Sign in under Account & sync, or use Copy/Download while offline.";
+        reportButton.textContent = "Retry private report";
+        reportButton.disabled = false;
+      }
     });
-    dialog.append(header, list, previewLabel, actions);
+    dialog.append(header, list, details, previewLabel, actions);
     overlay.append(dialog);
     document.documentElement.append(overlay);
     refreshPreview();

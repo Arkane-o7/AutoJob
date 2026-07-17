@@ -1,9 +1,8 @@
 # ApplyOS product feature map
 
-This document explains what ApplyOS does today, which behavior is planned, and
-where licensed open-source adaptations end. It is a product and privacy guide,
-not a promise that future cloud, recruiter, AI, or billing features are already
-available.
+This document explains what ApplyOS does today, which behavior still requires a
+production deployment, which work remains planned, and where licensed
+open-source adaptations end.
 
 ## Feature glossary
 
@@ -11,7 +10,7 @@ available.
 |---|---|---|---|---|---|
 | Job capture and ATS recognition | Save a job from its posting or application page | Extracts company, role, description, location, deadline, source, URL, and keywords with confidence indicators and editable fallbacks | Visible job-page metadata and text | None for storage; captured records stay local | It does not silently save every visited page or treat uncertain metadata as fact |
 | Review-first autofill | Fill application fields from a chosen profile | Fills confident empty fields, supports common ATS controls and accessible frames, and can attach the locally saved resume | Active profile, answer memory, resume file, and reviewed form labels/structure | None unless the user explicitly enables localhost Ollama | It never clicks Next, Review, Apply, or Submit and does not fill blocked sensitive, consent, CAPTCHA, or assessment fields |
-| Candidate CRM | A private personal system for managing the user's own job search | Tracks applications, pipeline status, priority, deadlines, notes, match score, applied date, follow-ups, resume version, and source in board and list views | Applications, reminders, profiles, resume versions, notes, and job descriptions | None in the current release | It is not an employer ATS and is not recruiter-visible |
+| Candidate CRM | A private personal system for managing the user's own job search | Tracks applications, pipeline status, priority, deadlines, notes, match score, applied date, follow-ups, resume version, and source in board and list views | Applications, reminders, profiles, resume versions, notes, and job descriptions | Local by default; owner-only account copy after explicit sync consent in a configured build | It is not an employer ATS and private CRM records are never recruiter-visible |
 | Resume/job matching | Explain how well the active profile matches a saved role | Calculates a deterministic score, matched and missing skills, keyword suggestions, and experience hints | Pasted resume text, structured profile fields, and job description | None for the built-in matcher | It does not claim hiring probability or invent qualifications |
 | Answer memory | Reuse answers the user has reviewed | Matches repeated questions to profile defaults, custom answers, and learned corrections; custom answers can be limited to one company domain and profile | Application-question text, user-approved answers, field fingerprints, profile ID, and optional company domain | None | It does not answer when confidence is low or reuse another profile's/company's restricted answer |
 | Knowledge/correction graph | Improve retrieval after the user corrects a field | Stores local question, field, profile, company, and reinforcement relationships used to rank reusable answers | Reviewed corrections and structural field context | None | It does not upload corrections, train a remote model, or learn from hidden field values |
@@ -25,25 +24,30 @@ available.
 | Optional local Ollama enhancement | Let technical users use a model running on their own computer | Sends selected Smart Draft prompts to the configured localhost Ollama endpoint when explicitly enabled | The prompt assembled for the selected Smart Tool | Localhost only, using the user-configured endpoint | It is not required during onboarding and is not a hosted ApplyOS AI service |
 | Conservative submission confirmation | Ask whether a likely completed application should be tracked | Combines a recent trusted submit interaction with strong confirmation-page evidence, then asks the user to confirm | Recent local submit intent and confirmation-page structure/text | None | It never changes status or schedules reminders without explicit confirmation |
 | Encrypted backup and restore | Move or recover the complete local workspace manually | Exports a password-derived AES-256-GCM `.applyos` file, previews a restore, validates versions, and retains one local undo checkpoint | Complete local workspace including saved resume files | None; export/import is performed locally | It cannot recover a forgotten password and is not cloud sync |
-| Reviewed site diagnostics | Let the user inspect a privacy-safe broken-field report | Includes only selected labels and allowlisted DOM structure after review; values, hidden controls, resume contents, and sensitive URL data are excluded | Selected structural field metadata, domain, platform, and extension version | Current release can open a user-reviewed GitHub issue; a private first-party endpoint is planned | It does not capture entered answers, upload automatically, or collect general browsing analytics |
+| Reviewed site diagnostics | Let the user inspect a privacy-safe broken-field report | Includes only selected labels and allowlisted DOM structure after review; values, hidden controls, resume contents, and sensitive URL data are excluded | User description, selected structural field metadata, domain, platform, and extension version | Explicit authenticated submission to a private validating/rate-limited endpoint; copy/download fallback when signed out | It does not capture entered answers, expose the repository, upload automatically, or collect general browsing analytics |
+| Optional online account | Give the user an owner identity for sync and account controls | User-initiated LinkedIn OIDC/PKCE flow with tokens isolated behind the service worker; local mode remains fully available | Basic provider identity and private account metadata | Supabase Auth only after the user clicks sign in | It does not import LinkedIn connections, messages, posts, contacts, or employment history and is not identity verification |
+| Private cloud sync | Keep an optional owner-only account copy | Off by default; uses a durable local retry record, idempotent change ID, server version conflict pause, manual cloud restore, and one-step undo | Reviewed local workspace collections; resume bytes only after separate consent | HTTPS to the configured Supabase project | It is not end-to-end encrypted, automatic conflict merging, recruiter access, or a replacement for encrypted backup |
+| Candidate publication | Let a candidate prepare a limited card for a future recruiter product | Starts private and marks only a reviewed allowlist eligible after a separate consent action; no recruiter can query it yet | Headline, target roles, coarse location, selected skills, experience summary, and selected links | Configured Supabase project | It never exposes private applications, notes, contacts, interviews, answer memory, or resume files; recruiter accounts/search are future work |
 
-## Terms for planned cloud work
+## Account and cloud terms
 
-- **Online account** means an ApplyOS identity and session that can later own
-  optional cross-device sync, export, and deletion. LinkedIn is the proposed
-  sign-in provider; it is not the database.
+- **Online account** means an ApplyOS identity and session that owns optional
+  cloud sync, export, deletion, private support, and candidate publication.
+  LinkedIn is the sign-in provider; Supabase is the configured data service.
 - **LinkedIn sign-in** means authentication using LinkedIn OpenID Connect. It
   does not import connections, contacts, messages, posts, employment history,
   or recruiter permissions, and it is not identity verification.
 - **Opt-in private cloud workspace** means an owner-only synchronized copy of
   selected ApplyOS data after prominent disclosure and explicit consent. Local
-  mode must continue to work without an account.
-- **Candidate publication** means a future, separate, user-approved recruiter-
-  facing snapshot. It is not the private profile used for autofill, and it can
-  be withdrawn independently.
+  mode continues to work without an account.
+- **Candidate publication** means a separate, user-approved recruiter-facing
+  snapshot. It is not the private profile used for autofill, and it can be
+  withdrawn independently.
 
-Cloud accounts, sync, candidate publication, recruiter search, paid cloud AI,
-and billing are not implemented in the current release.
+The runtime and backend source for accounts, sync, candidate publication, and
+private support are implemented but remain unavailable to ordinary users until
+the production provider deployment and release gate are completed. Recruiter
+accounts/search, paid cloud AI, and billing are not implemented.
 
 ## Licensed adaptations and ApplyOS-specific product work
 
@@ -65,7 +69,7 @@ recorded in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md):
 The ApplyOS interface, job capture, candidate CRM, dashboard, reminders,
 contacts/networking CRM, interview workspace, reviewed compose handoffs,
 submission confirmation, encrypted backups, privacy-reviewed reporting flow,
-and the planned cloud/recruiter architecture are ApplyOS product work unless a
+and the cloud/recruiter architecture are ApplyOS product work unless a
 source file or third-party notice explicitly states otherwise.
 
 ### Market inspiration is not code provenance

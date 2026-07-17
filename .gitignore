@@ -3,3 +3,8 @@ dist/
 .DS_Store
 .playwright-mcp/
 output/playwright/
+.env
+.env.*
+!.env.example
+supabase/.temp/
+supabase/.env
