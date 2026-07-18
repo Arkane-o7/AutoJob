@@ -1,0 +1,42 @@
+project_id = "applyos-local"
+
+[api]
+enabled = true
+port = 54321
+schemas = ["public", "storage", "graphql_public"]
+extra_search_path = ["public", "extensions"]
+max_rows = 1000
+
+[db]
+port = 54322
+major_version = 17
+
+[studio]
+enabled = true
+port = 54323
+
+[auth]
+enabled = true
+site_url = "https://example.invalid"
+additional_redirect_urls = ["https://mfjobohldgnoickgkbakbeejjlhbhaen.chromiumapp.org/auth/callback"]
+enable_signup = true
+
+[auth.external.linkedin_oidc]
+enabled = false
+client_id = "env(LINKEDIN_OIDC_CLIENT_ID)"
+secret = "env(LINKEDIN_OIDC_SECRET)"
+redirect_uri = ""
+
+[storage]
+enabled = true
+file_size_limit = "8MiB"
+
+[edge_runtime]
+enabled = true
+policy = "per_worker"
+
+[functions.submit-support-report]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true

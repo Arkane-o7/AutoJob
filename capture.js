@@ -237,7 +237,11 @@
 
   function confidence(value, strong, fallback) {
     if (!value) return 0;
-    return strong ? 0.96 : fallback ? 0.68 : 0.45;
+    // A value found through a dedicated ATS/site adapter is materially more
+    // reliable than a generic page fallback. Keep it above the review-warning
+    // threshold so correct NorthStarz and other adapter matches are not shown
+    // as errors merely because JSON-LD is absent.
+    return strong ? 0.96 : fallback ? 0.82 : 0.45;
   }
 
   ApplyOS.captureJob = function captureJob() {

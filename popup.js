@@ -1,10 +1,41 @@
-const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "dashboard", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
+const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
 let activeTab = null;
 let profile = {};
 let detectedJob = null;
 let application = null;
 let aiConfig = null;
 let trackingRuntimeReady = true;
+document.body.inert = true;
+
+function accountGateUrl(reason) {
+  const url = new URL(chrome.runtime.getURL("account.html"));
+  url.searchParams.set("reason", reason);
+  url.searchParams.set("returnTo", "popup");
+  return url.href;
+}
+
+async function requireWorkspaceAccess() {
+  let response;
+  try { response = await chrome.runtime.sendMessage({ type: "APPLYOS_CLOUD_STATUS" }); }
+  catch { response = null; }
+  const status = response?.ok ? response.status : null;
+  const ready = status?.configured === true
+    && status?.migrationRequired !== true
+    && (status?.workspaceReady === true || status?.offlineAuthorized === true);
+  if (!ready) {
+    const reason = !response?.ok ? "status-unavailable" : status?.configured !== true ? "configuration-required" : status?.migrationRequired === true ? "migration-required" : "sign-in-required";
+    try {
+      await chrome.tabs.create({ url: accountGateUrl(reason) });
+      window.close();
+    } catch {
+      document.body.inert = false;
+      say("Sign in to your Scout account before using autofill.", "error");
+    }
+    return null;
+  }
+  document.body.inert = false;
+  return status;
+}
 
 function hasCoreProfile(value) {
   return Boolean(value?.firstName && value?.lastName && value?.email && value?.phone);
@@ -45,7 +76,7 @@ function renderDetection(job) {
   ui.company.value = job.company || "";
   ui["site-label"].textContent = `${String(job.platform || "career page").replaceAll("_", " ")} · ${job.source}`;
   const match = ApplyOS.calculateMatch(job.description, profile);
-  ui.score.querySelector("strong").textContent = job.description ? `${match.score}%` : "—";
+  ui.score.querySelector("strong").textContent = job.description ? `${match.score}%` : "-";
   const confidence = Math.round((job.confidence?.overall || 0) * 100);
   const warnings = job.warnings?.join(" · ");
   ui.confidence.textContent = warnings || `${confidence}% extraction confidence. Review the editable title and company before saving.`;
@@ -80,9 +111,15 @@ function fallbackJobFromTab(tab, reason) {
 async function restoreSavedRecord(job) {
   application = await ApplyOS.getApplicationByUrl(job.url);
   if (application) {
+    if (job.description && job.description !== application.description) {
+      application = await ApplyOS.upsertApplication({ ...job, company: application.company, role: application.role }, profile);
+    } else {
+      const refreshed = await ApplyOS.refreshApplicationMatches(profile, { applicationId: application.id });
+      application = refreshed.applications[0] || application;
+    }
     ui.role.value = application.role;
     ui.company.value = application.company;
-    ui.score.querySelector("strong").textContent = `${application.match_score || 0}%`;
+    ui.score.querySelector("strong").textContent = application.description?.trim() ? `${application.match_score || 0}%` : "-";
   }
   renderRecord();
 }
@@ -125,7 +162,7 @@ async function checkTrackingRuntime() {
 }
 
 function trackingReloadNotice(prefix) {
-  return `${prefix} Application tracking needs one extension reload: open chrome://extensions, find ApplyOS, and click Reload.`;
+  return `${prefix} Application tracking needs one extension reload: open chrome://extensions, find Scout, and click Reload.`;
 }
 
 function clearApplicationSession() {
@@ -133,7 +170,49 @@ function clearApplicationSession() {
   return chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_CLEAR", tabId: activeTab.id }).catch(() => {});
 }
 
+async function startPopupTour() {
+  if (!detectedJob) return;
+  await ScoutTour.start({
+    id: "popup",
+    surface: "popup",
+    autoStart: true,
+    steps: [
+      {
+        target: '[data-tour-target="save-job"]',
+        eyebrow: "STEP 1 · CAPTURE",
+        title: "Save the opportunity.",
+        body: "Review the detected company and role above, then save the job to your private application pipeline.",
+        placement: "top"
+      },
+      {
+        target: '[data-tour-target="autofill"]',
+        eyebrow: "STEP 2 · AUTOFILL",
+        title: "Fill what Scout knows.",
+        body: "Scout fills confident empty fields and attaches your saved resume when the site allows it. You review every result.",
+        placement: "top"
+      },
+      {
+        target: '[data-tour-target="mark-applied"]',
+        eyebrow: "STEP 3 · TRACK",
+        title: "Confirm after you submit.",
+        body: "Once you submit the application yourself, mark it applied. Scout then creates editable follow-up reminders.",
+        placement: "top"
+      },
+      {
+        target: '[data-tour-target="report-problem"]',
+        eyebrow: "WHEN A SITE BREAKS",
+        title: "Report the structure—not your answers.",
+        body: "Review a privacy-safe field report so Scout can improve support for that site. Entered values and resume contents are excluded.",
+        placement: "top",
+        nextLabel: "Got it →"
+      }
+    ]
+  });
+}
+
 async function initialize() {
+  const access = await requireWorkspaceAccess();
+  if (!access) return;
   populateStatuses();
   const [profilesIndex, activeProfile, config, tabs] = await Promise.all([
     ApplyOS.getProfilesIndex(), ApplyOS.getActiveProfile(), ApplyOS.getAIConfig(), chrome.tabs.query({ active: true, currentWindow: true }), checkTrackingRuntime()
@@ -149,7 +228,7 @@ async function initialize() {
   ui.agent.classList.toggle("hidden", !aiConfig.enabled);
   ui.agent.disabled = !aiConfig.enabled || !hasCoreProfile(profile);
   await ApplyOS.ensureState();
-  if (!activeTab?.id || !/^https?:/.test(activeTab.url || "")) {
+  if (!activeTab?.id) {
     ui.confidence.textContent = "Open a job posting or application page to capture it.";
     ui.report.disabled = true;
     return;
@@ -158,10 +237,14 @@ async function initialize() {
   try {
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_DETECT_JOB" }, { frameId: 0 });
     if (!response?.ok) throw new Error(response?.error || "Page detection failed");
+    // Chrome intentionally withholds a tab's URL when the extension does not
+    // request broad tab access. The content script is already running on the
+    // page, so its canonical capture is the authoritative URL for this action.
+    activeTab.url = response.job?.url || activeTab.url || "";
     renderDetection(response.job);
     await restoreSavedRecord(response.job);
     if (!hasCoreProfile(profile)) say("Set up your profile before autofilling. You can still save this job.");
-    else if (!trackingRuntimeReady) say(trackingReloadNotice("ApplyOS was updated."), "error");
+    else if (!trackingRuntimeReady) say(trackingReloadNotice("Scout was updated."), "error");
   } catch (error) {
     const reason = error.message.includes("Receiving end does not exist") || error.message === "Page detection failed"
       ? "This tab needs one refresh for automatic detection"
@@ -171,6 +254,7 @@ async function initialize() {
     await restoreSavedRecord(fallback);
     say("Autofill is still available. Refresh this job tab once to restore automatic company and role detection.");
   }
+  await startPopupTour();
 }
 
 ui.save.addEventListener("click", async () => {
@@ -178,7 +262,7 @@ ui.save.addEventListener("click", async () => {
   try {
     await saveCurrent();
     const tracking = await startApplicationSession();
-    say(tracking.ok ? "Saved to your ApplyOS dashboard." : trackingReloadNotice("Saved to your dashboard."), tracking.ok ? "success" : "error");
+    say(tracking.ok ? "Saved to your Scout dashboard." : trackingReloadNotice("Saved to your dashboard."), tracking.ok ? "success" : "error");
   }
   catch (error) { say(error.message, "error"); }
   finally { ui.save.disabled = false; }
@@ -225,7 +309,7 @@ ui.report.addEventListener("click", async () => {
   try {
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_REPORT_BROKEN" }, { frameId: 0 });
     if (!response?.ok) throw new Error(response?.error || "Could not open the report review.");
-    say("Select the broken fields and review the sanitized payload. Nothing is shared until you open and submit the GitHub report.", "success");
+    say("Select the broken fields and review the sanitized payload. Nothing is shared until you explicitly send the private report.", "success");
   } catch (error) { say(error.message, "error"); }
   finally { ui.report.disabled = false; }
 });
@@ -252,7 +336,6 @@ ui.status.addEventListener("change", async () => {
   say("Status updated.", "success");
 });
 
-ui.dashboard.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
 ui.onboarding.addEventListener("click", () => {
   if (ApplyOS.isOnboardingComplete(profile)) chrome.runtime.openOptionsPage();
   else chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html?quick=1") });

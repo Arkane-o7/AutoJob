@@ -3,6 +3,8 @@ const resumeInput = document.querySelector("#resume-file");
 const fileTitle = document.querySelector("#file-title");
 const fileDetail = document.querySelector("#file-detail");
 const removeResumeButton = document.querySelector("#remove-resume");
+const resumeTextInput = form.elements.namedItem("resumeText");
+const resumeTextStatus = document.querySelector("#resume-text-status");
 const customAnswers = document.querySelector("#custom-answers");
 const addAnswerButton = document.querySelector("#add-answer");
 const saveStatus = document.querySelector("#save-status");
@@ -11,6 +13,34 @@ let savedResume = null;
 let pendingResume = null;
 let profilesIndex = null;
 let pendingRestore = null;
+document.body.inert = true;
+
+function accountGateUrl(reason) {
+  const url = new URL(chrome.runtime.getURL("account.html"));
+  url.searchParams.set("reason", reason);
+  url.searchParams.set("returnTo", `options.html${location.search}${location.hash}`);
+  return url.href;
+}
+
+async function requireWorkspaceAccess() {
+  let response;
+  try { response = await chrome.runtime.sendMessage({ type: "APPLYOS_CLOUD_STATUS" }); }
+  catch { response = null; }
+  const status = response?.ok ? response.status : null;
+  const ready = status?.configured === true
+    && status?.migrationRequired !== true
+    && (status?.workspaceReady === true || status?.offlineAuthorized === true);
+  if (!ready) {
+    const reason = !response?.ok ? "status-unavailable" : status?.configured !== true ? "configuration-required" : status?.migrationRequired === true ? "migration-required" : "sign-in-required";
+    location.replace(accountGateUrl(reason));
+    return null;
+  }
+  document.body.inert = false;
+  if (status.offlineAuthorized === true) {
+    globalThis.ScoutHeader?.setStatus("Offline · cached", "offline");
+  }
+  return status;
+}
 
 function setBackupStatus(message, tone = "") {
   const status = document.querySelector("#backup-status");
@@ -29,7 +59,7 @@ function downloadTextFile(contents, filename) {
 function backupSummaryText(summary) {
   const created = new Date(summary.created_at);
   const date = Number.isNaN(created.getTime()) ? summary.created_at : created.toLocaleString();
-  return `${summary.profiles} profiles · ${summary.applications} applications · ${summary.contacts} contacts · ${summary.interviews} interviews · ${summary.answers} remembered answers · Created ${date} with ApplyOS ${summary.extension_version}`;
+  return `${summary.profiles} profiles · ${summary.applications} applications · ${summary.contacts} contacts · ${summary.interviews} interviews · ${summary.answers} remembered answers · Created ${date} with Scout ${summary.extension_version}`;
 }
 
 function createAnswerRow(answer = {}) {
@@ -94,6 +124,57 @@ function createAnswerRow(answer = {}) {
   customAnswers.append(row);
 }
 
+async function startProfileTour() {
+  const force = new URLSearchParams(location.search).get("tour") === "1";
+  await ScoutTour.start({
+    id: "main",
+    surface: "options",
+    force,
+    steps: [
+      {
+        target: '[data-tour-target="profile-switcher"]',
+        eyebrow: "ROLE-SPECIFIC PROFILES",
+        title: "Keep more than one version of you.",
+        body: "Create focused profiles for different role types, then choose which one Scout uses for matching and autofill.",
+        placement: "right"
+      },
+      {
+        target: '[data-tour-target="identity"]',
+        eyebrow: "CORE DETAILS",
+        title: "Your application source of truth.",
+        body: "Identity, contact details, links, address, employment, education, and work preferences live here. Scout only fills facts you have provided.",
+        placement: "bottom"
+      },
+      {
+        target: '[data-tour-target="resume"]',
+        eyebrow: "RESUME",
+        title: "Save the file and the evidence.",
+        body: "The PDF or DOCX is used for supported upload fields. Resume text powers private matching, keyword gaps, and review-first Smart Tools.",
+        placement: "top"
+      },
+      {
+        target: '[data-tour-target="answers"]',
+        eyebrow: "ANSWER MEMORY",
+        title: "Teach Scout repeated questions.",
+        body: "Save reviewed answers once, optionally scope sensitive employer-history answers to one company, and reuse them when similar questions appear.",
+        placement: "top"
+      },
+      {
+        target: '[data-tour-target="save-profile"]',
+        eyebrow: "YOU STAY IN CONTROL",
+        title: "Review, then save your profile.",
+        body: "Nothing on this page changes until you choose Save profile. You can edit these details at any time; Scout still never submits an application for you.",
+        placement: "top",
+        nextLabel: "Finish tour →"
+      }
+    ],
+    onFinish: () => {
+      saveStatus.textContent = "Tour complete · add any missing details, then Save profile";
+      history.replaceState(null, "", chrome.runtime.getURL("options.html"));
+    }
+  });
+}
+
 function markUnsaved() {
   saveStatus.textContent = "Unsaved changes";
 }
@@ -108,7 +189,7 @@ function showResume(resume) {
   fileTitle.textContent = resume.name;
   const size = Number(resume.size || 0);
   fileDetail.textContent = resume.dataUrl
-    ? `${(size / 1024 / 1024).toFixed(2)} MB · stored locally and ready to attach`
+    ? `${(size / 1024 / 1024).toFixed(2)} MB · saved securely and ready to attach`
     : "File contents are missing from this older profile · choose the file again, then Save profile";
   removeResumeButton.classList.remove("hidden");
 }
@@ -122,7 +203,51 @@ function fileToDataUrl(file) {
   });
 }
 
+function isPdfResume(resume) {
+  return /application\/pdf/i.test(String(resume?.type || "")) || /\.pdf$/i.test(String(resume?.name || ""));
+}
+
+function setResumeTextStatus(message, tone = "") {
+  resumeTextStatus.textContent = message;
+  if (tone) resumeTextStatus.dataset.tone = tone;
+  else delete resumeTextStatus.dataset.tone;
+}
+
+async function extractAndApplyResumeText(source, { allowReplace = false } = {}) {
+  setResumeTextStatus("Extracting text privately on this device…");
+  try {
+    const extracted = await ApplyOS.extractPdfText(source);
+    if (extracted.length < 40) {
+      setResumeTextStatus("This PDF contains little or no selectable text. It may be scanned; paste or type the resume text here instead.", "warning");
+      return false;
+    }
+
+    const current = resumeTextInput.value.trim();
+    const sameText = ApplyOS.normalizeExtractedResumeText(current) === extracted;
+    if (current && !sameText) {
+      const replace = allowReplace && window.confirm("Scout extracted text from the new PDF. Replace the existing resume text with it?");
+      if (!replace) {
+        setResumeTextStatus(`Extracted ${extracted.length.toLocaleString()} characters. Your existing resume text was kept.`, "success");
+        return false;
+      }
+    }
+
+    if (!sameText) {
+      resumeTextInput.value = extracted;
+      markUnsaved();
+    }
+    setResumeTextStatus(`Extracted ${extracted.length.toLocaleString()} characters locally. Review the text, then save your profile.`, "success");
+    return true;
+  } catch (error) {
+    console.error("Resume text extraction failed", error);
+    setResumeTextStatus("Scout could not read text from this PDF. The file is still saved for attachment; paste the text here for matching.", "warning");
+    return false;
+  }
+}
+
 async function initialize() {
+  const access = await requireWorkspaceAccess();
+  if (!access) return;
   profilesIndex = await ApplyOS.getProfilesIndex();
   const [profile, state] = await Promise.all([ApplyOS.getActiveProfile(), ApplyOS.getState()]);
   const profileSelect = document.querySelector("#profile-select");
@@ -135,6 +260,13 @@ async function initialize() {
   }
   savedResume = profile.resume || null;
   showResume(savedResume);
+  if (savedResume?.dataUrl && isPdfResume(savedResume) && !resumeTextInput.value.trim()) {
+    await extractAndApplyResumeText(savedResume.dataUrl);
+  } else if (savedResume && !isPdfResume(savedResume)) {
+    setResumeTextStatus("Automatic text extraction currently supports PDF resumes. For DOC or DOCX files, paste the text here.", "warning");
+  } else if (resumeTextInput.value.trim()) {
+    setResumeTextStatus("Saved resume text is ready for matching and Smart Tools.", "success");
+  }
   (profile.customAnswers || []).forEach(createAnswerRow);
   if (!(profile.customAnswers || []).length) createAnswerRow();
   saveStatus.textContent = profile.firstName ? "Profile saved" : "Complete your profile";
@@ -146,6 +278,7 @@ async function initialize() {
   document.querySelector("#undo-restore").classList.toggle("hidden", !(await ApplyOS.hasRestoreCheckpoint()));
   document.querySelector("#enable-final-follow-up").checked = state.settings.final_follow_up_enabled !== false;
   document.querySelector("#enable-notifications").checked = state.settings.notification_enabled !== false;
+  await startProfileTour();
 }
 
 resumeInput.addEventListener("change", async () => {
@@ -164,6 +297,11 @@ resumeInput.addEventListener("change", async () => {
   }
   pendingResume = { name: file.name, type: file.type, size: file.size, dataUrl: await fileToDataUrl(file) };
   showResume(pendingResume);
+  if (isPdfResume(pendingResume)) {
+    await extractAndApplyResumeText(file, { allowReplace: true });
+  } else {
+    setResumeTextStatus("Automatic text extraction currently supports PDF resumes. Paste the DOC or DOCX text here.", "warning");
+  }
   markUnsaved();
 });
 
@@ -172,6 +310,9 @@ removeResumeButton.addEventListener("click", () => {
   pendingResume = null;
   resumeInput.value = "";
   showResume(null);
+  setResumeTextStatus(resumeTextInput.value.trim()
+    ? "The saved file was removed. Your editable resume text is still available."
+    : "PDF text is extracted privately on this device when you upload your resume.");
   markUnsaved();
 });
 
@@ -238,7 +379,10 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
-initialize();
+initialize().catch((error) => {
+  document.body.inert = false;
+  saveStatus.textContent = `Could not load profile — ${error.message}`;
+});
 
 document.querySelector("#profile-select").addEventListener("change", async (event) => { await ApplyOS.setActiveProfile(event.target.value); window.location.reload(); });
 document.querySelector("#new-profile").addEventListener("click", async () => {
@@ -285,7 +429,7 @@ document.querySelector("#export-backup").addEventListener("click", async (event)
   try {
     const result = await ApplyOS.exportEncryptedBackup(password, chrome.runtime.getManifest().version);
     const date = new Date().toISOString().slice(0, 10);
-    downloadTextFile(result.serialized, `applyos-backup-${date}.applyos`);
+    downloadTextFile(result.serialized, `scout-backup-${date}.scout`);
     setBackupStatus(`Encrypted backup downloaded · ${backupSummaryText(result.summary)}`, "success");
     document.querySelector("#backup-password").value = ""; document.querySelector("#backup-confirm").value = "";
   } catch (error) { setBackupStatus(error.message, "error"); }
@@ -295,13 +439,13 @@ document.querySelector("#export-backup").addEventListener("click", async (event)
 document.querySelector("#preview-backup").addEventListener("click", async (event) => {
   const button = event.currentTarget;
   const file = document.querySelector("#backup-file").files?.[0];
-  if (!file) { setBackupStatus("Choose an encrypted .applyos file first.", "error"); return; }
+  if (!file) { setBackupStatus("Choose an encrypted Scout backup first.", "error"); return; }
   if (file.size > 64 * 1024 * 1024) { setBackupStatus("This backup is larger than the 64 MB restore limit.", "error"); return; }
   button.disabled = true; pendingRestore = null; setBackupStatus("Decrypting locally…");
   try {
     pendingRestore = await ApplyOS.decryptBackup(await file.text(), document.querySelector("#restore-password").value);
     const summary = ApplyOS.backupSummary(pendingRestore);
-    document.querySelector("#backup-summary-title").textContent = `ApplyOS ${summary.extension_version} backup`;
+    document.querySelector("#backup-summary-title").textContent = `Scout ${summary.extension_version} backup`;
     document.querySelector("#backup-summary").textContent = backupSummaryText(summary);
     document.querySelector("#restore-confirmation").value = "";
     document.querySelector("#restore-backup").disabled = true;
@@ -317,8 +461,8 @@ document.querySelector("#restore-confirmation").addEventListener("input", (event
 
 document.querySelector("#restore-backup").addEventListener("click", async (event) => {
   if (!pendingRestore || document.querySelector("#restore-confirmation").value !== "RESTORE") return;
-  if (!window.confirm("Replace this browser's ApplyOS data with the reviewed backup? A one-step local undo checkpoint will be kept.")) return;
-  const button = event.currentTarget; button.disabled = true; setBackupStatus("Restoring and validating local data…");
+  if (!window.confirm("Replace this browser's Scout data with the reviewed backup? A one-step local undo checkpoint will be kept.")) return;
+  const button = event.currentTarget; button.disabled = true; setBackupStatus("Restoring and validating workspace data…");
   try {
     const summary = await ApplyOS.restoreBackup(pendingRestore);
     setBackupStatus(`Restore complete · ${backupSummaryText(summary)} · Reloading…`, "success");
@@ -327,8 +471,8 @@ document.querySelector("#restore-backup").addEventListener("click", async (event
 });
 
 document.querySelector("#undo-restore").addEventListener("click", async (event) => {
-  if (!window.confirm("Undo the last successful restore and return to the previous local data?")) return;
+  if (!window.confirm("Undo the last successful restore and return to the previous workspace state?")) return;
   const button = event.currentTarget; button.disabled = true; setBackupStatus("Recovering the pre-restore checkpoint…");
-  try { await ApplyOS.undoLastRestore(); setBackupStatus("Previous local data recovered. Reloading…", "success"); window.setTimeout(() => window.location.reload(), 700); }
+  try { await ApplyOS.undoLastRestore(); setBackupStatus("Previous workspace state recovered. Reloading…", "success"); window.setTimeout(() => window.location.reload(), 700); }
   catch (error) { setBackupStatus(error.message, "error"); button.disabled = false; }
 });

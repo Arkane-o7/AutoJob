@@ -200,8 +200,70 @@ export interface ApplyOSState {
   settings: {
     final_follow_up_enabled: boolean;
     notification_enabled: boolean;
+    cloud_sync_enabled?: boolean;
+    resume_sync_enabled?: boolean;
   };
   migrated_at: string;
+}
+
+export interface CloudConfig {
+  projectUrl: string;
+  publishableKey: string;
+  provider: "google" | "linkedin_oidc";
+  accountRequired: true;
+  providers: {
+    emailOtp: boolean;
+    google: "google";
+    linkedin: "linkedin_oidc";
+  };
+  supportFunction: string;
+  deleteFunction: string;
+  buildMode: "development" | "production" | "test";
+  allowRuntimeConfig: boolean;
+}
+
+export interface CloudSyncMeta {
+  enabled: boolean;
+  status: "off" | "pending" | "syncing" | "synced" | "offline" | "conflict" | "error";
+  serverVersion: number;
+  lastSyncedAt: string | null;
+  conflict: { serverVersion: number; detectedAt: string } | null;
+  pendingCount?: number;
+  error?: string | null;
+}
+
+export type CloudEntityType = "profile" | "application" | "contact" | "interview" | "reminder" | "answer_memory" | "learned_answer" | "resume_version" | "knowledge_graph" | "settings" | "onboarding_progress";
+
+export interface CloudMutation {
+  mutationId: string;
+  entityType: CloudEntityType;
+  entityId: string;
+  operation: "upsert" | "delete";
+  baseVersion: number;
+  payload: Record<string, unknown>;
+  createdAt: string;
+  attempts: number;
+}
+
+export interface CloudRepositoryMeta {
+  cursor: number;
+  status: "not_started" | "pending" | "synced" | "offline" | "conflict";
+  lastPulledAt: string | null;
+  lastFlushedAt: string | null;
+  conflict: Record<string, unknown> | null;
+}
+
+export interface CandidatePublication {
+  visibility: "private" | "recruiters";
+  headline: string;
+  target_roles: string[];
+  location: string;
+  skills: string[];
+  experience_summary: string;
+  portfolio_url: string;
+  linkedin_url: string;
+  published_at: string | null;
+  updated_at: string;
 }
 
 export interface BackupSummary {

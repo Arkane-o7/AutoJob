@@ -81,7 +81,7 @@
     };
   };
 
-  Diagnostics.githubIssueUrl = function githubIssueUrl(report = {}, repository = "Arkane-o7/AutoJob") {
+  Diagnostics.supportEnvelope = function supportEnvelope(report = {}, details = {}) {
     const safe = Diagnostics.buildReport({
       pageUrl: `https://${sourceDomain(`https://${report.source_domain || "unknown"}`)}`,
       platform: report.platform,
@@ -89,44 +89,11 @@
       generatedAt: report.generated_at,
       fields: report.fields
     });
-    const allFields = safe.fields;
-    let includedFields = allFields.slice(0, 20);
-    let json = "";
-    do {
-      json = JSON.stringify({ ...safe, fields: includedFields, fields_omitted: Math.max(0, allFields.length - includedFields.length) }, null, 2);
-      if (json.length <= 6000 || !includedFields.length) break;
-      includedFields = includedFields.slice(0, -1);
-    } while (includedFields.length);
-    const body = [
-      "## ApplyOS site compatibility report",
-      "",
-      `- Domain: ${safe.source_domain}`,
-      `- Platform: ${safe.platform}`,
-      `- Extension version: ${safe.extension_version}`,
-      `- Selected fields: ${allFields.length}`,
-      "",
-      "I reviewed the payload below before opening this issue. It contains field labels and allowlisted DOM structure only—no entered answers, resume data, or page query parameters.",
-      "",
-      "<details><summary>Sanitized diagnostic payload</summary>",
-      "",
-      "```json",
-      json,
-      "```",
-      "",
-      "</details>",
-      "",
-      "### What did ApplyOS do incorrectly?",
-      "<!-- Please describe what was missed or filled incorrectly. Remove anything you do not want to share publicly. -->"
-    ].join("\n");
-    const params = {
-      title: `[Site report] ${safe.source_domain}`,
-      body,
-      labels: "bug"
+    return {
+      description: redact(details.description, 2000),
+      expected_behavior: redact(details.expected_behavior, 2000),
+      actual_behavior: redact(details.actual_behavior, 2000),
+      diagnostic_payload: safe
     };
-    const query = Object.entries(params)
-      .map(([key, value]) => `${encodeURIComponent(key)}=${encodeURIComponent(value)}`)
-      .join("&");
-    const slug = String(repository || "Arkane-o7/AutoJob").replace(/^https?:\/\/github\.com\//i, "").replace(/^\/+|\/+$/g, "");
-    return `https://github.com/${slug}/issues/new?${query}`;
   };
 })(globalThis);

@@ -24,7 +24,7 @@ const ATS_MARKUP = Object.freeze({
   ashby: '<div data-ashby-job-posting aria-hidden="true"></div>',
   smartrecruiters: '<div data-test="application-form" aria-hidden="true"></div>',
   taleo: '<div class="taleo-application" aria-hidden="true"></div>',
-  microsoft: '<header><a href="https://www.microsoft.com">Microsoft</a></header><nav aria-label="Application sections"></nav><div class="jobCartPositionName-fixture">Software Engineering INTERN</div><div class="locationsContainer-fixture">India, Multiple Locations</div>',
+  microsoft: '<header><a href="https://www.microsoft.com">Microsoft</a></header><nav aria-label="Application sections"></nav><div class="jobCartPositionName-fixture">Software Engineering INTERN</div><div class="locationsContainer-fixture">India, Multiple Locations</div><div class="job-description-fixture">Build React and TypeScript services on AWS with Kubernetes and Docker.</div>',
   northstarz: '<div data-testid="northstarz-application" aria-hidden="true"></div>',
   "react-dropzone": '<div data-testid="generic-react-application" aria-hidden="true"></div>',
   icims: '<div class="iCIMS_Application" aria-hidden="true"></div>'

@@ -59,7 +59,7 @@ test("hidden controls are omitted without inspecting their values", async () => 
   assert.equal(ApplyOS.Diagnostics.describeField({ tag: "textarea", hidden: true, label: "Notes", value: "SECRET" }), null);
 });
 
-test("reviewed diagnostics create a bounded prefilled GitHub issue without private values", async () => {
+test("reviewed diagnostics create a bounded private support envelope without repository or private values", async () => {
   const ApplyOS = await pureRuntime();
   const report = ApplyOS.Diagnostics.buildReport({
     pageUrl: "https://apply.example.test/form?candidate=PRIVATE_QUERY#step",
@@ -73,17 +73,17 @@ test("reviewed diagnostics create a bounded prefilled GitHub issue without priva
       attributes: { "data-testid": "candidate-email", value: "PRIVATE_ATTRIBUTE" }
     }]
   });
-  const issueUrl = ApplyOS.Diagnostics.githubIssueUrl(report);
-  const parsed = new URL(issueUrl);
-  const body = parsed.searchParams.get("body");
-  assert.equal(parsed.origin + parsed.pathname, "https://github.com/Arkane-o7/AutoJob/issues/new");
-  assert.equal(parsed.searchParams.get("title"), "[Site report] apply.example.test");
-  assert.match(body, /candidate-email/);
-  assert.match(body, /\[redacted-email\]/);
+  const envelope = ApplyOS.Diagnostics.supportEnvelope(report, { description: "Dropdown stayed empty", expected_behavior: "Select No", actual_behavior: "No selection" });
+  const serialized = JSON.stringify(envelope);
+  assert.equal(envelope.description, "Dropdown stayed empty");
+  assert.equal(envelope.diagnostic_payload.source_domain, "apply.example.test");
+  assert.match(serialized, /candidate-email/);
+  assert.match(serialized, /\[redacted-email\]/);
+  assert.doesNotMatch(serialized, /github\.com|Arkane-o7|issues\/new/i);
   for (const secret of ["PRIVATE_QUERY", "PRIVATE_ENTERED_VALUE", "PRIVATE_ATTRIBUTE", "private.person@example.test"]) {
-    assert.doesNotMatch(issueUrl, new RegExp(secret, "i"));
+    assert.doesNotMatch(serialized, new RegExp(secret, "i"));
   }
-  assert.ok(issueUrl.length < 8000, "prefilled issue URL stays within a conservative browser-safe bound");
+  assert.ok(serialized.length < 65536, "support payload stays within the endpoint limit");
 });
 
 test("submission scoring accepts strong confirmation only after recent trusted intent", async () => {

@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Scout — Account</title>
+  <link rel="icon" href="assets/icons/scout-32.png">
+  <link rel="stylesheet" href="account.css">
+  <link rel="stylesheet" href="shared/header.css">
+  <style>
+    .migration-card{border:2px solid var(--warning);box-shadow:8px 8px 0 rgba(209,154,47,.28)}
+    .record-summary{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid rgba(23,24,20,.35);margin:22px 0}
+    .record-summary>div{padding:14px;display:grid;gap:5px;border-right:1px solid rgba(23,24,20,.2);border-bottom:1px solid rgba(23,24,20,.2)}
+    .record-summary b{font:400 24px Georgia,serif}
+    .record-summary span,.record-summary .wide-record{font:700 8px/1.4 "Courier New",monospace;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}
+    .record-summary .wide-record{grid-column:1/-1;text-transform:none}
+    .migration-blocked{opacity:.65}.migration-blocked .button-row{display:none}
+    .conflict-panel{margin-top:20px;padding:22px;border:2px solid var(--warning);background:rgba(209,154,47,.08)}
+    .conflict-panel h3{margin:0 0 8px;font:400 24px Georgia,serif}.conflict-panel>p{max-width:660px;color:var(--muted);font-size:11px;line-height:1.55}
+    .conflict-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:18px}
+    .conflict-version{position:relative;display:flex;min-width:0;min-height:210px;flex-direction:column;padding:18px;border:1px solid rgba(23,24,20,.45);background:rgba(255,255,255,.3);transition:background .16s ease,border-color .16s ease,transform .16s ease}
+    .conflict-version.newest{border-color:var(--ink);background:rgba(183,255,60,.18);box-shadow:5px 5px 0 rgba(23,24,20,.16)}
+    .conflict-version__head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:20px}
+    .conflict-version__kicker{display:block;margin-bottom:6px;font:700 8px/1 "Courier New",monospace;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+    .conflict-version h4{margin:0;font:400 23px/1.05 Georgia,serif}
+    .conflict-version__badge{padding:5px 7px;border:1px solid var(--ink);background:var(--acid);font:700 7px/1 "Courier New",monospace;letter-spacing:.1em;text-transform:uppercase;white-space:nowrap}
+    .conflict-version__badge:empty{display:none}
+    .conflict-version dl{display:grid;grid-template-columns:72px 1fr;gap:9px 12px;margin:0 0 20px}
+    .conflict-version dt{font:700 8px/1.35 "Courier New",monospace;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+    .conflict-version dd{min-width:0;margin:0;font-size:11px;line-height:1.35;overflow-wrap:anywhere}
+    .conflict-version button{width:100%;margin-top:auto}
+    .conflict-recommendation{margin-top:16px!important;padding:11px 13px;border-left:3px solid var(--acid);background:rgba(255,255,255,.34);color:var(--ink)!important}
+    .auth-consent{margin:0 0 6px;border:1px solid #676860;padding:14px;background:#22231f}.auth-consent b{color:var(--paper)}.auth-consent small{color:#c3c2b9}.auth-consent input{accent-color:var(--acid)}
+    @media(max-width:560px){.record-summary{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:700px){.conflict-grid{grid-template-columns:1fr}.conflict-version{min-height:190px}}
+  </style>
+</head>
+<body data-scout-page="account">
+  <header class="scout-header" data-scout-header>
+    <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
+    <nav class="scout-header__nav" aria-label="Primary navigation">
+      <a href="dashboard.html" data-scout-nav="applications">Applications</a>
+      <a href="dashboard.html?section=contacts" data-scout-nav="contacts">Contacts</a>
+    </nav>
+    <div class="scout-header__actions">
+      <label class="scout-header__profile"><span class="scout-visually-hidden">Active profile</span><select data-scout-profile-select aria-label="Active profile"><option>Loading…</option></select></label>
+      <a class="scout-header__action" href="options.html" data-scout-nav="profile">Profile &amp; answers</a>
+      <a class="scout-header__action" href="account.html" data-scout-nav="account">Account &amp; sync</a>
+    </div>
+  </header>
+
+  <main>
+    <aside>
+      <p class="eyebrow">ACCOUNT &amp; SYNC</p>
+      <h1>One account.<br><em>Your workspace,<br>everywhere.</em></h1>
+      <p>Scout securely keeps your application workspace available across your signed-in devices. LinkedIn is used only to sign in when you choose it; Scout does not import your network.</p>
+      <div class="privacy-seal">
+        <b>PRIVACY BOUNDARIES</b>
+        <span>Private account workspace</span>
+        <span>Encrypted connection and user-scoped access</span>
+        <span>No recruiter-facing profile in this release</span>
+      </div>
+    </aside>
+
+    <div class="stack">
+      <section class="account-card hero-card" aria-labelledby="identity-title">
+        <div class="identity-heading">
+          <p class="eyebrow">IDENTITY</p>
+          <h2 id="identity-title">Checking your session…</h2>
+          <p id="identity-copy">Connecting this browser to your Scout workspace.</p>
+        </div>
+
+        <div id="auth-loading" class="auth-loading" role="status" aria-live="polite">
+          <span class="spinner" aria-hidden="true"></span> Checking your session…
+        </div>
+
+        <div id="signed-out-actions" class="auth-panel hidden">
+          <label class="choice auth-consent"><input id="account-data-consent" type="checkbox"><span><b>I agree to create my private Scout workspace</b><small>Scout will store my account identity, profile, resumes, applications, contacts, interviews, and saved answers in its cloud database, with a user-specific offline cache, to provide the features described here.</small></span></label>
+          <button id="google-sign-in" class="provider-button" type="button"><span>Continue with Google</span><b>G</b></button>
+          <button id="linkedin-sign-in" class="provider-button outline light" type="button"><span>Continue with LinkedIn</span><b>in</b></button>
+          <div class="divider"><span>or use email</span></div>
+          <form id="email-request-form" class="email-form">
+            <label for="auth-email">Email address</label>
+            <div class="inline-control"><input id="auth-email" type="email" autocomplete="email" inputmode="email" required placeholder="you@example.com"><button type="submit">Send code <span>→</span></button></div>
+          </form>
+          <form id="email-verify-form" class="email-form hidden">
+            <label for="auth-code">Verification code sent to <strong id="code-destination"></strong></label>
+            <div class="inline-control"><input id="auth-code" type="text" autocomplete="one-time-code" inputmode="numeric" maxlength="8" required placeholder="Enter code"><button type="submit">Verify <span>→</span></button></div>
+            <button id="change-email" class="text-button" type="button">Use a different email</button>
+          </form>
+        </div>
+
+        <div id="signed-in-actions" class="signed-in-panel hidden">
+          <div id="user-avatar" class="avatar" aria-hidden="true">A</div>
+          <div><b id="user-name">Scout member</b><span id="user-email"></span></div>
+          <button id="sign-out" class="outline light" type="button">Sign out</button>
+        </div>
+        <p id="identity-result" class="inline-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="account-card migration-card hidden" id="migration-section" aria-labelledby="migration-title">
+        <div class="section-head">
+          <div><p class="eyebrow">EXISTING WORKSPACE FOUND</p><h2 id="migration-title">Review before connecting</h2></div>
+          <span class="state-pill warning">REVIEW</span>
+        </div>
+        <p class="section-copy">Scout found data created before account storage was enabled. Nothing has been uploaded. Choose whether to import this workspace into the signed-in account or permanently discard the legacy browser copy.</p>
+        <div id="migration-summary" class="record-summary" aria-label="Legacy workspace contents"></div>
+        <div class="notice"><b>Import safety</b><p>The import uses stable record identifiers and can be retried without duplicating records. Scout verifies server record counts before clearing the legacy copy.</p></div>
+        <div class="button-row"><button id="import-legacy" type="button">Import into my account <span>→</span></button><button id="discard-legacy" class="outline" type="button">Discard legacy copy</button></div>
+        <p id="migration-status" class="inline-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="account-card" id="sync-section" aria-labelledby="sync-title">
+        <div class="section-head">
+          <div><p class="eyebrow">PRIVATE CLOUD WORKSPACE</p><h2 id="sync-title">Workspace status</h2></div>
+          <span id="sync-state" class="state-pill neutral">CHECKING</span>
+        </div>
+        <div class="sync-summary">
+          <div><span>LAST SYNCED</span><b id="last-synced">—</b></div>
+          <div><span>PENDING</span><b id="pending-count">—</b></div>
+          <div><span>CONNECTION</span><b id="connection-state">Checking</b></div>
+        </div>
+        <div id="sync-notice" class="notice"><b>Account required</b><p>Sign in to create or reconnect your private Scout workspace. Temporary offline changes will sync to this account after you reconnect.</p></div>
+        <div id="conflict-panel" class="conflict-panel hidden" aria-labelledby="conflict-title">
+          <h3 id="conflict-title">Review a sync conflict</h3>
+          <p id="conflict-copy">This item was changed in two places. Scout paused syncing so you can choose which version to keep.</p>
+          <div class="conflict-grid" role="group" aria-label="Versions to choose from">
+            <article id="conflict-local-card" class="conflict-version">
+              <div class="conflict-version__head"><div><span class="conflict-version__kicker">THIS DEVICE</span><h4 id="conflict-local-title">Current browser</h4></div><span id="conflict-local-badge" class="conflict-version__badge"></span></div>
+              <dl><dt>Changed</dt><dd id="conflict-local-time">Time unavailable</dd><dt>Device</dt><dd id="conflict-local-device">This Chrome device</dd></dl>
+              <button id="conflict-retry" type="button">Keep this version <span>→</span></button>
+            </article>
+            <article id="conflict-server-card" class="conflict-version">
+              <div class="conflict-version__head"><div><span class="conflict-version__kicker">CLOUD COPY</span><h4 id="conflict-server-title">Synced version</h4></div><span id="conflict-server-badge" class="conflict-version__badge"></span></div>
+              <dl><dt>Synced</dt><dd id="conflict-server-time">Time unavailable</dd><dt>From</dt><dd id="conflict-server-device">Another Chrome device</dd></dl>
+              <button id="conflict-server-use" class="outline" type="button">Use this version</button>
+            </article>
+          </div>
+          <p id="conflict-recommendation" class="conflict-recommendation">Choose the version you recognize. Scout will never replace either copy without your confirmation.</p>
+          <p id="conflict-status" class="inline-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="button-row"><button id="sync-now" type="button">Sync now <span>↗</span></button></div>
+        <p id="sync-detail" class="status-line" role="status" aria-live="polite">Checking workspace status…</p>
+      </section>
+
+      <section class="account-card danger-zone workspace-control">
+        <p class="eyebrow">ACCOUNT CONTROL</p>
+        <h2>Your data</h2>
+        <p>Export a copy of your workspace or permanently delete your Scout account. Deletion includes cloud records, sessions, uploaded resume files, and this account’s cached workspace on this browser.</p>
+        <div class="button-row"><button id="replay-tour" class="outline" type="button">Replay feature tour</button><button id="download-cloud" class="outline" type="button">Export my data</button><button id="delete-account" class="danger" type="button">Delete account</button></div>
+        <p id="account-result" class="inline-status" role="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </main>
+  <script src="shared/constants.js"></script>
+  <script src="shared/matching.js"></script>
+  <script src="shared/followup.js"></script>
+  <script src="shared/profiles.js"></script>
+  <script src="shared/storage.js"></script>
+  <script src="shared/header.js"></script>
+  <script src="account.js"></script>
+</body>
+</html>

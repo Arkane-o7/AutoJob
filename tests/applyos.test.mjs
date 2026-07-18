@@ -27,7 +27,7 @@ async function runtime(seed = {}) {
     btoa: (value) => Buffer.from(value, "binary").toString("base64"), atob: (value) => Buffer.from(value, "base64").toString("binary"), globalThis: null
   });
   context.globalThis = context;
-  for (const file of ["shared/constants.js", "shared/matching.js", "shared/offlyn-core.js", "shared/ats-compat.js", "shared/followup.js", "shared/profiles.js", "shared/ai.js", "shared/graph.js", "shared/agent.js", "shared/storage.js", "shared/backup.js"]) {
+  for (const file of ["shared/constants.js", "shared/matching.js", "shared/offlyn-core.js", "shared/ats-compat.js", "shared/followup.js", "shared/profiles.js", "shared/ai.js", "shared/graph.js", "shared/agent.js", "shared/storage.js", "shared/backup.js", "shared/resume-parser.js"]) {
     vm.runInContext(await readFile(resolve(file), "utf8"), context, { filename: file });
   }
   return { ApplyOS: context.ApplyOS, data };
@@ -191,10 +191,37 @@ test("serializes overlapping async mutations without losing updates", async () =
 
 test("calculates local skill matches and missing skills", async () => {
   const { ApplyOS } = await runtime();
-  const match = ApplyOS.calculateMatch("Build React and TypeScript services on AWS with Kubernetes.", { jobDescription: "Built React TypeScript apps on AWS." });
+  const match = ApplyOS.calculateMatch("Build React and TypeScript services on AWS with Kubernetes.", { resumeText: "Built React TypeScript apps on AWS." });
   assert.ok(match.score > 50);
   assert.deepEqual([...match.matchedSkills], ["typescript", "react", "aws"]);
   assert.ok(match.missingSkills.includes("kubernetes"));
+  assert.equal(match.available, true);
+  const missingDescription = ApplyOS.calculateMatch("", { resumeText: "React TypeScript AWS Kubernetes" });
+  assert.equal(missingDescription.available, false);
+  assert.equal(missingDescription.score, 0);
+  const binaryOnly = ApplyOS.calculateMatch("Kubernetes", { resume: { dataUrl: "data:application/pdf;base64,a3ViZXJuZXRlcw==" } });
+  assert.equal(binaryOnly.score, 0);
+});
+
+test("refreshes saved application matches after profile changes without rewriting unchanged scores", async () => {
+  const { ApplyOS } = await runtime();
+  const application = await ApplyOS.upsertApplication({
+    company: "Acme",
+    role: "Engineer",
+    url: "https://example.com/jobs/match-refresh",
+    description: "Build React and TypeScript services on AWS with Kubernetes."
+  }, { jobDescription: "Retail operations" });
+  assert.equal(application.match_score, 0);
+  const before = await ApplyOS.getState();
+  const refreshed = await ApplyOS.refreshApplicationMatches({ resumeText: "Built React and TypeScript services on AWS with Kubernetes." });
+  assert.equal(refreshed.count, 1);
+  assert.ok(refreshed.applications[0].match_score >= 80);
+  assert.ok(refreshed.applications[0].matched_skills.includes("kubernetes"));
+  const after = await ApplyOS.getState();
+  assert.equal(after.revision, before.revision + 1);
+  const unchanged = await ApplyOS.refreshApplicationMatches({ resumeText: "Built React and TypeScript services on AWS with Kubernetes." });
+  assert.equal(unchanged.count, 0);
+  assert.equal((await ApplyOS.getState()).revision, after.revision);
 });
 
 test("marking applied creates editable 7 and 14 day follow-ups", async () => {
@@ -425,16 +452,21 @@ test("restored application identifiers and links are normalized before dashboard
   assert.equal(state.applications[0].url, "");
 });
 
-test("onboarding is first-run-only and the options page is the sole full profile editor", async () => {
-  const [popup, options, onboarding, popupScript] = await Promise.all([
+test("onboarding stays minimal while contextual tours use the canonical product surfaces", async () => {
+  const [popup, options, onboarding, tourRuntime, popupScript] = await Promise.all([
     readFile(resolve("popup.html"), "utf8"),
     readFile(resolve("options.html"), "utf8"),
     readFile(resolve("onboarding.js"), "utf8"),
+    readFile(resolve("shared/tour.js"), "utf8"),
     readFile(resolve("popup.js"), "utf8")
   ]);
   assert.doesNotMatch(options, /Run setup again/);
   assert.doesNotMatch(popup, /Profile & answer memory/);
-  assert.match(onboarding, /isOnboardingComplete/);
+  assert.match(onboarding, /ScoutTour\.prepareFirstRun/);
+  assert.match(onboarding, /location\.replace\(chrome\.runtime\.getURL\("options\.html"\)\)/);
+  assert.match(tourRuntime, /const VERSION = 2/);
+  assert.match(tourRuntime, /dismissedAt/);
+  assert.match(tourRuntime, /scrollIntoView/);
   assert.match(popupScript, /Edit profile/);
 });
 
@@ -501,6 +533,40 @@ test("resume attachment handles unlabeled React dropzones without repeated attac
   assert.doesNotMatch(source, /attributeFilter: \["class"/);
   const optionsSource = await readFile(resolve("options.js"), "utf8");
   assert.match(optionsSource, /File contents are missing from this older profile/);
+});
+
+test("resume PDF extraction preserves readable page and line boundaries", async () => {
+  const { ApplyOS } = await runtime();
+  let destroyed = false;
+  const pdfjs = {
+    getDocument({ data, isEvalSupported }) {
+      assert.ok(ArrayBuffer.isView(data));
+      assert.equal(isEvalSupported, false);
+      return {
+        promise: Promise.resolve({
+          numPages: 2,
+          async getPage(pageNumber) {
+            return {
+              async getTextContent() {
+                return pageNumber === 1
+                  ? { items: [
+                    { str: "Ada", transform: [1, 0, 0, 1, 0, 700] },
+                    { str: "Lovelace", transform: [1, 0, 0, 1, 30, 700], hasEOL: true },
+                    { str: "Software   Engineer", transform: [1, 0, 0, 1, 0, 680] }
+                  ] }
+                  : { items: [{ str: "TypeScript", transform: [1, 0, 0, 1, 0, 700] }] };
+              },
+              cleanup() {}
+            };
+          },
+          async destroy() { destroyed = true; }
+        })
+      };
+    }
+  };
+  const text = await ApplyOS.extractPdfText(new Uint8Array([1, 2, 3]), pdfjs);
+  assert.equal(text, "Ada Lovelace\nSoftware Engineer\n\nTypeScript");
+  assert.equal(destroyed, true);
 });
 
 test("dashboard drawers use inert state instead of aria-hidden focus transitions", async () => {

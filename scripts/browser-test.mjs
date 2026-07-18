@@ -19,6 +19,7 @@ const profile = Object.freeze({
   country: "United Kingdom", workAuthorization: "Yes", desiredStartDate: "2026-08-01",
   visaSponsorship: "No",
   currentCompany: "Analytical Engines", currentTitle: "Programmer", employmentStartDate: "2024-01", jobDescription: "Built reliable computing systems.",
+  resumeText: "Built React and TypeScript services on AWS with Kubernetes and Docker.",
   resume: {
     name: resumeName, type: "application/pdf", size: 51,
     dataUrl: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\n% ApplyOS browser regression fixture\n%%EOF").toString("base64")}`
@@ -52,6 +53,18 @@ async function waitForWorker(context) {
   return context.serviceWorkers()[0] || context.waitForEvent("serviceworker", { timeout: 15000 });
 }
 
+async function waitForSignedOutInitialization(worker) {
+  await worker.evaluate(async () => {
+    const deadline = Date.now() + 10000;
+    while (Date.now() < deadline) {
+      const title = await chrome.action.getTitle({});
+      if (/Sign in required/i.test(title)) return;
+      await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+    }
+    throw new Error("Scout signed-out initialization timed out");
+  });
+}
+
 async function waitForExtensionInitialization(worker) {
   await worker.evaluate(async () => {
     const deadline = Date.now() + 10000;
@@ -62,6 +75,38 @@ async function waitForExtensionInitialization(worker) {
     }
     throw new Error("ApplyOS service worker initialization timed out");
   });
+}
+
+async function installBrowserAccount(worker) {
+  await worker.evaluate(async ({ fakeProfile, userId }) => {
+    await chrome.storage.local.clear();
+    const bundledCloud = await ApplyOS.getCloudConfig();
+    if (!bundledCloud.projectUrl) {
+      await ApplyOS.saveCloudConfig({
+        projectUrl: "http://127.0.0.1:54321",
+        publishableKey: "sb_publishable_browser_regression"
+      });
+    }
+    await ApplyOS.installDevelopmentSession({
+      access_token: "browser-regression-access-token",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+      user: { id: userId, email: "ada@example.test", user_metadata: { full_name: "Ada Lovelace" } }
+    });
+    await chrome.storage.local.set({
+      applyos_cache_owner_id: userId,
+      applyos_cloud_owner_id: userId,
+      applyos_legacy_workspace_decision: { decision: "imported", userId, at: new Date().toISOString() },
+      profile: { ...fakeProfile, firstName: "Stale", address: "", city: "", state: "", postalCode: "" },
+      profilesIndex: {
+        activeId: "browser_test",
+        profiles: [{ id: "browser_test", name: "Browser test", targetRole: "", color: "#b7ff3c", createdAt: Date.now() }]
+      },
+      profile_browser_test: fakeProfile
+    });
+    await ApplyOS.ensureState();
+    await ApplyOS.ensureGraph();
+    await ApplyOS.persistActiveUserCache(userId);
+  }, { fakeProfile: profile, userId: "11111111-1111-4111-8111-111111111111" });
 }
 
 async function sendFill(worker) {
@@ -233,18 +278,9 @@ async function main() {
     });
     const worker = await waitForWorker(context);
     assert.match(worker.url(), /^chrome-extension:\/\//, "unpacked MV3 service worker should run");
+    await waitForSignedOutInitialization(worker);
+    await installBrowserAccount(worker);
     await waitForExtensionInitialization(worker);
-    await worker.evaluate(async (fakeProfile) => {
-      await chrome.storage.local.clear();
-      await chrome.storage.local.set({
-        profile: { ...fakeProfile, firstName: "Stale", address: "", city: "", state: "", postalCode: "" },
-        profilesIndex: {
-          activeId: "browser_test",
-          profiles: [{ id: "browser_test", name: "Browser test", targetRole: "", color: "#b7ff3c", createdAt: Date.now() }]
-        },
-        profile_browser_test: fakeProfile
-      });
-    }, profile);
 
     const page = await context.newPage();
     await Promise.all(context.pages().filter((candidate) => candidate !== page).map((candidate) => candidate.close().catch(() => {})));
@@ -308,38 +344,66 @@ async function main() {
       console.log(`PASS ${testCase.id.padEnd(15)} values, events, resume, privacy and no-navigation invariants`);
     }
 
+    const promptUrl = `http://apply.careers.microsoft.com:${server.port}/microsoft`;
+    await page.goto(promptUrl, { waitUntil: "domcontentloaded" });
+    await page.bringToFront();
+    const pagePrompt = page.locator(".scout-page-prompt");
+    await pagePrompt.waitFor({ state: "visible", timeout: 5000 });
+    assert.match(await pagePrompt.locator("h2").textContent(), /autofill/i, "known ATS form should offer review-gated autofill");
+    await pagePrompt.locator(".scout-page-primary").click();
+    await pagePrompt.waitFor({ state: "detached" });
+    assert.equal(await page.locator("#Contact_Information_q_address").inputValue(), profile.address, "page prompt invokes the same safe autofill path");
+    assert.equal(await page.evaluate(() => window.__fixture.submitCount), 0, "page prompt never submits the application");
+    const promptedApplication = await worker.evaluate(async (url) => ApplyOS.getApplicationByUrl(url), promptUrl);
+    assert.equal(promptedApplication?.company, "Microsoft", "page prompt saves the detected job before autofill");
+    assert.ok(promptedApplication?.match_score >= 80, "saved job match uses the active profile's extracted resume text");
+    assert.ok(promptedApplication?.matched_skills?.includes("typescript"), "saved job records resume-text skill overlap");
+    await page.locator(".applykit-toast").first().waitFor({ state: "visible" });
+    assert.equal(await page.locator(".scout-notification-stack > .applykit-toast").count(), 1, "save-and-autofill reports its result once");
+    await sendFill(worker);
+    await page.waitForFunction(() => document.querySelectorAll(".scout-notification-stack > .applykit-toast").length >= 2);
+    const toastLayout = await page.locator(".scout-notification-stack > .applykit-toast").evaluateAll((items) => items.map((item) => {
+      const rect = item.getBoundingClientRect();
+      return { top: rect.top, bottom: rect.bottom };
+    }));
+    assert.ok(toastLayout.every((item, index) => index === 0 || toastLayout[index - 1].bottom < item.top), "simultaneous page notifications stack vertically without overlap");
+    console.log("PASS detected ATS page offers explicit save-and-autofill without submission");
+
+    await page.goto(`http://apply.example.test:${server.port}/react-dropzone`, { waitUntil: "domcontentloaded" });
+    await sendFill(worker);
     await page.bringToFront();
     const reportResponse = await activeTabMessage(worker, { type: "APPLYOS_REPORT_BROKEN" });
     assert.equal(reportResponse?.ok, true, "broken-field review should open through the content message path");
     const review = page.locator(".applyos-review-dialog");
     await review.waitFor({ state: "visible" });
-    const githubReport = review.locator(".applyos-review-report");
-    assert.equal(await githubReport.isDisabled(), true, "GitHub reporting requires an explicit field selection");
+    const privateReport = review.locator(".applyos-review-report");
+    assert.equal(await privateReport.isDisabled(), true, "private reporting requires reviewed fields and a description");
     assert.equal(await review.locator("input[type='checkbox']:checked").count(), 0, "diagnostic fields require explicit selection");
-    assert.deepEqual(JSON.parse(await review.locator("textarea").inputValue()).fields, [], "unreviewed diagnostics contain no fields");
+    assert.deepEqual(JSON.parse(await review.locator(".applyos-review-preview textarea").inputValue()).fields, [], "unreviewed diagnostics contain no fields");
     for (const label of ["Email address", "Upload CV/Resume"]) {
       await review.locator("label", { hasText: label }).locator("input[type='checkbox']").check();
     }
-    const reviewedPayload = await review.locator("textarea").inputValue();
+    const reviewedPayload = await review.locator(".applyos-review-preview textarea").inputValue();
     assert.match(reviewedPayload, /Email address/);
     assert.match(reviewedPayload, /Upload CV\/Resume/);
     for (const privateValue of ["existing@example.test", resumeName, "+44 20 7946 0958"]) {
       assert.equal(reviewedPayload.includes(privateValue), false, `diagnostic preview excludes ${privateValue}`);
     }
-    assert.equal(await githubReport.isEnabled(), true, "reviewed fields enable the manual GitHub report action");
-    const githubUrl = await githubReport.getAttribute("data-report-url");
-    assert.match(githubUrl, /^https:\/\/github\.com\/Arkane-o7\/AutoJob\/issues\/new\?/);
-    for (const privateValue of ["existing@example.test", resumeName, "+44 20 7946 0958"]) {
-      assert.equal(githubUrl.includes(privateValue), false, `prefilled GitHub report excludes ${privateValue}`);
-    }
+    assert.equal(await privateReport.isDisabled(), true, "selected fields alone do not send a report without user context");
+    await review.locator(".applyos-review-details textarea").first().fill("The reviewed email and resume fields were not filled.");
+    assert.equal(await privateReport.isEnabled(), true, "reviewed fields plus description enable private submission");
+    assert.equal(await privateReport.getAttribute("data-report-url"), null, "private reports expose no repository URL");
+    await privateReport.click();
+    await page.waitForFunction(() => /unavailable|unreachable|temporarily|try again|copy|download|reference/i.test(document.querySelector(".applyos-review-dialog footer > span")?.textContent || ""));
+    assert.match(await review.locator("footer > span").textContent(), /unavailable|unreachable|temporarily|try again|copy|download|reference/i, "support failures retain a review-safe fallback without exposing a repository");
     await review.locator(".applyos-review-close").click();
-    console.log("PASS reviewed-report value-free preview and manual GitHub issue handoff");
+    console.log("PASS reviewed-report value-free preview and private support fallback");
 
     const extensionId = new URL(worker.url()).host;
     const popupProbe = await context.newPage();
     await popupProbe.setViewportSize({ width: 420, height: 600 });
     await popupProbe.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
-    await popupProbe.waitForTimeout(250);
+    await popupProbe.waitForFunction(() => document.querySelector("#score strong")?.textContent.trim() === "-");
     const popupMetrics = await popupProbe.evaluate(() => {
       document.querySelector("#record-controls")?.classList.remove("hidden");
       document.querySelector("#agent")?.classList.remove("hidden");
@@ -363,6 +427,84 @@ async function main() {
     await popupProbe.close();
     console.log("PASS popup fits the 420x600 Chrome surface without a scroll container");
 
+    const conflictFixture = await worker.evaluate(async () => {
+      const userId = "11111111-1111-4111-8111-111111111111";
+      const keys = ApplyOS.cloudRepositoryKeys(userId);
+      const mutationId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+      await chrome.storage.local.set({
+        [keys.cache]: {},
+        [keys.outbox]: [{ mutationId, entityType: "application", entityId: "job_conflict", operation: "upsert", baseVersion: 4, payload: { id: "job_conflict", role: "Research Scientist", company: "Northstar Labs", notes: "private local notes" }, createdAt: "2026-07-18T13:23:33.568Z", attempts: 1 }],
+        [keys.meta]: {
+          cursor: 4,
+          status: "conflict",
+          conflict: {
+            mutationId,
+            entityType: "application",
+            entityId: "job_conflict",
+            localPayload: { id: "job_conflict", role: "Research Scientist", company: "Northstar Labs", notes: "private local notes" },
+            serverPayload: { id: "job_conflict", role: "Research Scientist", company: "Northstar Labs", notes: "private server notes" },
+            serverVersion: 5,
+            localDeviceId: "device_browser_test",
+            localDeviceLabel: "Chrome on macOS",
+            localUpdatedAt: "2026-07-18T13:23:33.568Z",
+            serverDeviceId: "device_windows_test",
+            serverDeviceLabel: "Chrome on Windows",
+            serverUpdatedAt: "2026-07-18T12:00:00.000Z",
+            detectedAt: "2026-07-18T13:24:00.000Z"
+          }
+        }
+      });
+      return ApplyOS.getCloudRepositoryState();
+    });
+    assert.equal(conflictFixture.meta?.status, "conflict", "browser fixture installs a pending sync conflict");
+
+    const accountProbe = await context.newPage();
+    const accountMessages = [];
+    accountProbe.on("console", (message) => { if (["warning", "error"].includes(message.type())) accountMessages.push(message.text()); });
+    await accountProbe.goto(`chrome-extension://${extensionId}/account.html`, { waitUntil: "domcontentloaded" });
+    await accountProbe.locator("#identity-title").waitFor({ state: "visible" });
+    await accountProbe.waitForFunction(() => !document.querySelector("#signed-in-actions")?.classList.contains("hidden"));
+    assert.match(await accountProbe.locator("#identity-title").textContent(), /account|connected|welcome/i, "account page recognizes the authenticated workspace");
+    assert.equal(await accountProbe.locator("#deployment-config").count(), 0, "customer UI never exposes deployment configuration");
+    assert.equal(await accountProbe.getByText("Continue locally").count(), 0, "account-required builds expose no local-only bypass");
+    assert.equal(await accountProbe.locator("#google-sign-in").count(), 1, "Google is available as a supported sign-in method");
+    assert.equal(await accountProbe.locator("#linkedin-sign-in").count(), 1, "LinkedIn is available as a supported sign-in method");
+    assert.equal(await accountProbe.locator("#email-request-form").count(), 1, "email code login is available as a supported sign-in method");
+    assert.equal(await accountProbe.locator("#publication-section").count(), 0, "unreleased recruiter search has no customer-facing controls");
+    await accountProbe.evaluate((conflict) => renderConflict(conflict), conflictFixture.meta.conflict);
+    await accountProbe.locator("#conflict-panel").waitFor({ state: "visible" });
+    assert.equal(await accountProbe.locator("#conflict-panel textarea").count(), 0, "conflict review never exposes raw JSON editors");
+    assert.equal(await accountProbe.locator("#conflict-panel .conflict-version__badge", { hasText: "NEWEST" }).count(), 1, "conflict review identifies exactly one newest version");
+    assert.match(await accountProbe.locator("#conflict-local-device").textContent(), /Chrome on macOS/);
+    assert.match(await accountProbe.locator("#conflict-server-device").textContent(), /Chrome on Windows/);
+    assert.match(await accountProbe.locator("#conflict-recommendation").textContent(), /Newest: this browser/i);
+    assert.equal((await accountProbe.locator("#conflict-panel").innerText()).includes("private local notes"), false, "conflict review hides private payload values");
+    assert.match(await accountProbe.locator("body").innerText(), /account|required|offline|cache/i, "account page explains cloud authority and the user-specific offline cache");
+    assert.equal((await accountProbe.locator("body").innerText()).includes("github.com/Arkane-o7"), false, "account and support surfaces never expose the source repository");
+    assert.deepEqual(accountMessages, [], `account page should not emit console warnings or errors: ${accountMessages.join(" | ")}`);
+    await accountProbe.close();
+    await worker.evaluate(async () => {
+      const keys = ApplyOS.cloudRepositoryKeys("11111111-1111-4111-8111-111111111111");
+      const stored = await chrome.storage.local.get([keys.meta, keys.outbox]);
+      await chrome.storage.local.set({ [keys.meta]: { ...(stored[keys.meta] || {}), status: "synced", conflict: null }, [keys.outbox]: [] });
+    });
+    console.log("PASS account page shows a readable newest-version conflict choice without raw JSON");
+
+    const starterProbe = await context.newPage();
+    await starterProbe.goto(`chrome-extension://${extensionId}/onboarding.html?start=1`, { waitUntil: "domcontentloaded" });
+    await starterProbe.waitForFunction(() => document.querySelector("[data-panel='0']")?.classList.contains("active"));
+    assert.equal(await starterProbe.locator("[data-panel]").count(), 2, "first-run onboarding stays focused on two screens");
+    assert.match(await starterProbe.locator("[data-panel='0'] h2").textContent(), /show you the rest in context/i);
+    await starterProbe.locator("#next").click();
+    await starterProbe.waitForFunction(() => document.querySelector("[data-panel='1']")?.classList.contains("active"));
+    assert.equal(await starterProbe.locator("[data-panel='1'] input[required]").count(), 4, "starter profile asks only for core autofill identity fields");
+    assert.match(await starterProbe.locator("#next").textContent(), /Save & show me around/);
+    await starterProbe.locator("#next").click();
+    await starterProbe.waitForURL(`chrome-extension://${extensionId}/dashboard.html?tour=1`);
+    await starterProbe.locator(".scout-tour-card", { hasText: "Know what needs attention." }).waitFor({ state: "visible" });
+    await starterProbe.close();
+    console.log("PASS two-screen starter setup hands off to the real dashboard tour");
+
     await worker.evaluate(async () => {
       const stored = await chrome.storage.local.get("profile_browser_test");
       const value = { ...stored.profile_browser_test, structuredFutureField: { preserved: true } };
@@ -382,20 +524,89 @@ async function main() {
     assert.equal(savedProfileState.profile.structuredFutureField.preserved, true, "profile form saves preserve fields owned by future or imported schema versions");
     assert.ok(savedProfileState.profile.onboardingCompletedAt, "saving the canonical profile completes first-run setup");
     assert.match(savedProfileState.resume?.sha256 || "", /^[a-f0-9]{64}$/, "saved resume versions retain a content hash");
+    await worker.evaluate(async () => chrome.storage.local.set({ applyos_tour_progress: { version: 2, setupCompletedAt: new Date().toISOString(), flows: { main: { surface: "options", step: 4, completedAt: new Date().toISOString(), dismissedAt: null } } } }));
     const onboardingProbe = await context.newPage();
     await onboardingProbe.goto(`chrome-extension://${extensionId}/onboarding.html`, { waitUntil: "domcontentloaded" });
     await onboardingProbe.waitForURL(`chrome-extension://${extensionId}/options.html`);
     await onboardingProbe.close();
+    const stateBeforeTour = await worker.evaluate(async () => {
+      const value = await ApplyOS.getState();
+      return { revision: value.revision, applications: value.applications.length, contacts: value.contacts.length };
+    });
+    const tourProbe = await context.newPage();
+    await tourProbe.goto(`chrome-extension://${extensionId}/dashboard.html?tour=1`, { waitUntil: "domcontentloaded" });
+    await tourProbe.locator(".scout-tour-card").waitFor({ state: "visible" });
+    await tourProbe.waitForFunction(() => document.querySelector(".scout-tour-card h2")?.textContent === "Know what needs attention.");
+    assert.match(await tourProbe.locator(".scout-tour-kicker").textContent(), /1\s*\/\s*5/, "dashboard coach marks start on the first real control");
+    for (const expectedTitle of ["Your next move stays visible.", "This is your working pipeline.", "Map the people behind each role.", "Complete your application profile."]) {
+      await tourProbe.locator(".scout-tour-next").click();
+      await tourProbe.waitForFunction((title) => document.querySelector(".scout-tour-card h2")?.textContent === title, expectedTitle);
+    }
+    assert.match(await tourProbe.locator(".scout-tour-card").textContent(), /Complete your application profile/, "dashboard tour reaches the profile handoff");
+    await tourProbe.locator(".scout-tour-next").click();
+    await tourProbe.waitForURL(`chrome-extension://${extensionId}/options.html?tour=1`);
+    await tourProbe.locator(".scout-tour-card").waitFor({ state: "visible" });
+    await tourProbe.waitForFunction(() => document.querySelector(".scout-tour-card h2")?.textContent === "Keep more than one version of you.");
+    assert.match(await tourProbe.locator(".scout-tour-kicker").textContent(), /1\s*\/\s*5/, "profile coach marks resume on the next real surface");
+    for (const expectedTitle of ["Your application source of truth.", "Save the file and the evidence.", "Teach Scout repeated questions.", "Review, then save your profile."]) {
+      await tourProbe.locator(".scout-tour-next").click();
+      await tourProbe.waitForFunction((title) => document.querySelector(".scout-tour-card h2")?.textContent === title, expectedTitle);
+    }
+    await tourProbe.locator(".scout-tour-next").click();
+    await tourProbe.locator(".scout-tour-card").waitFor({ state: "detached" });
+    const stateAfterTour = await worker.evaluate(async () => {
+      const value = await ApplyOS.getState();
+      const stored = await chrome.storage.local.get("applyos_tour_progress");
+      return { revision: value.revision, applications: value.applications.length, contacts: value.contacts.length, tour: stored.applyos_tour_progress };
+    });
+    assert.deepEqual({ revision: stateAfterTour.revision, applications: stateAfterTour.applications, contacts: stateAfterTour.contacts }, stateBeforeTour, "coach marks do not mutate profile or CRM data");
+    assert.ok(stateAfterTour.tour.flows.main.completedAt, "cross-page tour completion is persisted");
+    await tourProbe.close();
     await profileProbe.close();
-    console.log("PASS canonical profile round-trip preserves structured data and completed onboarding redirects");
+    console.log("PASS canonical profile round-trip and contextual read-only product tour");
 
     const helper = await context.newPage();
     const dashboardMessages = [];
     helper.on("console", (message) => { if (["warning", "error"].includes(message.type())) dashboardMessages.push(message.text()); });
     await helper.goto(`chrome-extension://${extensionId}/dashboard.html`, { waitUntil: "domcontentloaded" });
+    await helper.locator("[data-scout-header]").waitFor({ state: "visible" });
+    const headerSnapshot = (target) => target.evaluate(() => {
+      const header = document.querySelector("[data-scout-header]");
+      const rect = header.getBoundingClientRect();
+      return {
+        height: Math.round(rect.height),
+        brand: header.querySelector(".scout-header__wordmark")?.alt || "",
+        brandLoaded: Boolean(header.querySelector(".scout-header__wordmark")?.complete && header.querySelector(".scout-header__wordmark")?.naturalWidth),
+        nav: [...header.querySelectorAll(".scout-header__nav a")].map((item) => item.textContent.trim()),
+        actions: [...header.querySelectorAll(".scout-header__action")].map((item) => item.textContent.trim()),
+        active: header.querySelector("[aria-current='page']")?.dataset.scoutNav || "",
+        profile: header.querySelector("[data-scout-profile-select]")?.value || ""
+      };
+    });
+    const headerSamples = [{ page: "dashboard", ...(await headerSnapshot(helper)) }];
+    for (const [name, path] of [["account", "account.html"], ["profile", "options.html"], ["setup", "onboarding.html?start=1"]]) {
+      const surface = await context.newPage();
+      await surface.goto(`chrome-extension://${extensionId}/${path}`, { waitUntil: "domcontentloaded" });
+      await surface.locator("[data-scout-header]").waitFor({ state: "visible" });
+      headerSamples.push({ page: name, ...(await headerSnapshot(surface)) });
+      await surface.close();
+    }
+    for (const sample of headerSamples) {
+      assert.equal(sample.height, 68, `${sample.page} uses the shared 68px header geometry`);
+      assert.equal(sample.brand, "Scout", `${sample.page} uses the supplied Scout wordmark`);
+      assert.equal(sample.brandLoaded, true, `${sample.page} loads the supplied Scout wordmark asset`);
+      assert.deepEqual(sample.nav, ["Applications", "Contacts"], `${sample.page} uses the shared primary navigation`);
+      assert.deepEqual(sample.actions, ["Profile & answers", "Account & sync"], `${sample.page} uses the shared account actions`);
+      assert.equal(sample.profile, "browser_test", `${sample.page} uses the active workspace profile`);
+    }
+    assert.equal(headerSamples.find((sample) => sample.page === "dashboard").active, "applications");
+    assert.equal(headerSamples.find((sample) => sample.page === "account").active, "account");
+    assert.equal(headerSamples.find((sample) => sample.page === "profile").active, "profile");
+    console.log("PASS shared Scout header geometry, navigation, account state and profile controls");
     const runtime = await helper.evaluate(() => chrome.runtime.sendMessage({ type: "APPLYOS_RUNTIME_PING" }));
     assert.equal(runtime?.ok, true, "the popup runtime handshake should reach the service worker");
     assert.equal(runtime?.features?.applicationTracking, true, "the service worker should advertise application tracking");
+    await worker.evaluate(async () => ApplyOS.updateSettings({ final_follow_up_enabled: true }));
     const startSession = async () => {
       await page.goto(`http://apply.example.test:${server.port}/react-dropzone`, { waitUntil: "domcontentloaded" });
       await page.bringToFront();
@@ -462,6 +673,8 @@ async function main() {
     assert.equal(await helper.evaluate(() => document.activeElement?.classList.contains("job-card")), true, "closing details restores focus to the opening card");
 
     await helper.locator("[data-section='contacts']").click();
+    assert.equal(await helper.locator("[data-scout-nav='contacts']").getAttribute("aria-current"), "page", "contacts navigation becomes active without a reload");
+    assert.equal(new URL(helper.url()).searchParams.get("section"), "contacts", "contacts navigation keeps a shareable dashboard URL");
     await helper.locator("#add-contact").click();
     const contactDetail = helper.locator("#contact-detail");
     await contactDetail.waitFor({ state: "visible" });
@@ -531,7 +744,7 @@ async function main() {
     const downloadPromise = optionsPage.waitForEvent("download");
     await optionsPage.locator("#export-backup").click();
     const download = await downloadPromise;
-    assert.match(download.suggestedFilename(), /^applyos-backup-\d{4}-\d{2}-\d{2}\.applyos$/, "encrypted export uses the ApplyOS backup extension");
+    assert.match(download.suggestedFilename(), /^scout-backup-\d{4}-\d{2}-\d{2}\.scout$/, "encrypted export uses the Scout backup extension");
     await optionsPage.locator("#backup-file").setInputFiles({ name: "fixture.applyos", mimeType: "application/json", buffer: Buffer.from(encryptedBackup.serialized) });
     await optionsPage.locator("#restore-password").fill(backupPassword);
     await optionsPage.locator("#preview-backup").click();

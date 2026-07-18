@@ -3,21 +3,32 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ApplyOS — Profile & Settings</title>
+    <title>Scout — Profile & Settings</title>
+    <link rel="icon" href="assets/icons/scout-32.png">
     <link rel="stylesheet" href="options.css">
+    <link rel="stylesheet" href="shared/header.css">
+    <link rel="stylesheet" href="shared/tour.css">
   </head>
-  <body>
-    <header class="masthead">
-      <a class="brand" href="#top"><span class="mark">A.</span><span>APPLYOS</span></a>
-      <div class="local-note"><span></span> SAVED ONLY IN THIS BROWSER</div>
+  <body data-scout-page="profile">
+    <header class="scout-header" data-scout-header>
+      <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
+      <nav class="scout-header__nav" aria-label="Primary navigation">
+        <a href="dashboard.html" data-scout-nav="applications">Applications</a>
+        <a href="dashboard.html?section=contacts" data-scout-nav="contacts">Contacts</a>
+      </nav>
+      <div class="scout-header__actions">
+        <label class="scout-header__profile"><span class="scout-visually-hidden">Active profile</span><select data-scout-profile-select aria-label="Active profile"><option>Loading…</option></select></label>
+        <a class="scout-header__action" href="options.html" data-scout-nav="profile">Profile &amp; answers</a>
+        <a class="scout-header__action" href="account.html" data-scout-nav="account">Account &amp; sync</a>
+      </div>
     </header>
 
     <main id="top">
       <aside>
         <p class="kicker">YOUR APPLICATION DOSSIER</p>
         <h1>Tell it once.<br><em>Review every time.</em></h1>
-        <p>ApplyOS uses these details to fill forms you open. Nothing is uploaded to an ApplyOS server, and the extension never clicks Submit.</p>
-        <div class="profile-manager">
+        <p>Scout uses these details to fill forms you open. They belong to your private account workspace. The extension never clicks Submit.</p>
+        <div class="profile-manager" data-tour-target="profile-switcher">
           <label><span>ACTIVE PROFILE</span><select id="profile-select"></select></label>
           <button id="new-profile" type="button">+ New profile</button>
           <button id="rename-profile" type="button">Rename profile</button>
@@ -37,7 +48,7 @@
       </aside>
 
       <form id="profile-form">
-        <section id="identity">
+        <section id="identity" data-tour-target="identity">
           <div class="section-number">01</div>
           <div class="section-heading"><p>THE ESSENTIALS</p><h2>Identity & contact</h2></div>
           <div class="grid">
@@ -120,13 +131,13 @@
           <div class="reminder-settings">
             <strong>FOLLOW-UP DEFAULTS</strong>
             <label><input id="enable-final-follow-up" type="checkbox"> Schedule an optional final follow-up 14 days after applying</label>
-            <label><input id="enable-notifications" type="checkbox"> Show follow-ups due on the ApplyOS toolbar badge</label>
+            <label><input id="enable-notifications" type="checkbox"> Show follow-ups due on the Scout toolbar badge</label>
             <small>Changes apply to new applications. Every reminder remains editable and nothing is sent automatically.</small>
           </div>
-          <div class="safety-note"><strong>Intentionally manual</strong><span>ApplyOS does not autofill demographic, disability, veteran, government-ID, birth-date, assessment, CAPTCHA, or consent fields.</span></div>
+          <div class="safety-note"><strong>Intentionally manual</strong><span>Scout does not autofill demographic, disability, veteran, government-ID, birth-date, assessment, CAPTCHA, or consent fields.</span></div>
         </section>
 
-        <section id="resume">
+        <section id="resume" data-tour-target="resume">
           <div class="section-number">06</div>
           <div class="section-heading"><p>THE DOCUMENT</p><h2>Your resume</h2></div>
           <label class="file-drop" for="resume-file">
@@ -136,10 +147,14 @@
             <small id="file-detail">Best-effort attachment on supported forms · 8 MB maximum</small>
           </label>
           <button id="remove-resume" type="button" class="remove hidden">Remove saved resume</button>
-          <label class="resume-text"><span>Resume text for matching & Smart Tools</span><textarea name="resumeText" rows="12" placeholder="Paste your resume text here. ApplyOS never sends it to an ApplyOS server."></textarea></label>
+          <label class="resume-text">
+            <span>Resume text for matching & Smart Tools</span>
+            <textarea name="resumeText" rows="12" placeholder="Upload a text-based PDF and Scout will extract this automatically. You can still review and edit it here."></textarea>
+            <small id="resume-text-status" aria-live="polite">PDF text is extracted privately on this device when you upload your resume.</small>
+          </label>
         </section>
 
-        <section id="answers">
+        <section id="answers" data-tour-target="answers">
           <div class="section-number">07</div>
           <div class="section-heading"><p>FOR REPEATED QUESTIONS</p><h2>Custom answers</h2></div>
           <p class="section-copy">Add phrases from questions you see often—including skill-specific experience such as “years handling 100 TB of data.” Use company-only scope for employer-history, employee-relationship, and company-specific answers.</p>
@@ -154,7 +169,7 @@
           <details class="advanced-ai">
             <summary><span>Technical users</span><strong>Configure an existing Ollama installation</strong><i>＋</i></summary>
             <div class="advanced-ai-body">
-              <p>This can enhance drafts with a generative model running on your computer. ApplyOS does not install Ollama, download models, or require this feature.</p>
+              <p>This can enhance drafts with a generative model running on your computer. Scout does not install Ollama, download models, or require this feature.</p>
               <div class="grid">
                 <label class="wide"><span>Ollama endpoint</span><input id="ai-endpoint" value="http://localhost:11434"></label>
                 <label><span>Installed chat model</span><input id="ai-model" value="llama3.2"></label>
@@ -168,19 +183,19 @@
 
         <section id="backup">
           <div class="section-number">09</div>
-          <div class="section-heading"><p>PORTABILITY & RECOVERY</p><h2>Encrypted local backup</h2></div>
-          <p class="section-copy">Export your complete ApplyOS workspace—including profiles, saved resume files, applications, contacts, interviews, and answer memory—as one password-encrypted file. The password is never stored or sent anywhere.</p>
+          <div class="section-heading"><p>PORTABILITY & RECOVERY</p><h2>Encrypted recovery backup</h2></div>
+          <p class="section-copy">Export your complete Scout workspace—including profiles, saved resume files, applications, contacts, interviews, and answer memory—as one password-encrypted file. The password is never stored or sent anywhere.</p>
           <div class="backup-grid">
             <article class="backup-card">
               <p class="kicker">EXPORT</p><h3>Protect a copy</h3>
               <label><span>Backup password</span><input id="backup-password" type="password" autocomplete="new-password" minlength="10" placeholder="At least 10 characters"></label>
               <label><span>Confirm password</span><input id="backup-confirm" type="password" autocomplete="new-password" minlength="10"></label>
               <button id="export-backup" type="button">Download encrypted backup →</button>
-              <small>Keep the password safe. ApplyOS cannot recover it.</small>
+              <small>Keep the password safe. Scout cannot recover it.</small>
             </article>
             <article class="backup-card">
               <p class="kicker">IMPORT</p><h3>Review before replacing</h3>
-              <label><span>Encrypted .applyos file</span><input id="backup-file" type="file" accept=".applyos,application/json"></label>
+              <label><span>Encrypted Scout backup</span><input id="backup-file" type="file" accept=".scout,.applyos,application/json"></label>
               <label><span>Backup password</span><input id="restore-password" type="password" autocomplete="current-password"></label>
               <button id="preview-backup" type="button">Decrypt & preview →</button>
               <small>Nothing changes until you review the counts and confirm Restore.</small>
@@ -188,14 +203,14 @@
           </div>
           <div id="backup-preview" class="backup-preview hidden" aria-live="polite">
             <div><p class="kicker">DECRYPTED PREVIEW</p><h3 id="backup-summary-title">Backup ready to review</h3><p id="backup-summary"></p></div>
-            <label><span>Type RESTORE to replace local data</span><input id="restore-confirmation" autocomplete="off" placeholder="RESTORE"></label>
-            <button id="restore-backup" type="button" disabled>Replace local data</button>
+            <label><span>Type RESTORE to replace workspace data</span><input id="restore-confirmation" autocomplete="off" placeholder="RESTORE"></label>
+            <button id="restore-backup" type="button" disabled>Replace workspace data</button>
           </div>
           <div class="backup-status-row"><strong id="backup-status">No backup operation running.</strong><button id="undo-restore" class="hidden" type="button">Undo last restore</button></div>
-          <div class="safety-note"><strong>Local and review-first</strong><span>Encryption uses AES-256-GCM with a password-derived key. Restore creates a local one-step rollback checkpoint and never uploads the file.</span></div>
+          <div class="safety-note"><strong>Encrypted and review-first</strong><span>Encryption uses AES-256-GCM with a password-derived key. Restore creates a one-step rollback checkpoint on this device and never uploads the backup file.</span></div>
         </section>
 
-        <div class="save-bar">
+        <div class="save-bar" data-tour-target="save-profile">
           <div><strong id="save-status">Unsaved changes</strong><span>Review autofilled forms before submitting.</span></div>
           <button type="submit">Save profile <span>→</span></button>
         </div>
@@ -209,6 +224,9 @@
     <script src="shared/graph.js"></script>
     <script src="shared/storage.js"></script>
     <script src="shared/backup.js"></script>
+    <script src="shared/resume-parser.js"></script>
+    <script src="shared/header.js"></script>
+    <script src="shared/tour.js"></script>
     <script src="options.js"></script>
   </body>
 </html>

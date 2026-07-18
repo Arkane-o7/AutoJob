@@ -4,62 +4,105 @@ if (!globalThis.chrome?.storage?.local) {
     ...(globalThis.chrome || {}),
     storage: { local: {
       async get(keys) { const wanted = Array.isArray(keys) ? keys : [keys]; return Object.fromEntries(wanted.filter((key) => key in previewData).map((key) => [key, structuredClone(previewData[key])])); },
-      async set(values) { Object.assign(previewData, structuredClone(values)); },
-      async remove(keys) { for (const key of Array.isArray(keys) ? keys : [keys]) delete previewData[key]; }
+      async set(values) { Object.assign(previewData, structuredClone(values)); }
     } },
-    runtime: { ...(globalThis.chrome?.runtime || {}), sendMessage: async () => ({ ok: false, error: "Ollama proxy is available in the installed extension." }), openOptionsPage() {}, getURL: (path) => path },
-    tabs: { create() {} }
+    runtime: { ...(globalThis.chrome?.runtime || {}), sendMessage: async () => ({ ok: false }), getURL: (path) => path }
   };
 }
 
 const form = document.querySelector("#onboarding-form");
 const panels = [...document.querySelectorAll("[data-panel]")];
-const steps = [...document.querySelectorAll("#steps li")];
 const back = document.querySelector("#back");
 const next = document.querySelector("#next");
-const progress = document.querySelector("#progress");
 let current = 0;
+let minimumStep = 0;
+document.body.inert = true;
+
+function accountGateUrl(reason) {
+  const url = new URL(chrome.runtime.getURL("account.html"));
+  url.searchParams.set("reason", reason);
+  url.searchParams.set("returnTo", `onboarding.html${location.search}${location.hash}`);
+  return url.href;
+}
+
+async function requireWorkspaceAccess() {
+  let response;
+  try { response = await chrome.runtime.sendMessage({ type: "APPLYOS_CLOUD_STATUS" }); }
+  catch { response = null; }
+  const status = response?.ok ? response.status : null;
+  const ready = status?.configured === true && status?.migrationRequired !== true && (status?.workspaceReady === true || status?.offlineAuthorized === true);
+  if (!ready) {
+    const reason = !response?.ok ? "status-unavailable" : status?.configured !== true ? "configuration-required" : status?.migrationRequired === true ? "migration-required" : "sign-in-required";
+    location.replace(accountGateUrl(reason));
+    return null;
+  }
+  document.body.inert = false;
+  if (status.offlineAuthorized === true) globalThis.ScoutHeader?.setStatus("Offline · cached", "offline");
+  return status;
+}
 
 function render() {
   panels.forEach((panel, index) => panel.classList.toggle("active", index === current));
-  steps.forEach((step, index) => { step.classList.toggle("active", index === current); step.classList.toggle("complete", index < current); });
-  back.disabled = current === 0 || current === panels.length - 1;
-  next.hidden = current === panels.length - 1;
-  next.textContent = current === panels.length - 2 ? "Save & finish →" : "Continue →";
-  progress.style.width = `${((current + 1) / panels.length) * 100}%`;
+  back.disabled = current <= minimumStep;
+  next.textContent = current === panels.length - 1 ? "Save & show me around →" : "Start setup →";
+  document.querySelector("#rail-progress").style.width = `${((current + 1) / panels.length) * 100}%`;
+  document.querySelector("#rail-step").textContent = String(current + 1).padStart(2, "0");
+  document.querySelector("#rail-label").textContent = current === 0 ? "A quick hello" : "Your essentials";
 }
 
 function validatePanel() {
-  const required = [...panels[current].querySelectorAll("[required]")];
-  for (const input of required) if (!input.reportValidity()) return false;
+  for (const input of panels[current].querySelectorAll("[required]")) if (!input.reportValidity()) return false;
   return true;
 }
 
-async function saveProfile(complete = false) {
+async function saveStarterProfile() {
   const values = Object.fromEntries(new FormData(form).entries());
   values.fullName = `${values.firstName || ""} ${values.lastName || ""}`.trim();
-  const profile = complete ? await ApplyOS.completeOnboarding(values) : await ApplyOS.patchActiveProfile(values);
-  if (complete) await ApplyOS.syncProfileAnswerDefaults(profile);
-  return profile;
+  const profile = await ApplyOS.completeOnboarding(values);
+  await ApplyOS.syncProfileAnswerDefaults(profile);
 }
 
 next.addEventListener("click", async () => {
   if (!validatePanel()) return;
-  await saveProfile(current === panels.length - 2);
-  current = Math.min(panels.length - 1, current + 1); render();
+  if (current < panels.length - 1) {
+    current += 1;
+    render();
+    panels[current].querySelector("input")?.focus();
+    return;
+  }
+  next.disabled = true;
+  next.textContent = "Preparing your workspace…";
+  try {
+    await saveStarterProfile();
+    await ScoutTour.prepareFirstRun();
+    location.assign(chrome.runtime.getURL("dashboard.html?tour=1"));
+  } catch (error) {
+    next.disabled = false;
+    next.textContent = "Try again →";
+    console.error(error);
+  }
 });
-back.addEventListener("click", () => { current = Math.max(0, current - 1); render(); });
 
-document.querySelector("#open-dashboard").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
-document.querySelector("#open-profile").addEventListener("click", () => chrome.runtime.openOptionsPage());
-document.querySelector("#open-ai-settings").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("options.html#local-ai") }));
+back.addEventListener("click", () => {
+  current = Math.max(minimumStep, current - 1);
+  render();
+});
 
 (async function initialize() {
+  const access = await requireWorkspaceAccess();
+  if (!access) return;
   const profile = await ApplyOS.getActiveProfile();
-  if (ApplyOS.isOnboardingComplete(profile) && new URLSearchParams(location.search).get("quick") !== "1") {
+  const params = new URLSearchParams(location.search);
+  const quick = params.get("quick") === "1";
+  if (ApplyOS.isOnboardingComplete(profile) && !params.has("start") && !quick) {
     location.replace(chrome.runtime.getURL("options.html"));
     return;
   }
   for (const element of form.elements) if (element.name && Object.hasOwn(profile, element.name)) element.value = profile[element.name] ?? "";
+  current = quick ? 1 : 0;
+  minimumStep = quick ? 1 : 0;
   render();
-})().catch(console.error);
+})().catch((error) => {
+  document.body.inert = false;
+  console.error(error);
+});

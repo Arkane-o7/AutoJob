@@ -1,0 +1,171 @@
+:root {
+  --scout-tour-ink: #151612;
+  --scout-tour-paper: #f4f0e5;
+  --scout-tour-acid: #b7ff3c;
+  --scout-tour-orange: #ff5c35;
+}
+
+.scout-tour-spotlight {
+  position: fixed;
+  z-index: 2147483644;
+  border: 2px solid var(--scout-tour-acid);
+  border-radius: 3px;
+  box-shadow: 0 0 0 9999px rgba(15, 16, 13, .72), 7px 7px 0 rgba(183, 255, 60, .32);
+  pointer-events: auto;
+  transition: top 180ms ease, left 180ms ease, width 180ms ease, height 180ms ease;
+}
+
+.scout-tour-spotlight::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  cursor: default;
+}
+
+.scout-tour-card {
+  position: fixed;
+  z-index: 2147483646;
+  width: min(360px, calc(100vw - 24px));
+  padding: 20px;
+  border: 1px solid var(--scout-tour-ink);
+  color: var(--scout-tour-ink);
+  background-color: var(--scout-tour-paper);
+  background-image:
+    linear-gradient(rgba(21, 22, 18, .055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 22, 18, .055) 1px, transparent 1px);
+  background-size: 20px 20px;
+  box-shadow: 8px 8px 0 var(--scout-tour-acid);
+  font-family: "Avenir Next", "Century Gothic", sans-serif;
+}
+
+.scout-tour-card::before {
+  content: "";
+  position: absolute;
+  width: 0;
+  height: 0;
+  border: 10px solid transparent;
+}
+
+.scout-tour-card[data-placement="bottom"]::before {
+  top: -20px;
+  left: var(--scout-tour-arrow, 30px);
+  border-bottom-color: var(--scout-tour-ink);
+}
+
+.scout-tour-card[data-placement="top"]::before {
+  bottom: -20px;
+  left: var(--scout-tour-arrow, 30px);
+  border-top-color: var(--scout-tour-ink);
+}
+
+.scout-tour-card[data-placement="left"]::before {
+  top: var(--scout-tour-arrow, 30px);
+  right: -20px;
+  border-left-color: var(--scout-tour-ink);
+}
+
+.scout-tour-card[data-placement="right"]::before {
+  top: var(--scout-tour-arrow, 30px);
+  left: -20px;
+  border-right-color: var(--scout-tour-ink);
+}
+
+.scout-tour-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 14px;
+  color: #67685f;
+  font: 800 9px/1.2 ui-monospace, "SFMono-Regular", monospace;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+}
+
+.scout-tour-kicker span:last-child {
+  display: grid;
+  min-width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 50%;
+  color: var(--scout-tour-ink);
+  background: var(--scout-tour-acid);
+  letter-spacing: 0;
+}
+
+.scout-tour-card h2 {
+  margin: 0 0 10px;
+  font: 500 30px/1 Georgia, serif;
+  letter-spacing: -.035em;
+}
+
+.scout-tour-card p {
+  margin: 0;
+  color: #5f6058;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.scout-tour-actions {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 9px;
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(21, 22, 18, .2);
+}
+
+.scout-tour-actions button {
+  min-height: 34px;
+  padding: 8px 11px;
+  border: 1px solid var(--scout-tour-ink);
+  color: inherit;
+  background: transparent;
+  font: 800 10px/1 "Avenir Next", "Century Gothic", sans-serif;
+  cursor: pointer;
+}
+
+.scout-tour-actions .scout-tour-skip {
+  justify-self: center;
+  border: 0;
+  color: #67685f;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.scout-tour-actions .scout-tour-next {
+  border-color: var(--scout-tour-acid);
+  background: var(--scout-tour-acid);
+  box-shadow: 3px 3px 0 var(--scout-tour-ink);
+}
+
+.scout-tour-actions button:disabled {
+  visibility: hidden;
+}
+
+.scout-tour-card button:focus-visible {
+  outline: 3px solid #55791f;
+  outline-offset: 2px;
+}
+
+.scout-tour-live {
+  position: fixed;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (max-width: 560px) {
+  .scout-tour-card { padding: 16px; box-shadow: 5px 5px 0 var(--scout-tour-acid); }
+  .scout-tour-card h2 { font-size: 24px; }
+  .scout-tour-card p { font-size: 11px; }
+  .scout-tour-actions { grid-template-columns: auto 1fr auto; gap: 5px; }
+  .scout-tour-actions button { padding: 7px 8px; font-size: 9px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scout-tour-spotlight { transition: none; }
+}

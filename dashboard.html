@@ -3,37 +3,42 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ApplyOS Dashboard</title>
+    <title>Scout Dashboard</title>
+    <link rel="icon" href="assets/icons/scout-32.png">
     <link rel="stylesheet" href="dashboard.css">
+    <link rel="stylesheet" href="shared/header.css">
+    <link rel="stylesheet" href="shared/tour.css">
   </head>
-  <body>
-    <header class="masthead">
-      <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
-      <nav class="section-tabs" aria-label="Dashboard sections"><button class="active" data-section="applications" type="button">Applications</button><button data-section="contacts" type="button">Contacts</button></nav>
-      <div class="header-actions">
-        <span class="privacy">LOCAL DATA</span>
-        <select id="active-profile" aria-label="Active profile"></select>
-        <button id="profile" class="outline" type="button">Profile & answers</button>
+  <body data-scout-page="dashboard">
+    <header class="scout-header" data-scout-header>
+      <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
+      <nav class="scout-header__nav" aria-label="Primary navigation">
+        <a href="dashboard.html" data-scout-nav="applications" data-section="applications">Applications</a>
+        <a href="dashboard.html?section=contacts" data-scout-nav="contacts" data-section="contacts" data-tour-target="contacts-tab">Contacts</a>
+      </nav>
+      <div class="scout-header__actions">
+        <label class="scout-header__profile"><span class="scout-visually-hidden">Active profile</span><select id="active-profile" data-scout-profile-select aria-label="Active profile"><option>Loading…</option></select></label>
+        <a id="profile" class="scout-header__action" href="options.html" data-scout-nav="profile" data-tour-target="profile-settings">Profile &amp; answers</a>
+        <a id="account" class="scout-header__action" href="account.html" data-scout-nav="account">Account &amp; sync</a>
       </div>
     </header>
 
     <main>
       <section class="intro application-only">
-        <div><p class="eyebrow">APPLICATION COMMAND CENTER</p><h1>Turn applications<br>into a <em>system.</em></h1></div>
-        <div class="metric-grid">
+        <div><p class="eyebrow">OPPORTUNITY RADAR</p><h1>Keep every opportunity<br><em>in sight.</em></h1></div>
+        <div class="metric-grid" data-tour-target="metrics">
           <article><strong id="metric-total">0</strong><span>ACTIVE</span></article>
           <article class="acid"><strong id="metric-due">0</strong><span>FOLLOW-UPS DUE</span></article>
           <article><strong id="metric-interviews">0</strong><span>INTERVIEWS</span></article>
-          <article><strong id="metric-memory">0</strong><span>LEARNED ANSWERS</span></article>
         </div>
       </section>
 
-      <section class="due-strip application-only">
+      <section class="due-strip application-only" data-tour-target="next-actions">
         <div><p class="eyebrow">NEXT ACTIONS</p><h2>Upcoming deadlines & follow-ups</h2></div>
         <div id="upcoming" class="upcoming"></div>
       </section>
 
-      <section class="workspace application-only">
+      <section class="workspace application-only" data-tour-target="pipeline">
         <div class="toolbar">
           <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search company, role, notes…"></label>
           <select id="filter-status" aria-label="Filter by status"><option value="">All statuses</option></select>
@@ -42,13 +47,13 @@
           <div class="view-toggle" aria-label="Choose dashboard view"><button class="active" data-view="board" type="button">Board</button><button data-view="list" type="button">List</button></div>
         </div>
 
-        <div id="empty" class="empty hidden"><span>A.</span><h2>Your pipeline starts here.</h2><p>Open a job page and choose “Save to ApplyOS,” or load mock records to explore the dashboard.</p><button id="mock" class="primary" type="button">Load sample data</button></div>
+        <div id="empty" class="empty hidden"><span><img src="assets/brand/scout-mark.png" alt=""></span><h2>Your pipeline starts here.</h2><p>Open a job page and choose “Save to Scout,” or load mock records to explore the dashboard.</p><button id="mock" class="primary" type="button">Load sample data</button></div>
         <div id="board" class="board"></div>
         <div id="list" class="list hidden"></div>
       </section>
 
-      <section id="contacts-workspace" class="contacts-workspace hidden">
-        <div class="contacts-intro"><div><p class="eyebrow">NETWORKING CRM</p><h1>Remember the <em>people,</em><br>not just the pipeline.</h1></div><button id="add-contact" class="primary" type="button">Add contact</button></div>
+      <section id="contacts-workspace" class="contacts-workspace hidden" data-tour-target="contacts-workspace">
+        <div class="contacts-intro"><div><p class="eyebrow">RELATIONSHIP MAP</p><h1>Know the people<br><em>behind every role.</em></h1></div><button id="add-contact" class="primary" type="button">Add contact</button></div>
         <div class="contacts-toolbar"><label class="search"><span>⌕</span><input id="contact-search" type="search" placeholder="Search name, company, role, notes…"></label><span id="contact-count">0 contacts</span></div>
         <div id="contacts-empty" class="empty"><span>+</span><h2>Build your network deliberately.</h2><p>Add recruiters, interviewers, referrals, and people you meet during the search.</p><button id="contacts-empty-add" class="primary" type="button">Add first contact</button></div>
         <div id="contacts-list" class="contacts-list hidden"></div>
@@ -69,7 +74,7 @@
           <label><span>Next follow-up</span><input id="detail-follow-up" type="date"></label>
         </div>
         <label><span>Notes</span><textarea id="detail-notes" placeholder="Contacts, context, interview notes…"></textarea></label>
-        <section class="match-panel"><div><span>RESUME MATCH</span><strong id="detail-score">0%</strong></div><div class="match-bar"><i id="detail-bar"></i></div><p id="detail-skills"></p><p id="detail-missing"></p></section>
+        <section class="match-panel"><div><span>RESUME MATCH</span><strong id="detail-score">-</strong></div><div class="match-bar"><i id="detail-bar"></i></div><p id="detail-skills"></p><p id="detail-missing"></p></section>
         <div class="detail-actions"><button class="primary" type="submit">Save changes</button><button id="detail-applied" class="outline" type="button">Mark as applied</button><a id="detail-url" class="outline link-button" target="_blank" rel="noreferrer">Open job ↗</a><button id="delete-application" class="outline danger" type="button">Delete application</button></div>
       </form>
       <section class="contact-panel">
@@ -81,7 +86,7 @@
         <label><span>Recipient</span><select id="draft-contact"><option value="">Hiring team / no address</option></select></label>
         <select id="draft-type" aria-label="Draft type"><option value="follow_up">First follow-up</option><option value="final_follow_up">Final follow-up</option></select>
         <button id="generate-draft" class="dark-button" type="button">Generate draft</button>
-        <div id="draft" class="draft hidden"><label><span>Subject</span><input id="draft-subject"></label><label><span>Message</span><textarea id="draft-body"></textarea></label><div class="compose-actions"><a id="compose-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="compose-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="compose-mailto" class="outline link-button">Email app ↗</a><button id="copy-draft" class="outline" type="button">Copy</button></div><small>These buttons only open a reviewed draft. ApplyOS never sends it.</small></div>
+        <div id="draft" class="draft hidden"><label><span>Subject</span><input id="draft-subject"></label><label><span>Message</span><textarea id="draft-body"></textarea></label><div class="compose-actions"><a id="compose-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="compose-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="compose-mailto" class="outline link-button">Email app ↗</a><button id="copy-draft" class="outline" type="button">Copy</button></div><small>These buttons only open a reviewed draft. Scout never sends it.</small></div>
       </section>
       <section class="interview-panel">
         <div class="panel-heading"><div><p class="eyebrow">INTERVIEW WORKSPACE</p><h2>Prepare, meet, follow through.</h2></div><button id="add-interview" class="outline" type="button">Add interview</button></div>
@@ -98,10 +103,10 @@
         <div id="thank-you" class="draft hidden"><label><span>Subject</span><input id="thank-you-subject"></label><label><span>Message</span><textarea id="thank-you-body"></textarea></label><div class="compose-actions"><a id="thank-you-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="thank-you-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="thank-you-mailto" class="outline link-button">Email app ↗</a><button id="copy-thank-you" class="outline" type="button">Copy</button></div><small>Review every line before sending.</small></div>
       </section>
       <section class="ai-studio">
-        <div class="studio-head"><div><p class="eyebrow">SMART DRAFT STUDIO</p><h2>Tailor with evidence.</h2></div><span id="studio-status">READY OFFLINE</span></div>
-        <p class="studio-copy">Works without accounts, models, or setup. Material is never submitted or sent; review every line.</p>
+        <div class="studio-head"><div><p class="eyebrow">SMART DRAFT STUDIO</p><h2>Tailor with evidence.</h2></div><span id="studio-status">SMART READY</span></div>
+        <p class="studio-copy">Uses your private account workspace without extra model setup. Material is never submitted or sent; review every line.</p>
         <div class="studio-actions"><button id="ai-cover-letter" type="button">Cover-letter draft</button><button id="ai-tailor-resume" type="button">Resume focus plan</button><button id="ai-keywords" type="button">Keyword gap</button></div>
-        <div id="ai-output-wrap" class="ai-output hidden"><div><strong id="ai-output-title">Smart draft</strong><button id="copy-ai-output" type="button">Copy</button></div><textarea id="ai-output" aria-label="Generated ApplyOS draft"></textarea><small>Review required · no facts should be added unless they are true.</small></div>
+        <div id="ai-output-wrap" class="ai-output hidden"><div><strong id="ai-output-title">Smart draft</strong><button id="copy-ai-output" type="button">Copy</button></div><textarea id="ai-output" aria-label="Generated Scout draft"></textarea><small>Review required · no facts should be added unless they are true.</small></div>
       </section>
     </aside>
     <aside id="contact-detail" class="detail contact-detail" role="dialog" aria-modal="false" aria-label="Contact details" data-state="closed" inert>
@@ -111,11 +116,11 @@
         <input id="contact-id" type="hidden">
         <label class="hero-field"><span>NAME</span><input id="contact-name" required placeholder="Recruiter or contact name"></label>
         <label class="hero-field company-field"><span>TITLE / COMPANY</span><input id="contact-title" placeholder="Recruiter, Engineering Manager…"></label>
-        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Application</span><select id="contact-application"><option value="">General networking</option></select></label><label><span>Last contacted</span><input id="contact-last" type="date"></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
+        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Applications (optional)</span><select id="contact-application" multiple size="4" aria-describedby="contact-application-help"></select><small id="contact-application-help">Choose every application this person is connected to. Leave all unselected for general networking.</small></label><label><span>Last contacted</span><input id="contact-last" type="date"></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
         <label><span>Notes</span><textarea id="contact-notes" placeholder="How you met, context, promises, next conversation…"></textarea></label>
         <div class="detail-actions"><button class="primary" type="submit">Save contact</button><button id="delete-contact" class="outline danger hidden" type="button">Delete</button><a id="open-contact-linkedin" class="outline link-button hidden" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>
       </form>
-      <section class="contact-compose"><p class="eyebrow">MANUAL MESSAGE</p><h2>Compose without auto-sending.</h2><label><span>Subject</span><input id="contact-subject" value="Great connecting"></label><label><span>Message</span><textarea id="contact-message" placeholder="Write or paste a reviewed message…"></textarea></label><div class="compose-actions"><a id="contact-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="contact-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="contact-mailto" class="outline link-button">Email app ↗</a></div><small>ApplyOS opens a draft only. You review and send it yourself.</small></section>
+      <section class="contact-compose"><p class="eyebrow">MANUAL MESSAGE</p><h2>Compose without auto-sending.</h2><label><span>Subject</span><input id="contact-subject" value="Great connecting"></label><label><span>Message</span><textarea id="contact-message" placeholder="Write or paste a reviewed message…"></textarea></label><div class="compose-actions"><a id="contact-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="contact-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="contact-mailto" class="outline link-button">Email app ↗</a></div><small>Scout opens a draft only. You review and send it yourself.</small></section>
     </aside>
     <div id="scrim" class="scrim hidden"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -127,6 +132,8 @@
     <script src="shared/ai.js"></script>
     <script src="shared/graph.js"></script>
     <script src="shared/storage.js"></script>
+    <script src="shared/header.js"></script>
+    <script src="shared/tour.js"></script>
     <script src="dashboard.js"></script>
   </body>
 </html>

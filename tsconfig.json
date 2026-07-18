@@ -10,6 +10,6 @@
     "noEmit": true,
     "skipLibCheck": true
   },
-  "include": ["types/**/*.ts", "shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/profiles.js", "shared/storage.js", "shared/graph.js", "shared/agent.js", "shared/backup.js", "shared/offlyn-core.js", "shared/ats-compat.js", "shared/workday.js", "background.js", "capture.js", "content.js"],
+  "include": ["types/**/*.ts", "shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/profiles.js", "shared/storage.js", "shared/graph.js", "shared/agent.js", "shared/backup.js", "shared/resume-parser.js", "shared/cloud-config.js", "shared/cloud.js", "shared/offlyn-core.js", "shared/ats-compat.js", "shared/workday.js", "background.js", "account.js", "capture.js", "content.js"],
   "exclude": ["dist/**", "tests/**", "scripts/**"]
 }
