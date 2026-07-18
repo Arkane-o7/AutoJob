@@ -1,15 +1,26 @@
 {
   "manifest_version": 3,
-  "name": "ApplyOS",
-  "version": "0.10.0",
+  "name": "Scout",
+  "version": "0.11.0",
   "description": "A private, review-first job application CRM and autofill assistant.",
-  "permissions": ["storage", "unlimitedStorage", "activeTab", "alarms", "webNavigation", "identity"],
-  "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*", "https://*.supabase.co/*", "http://localhost:54321/*", "http://127.0.0.1:54321/*"],
+  "permissions": ["storage", "unlimitedStorage", "alarms", "webNavigation", "identity"],
+  "host_permissions": ["https://hkmrpkxiaadhlwpieyve.supabase.co/*"],
+  "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*", "http://localhost:54321/*", "http://127.0.0.1:54321/*"],
   "background": {
     "service_worker": "background.js"
   },
+  "icons": {
+    "16": "assets/icons/scout-16.png",
+    "32": "assets/icons/scout-32.png",
+    "48": "assets/icons/scout-48.png",
+    "128": "assets/icons/scout-128.png"
+  },
   "action": {
-    "default_title": "ApplyOS",
+    "default_title": "Scout",
+    "default_icon": {
+      "16": "assets/icons/scout-16.png",
+      "32": "assets/icons/scout-32.png"
+    },
     "default_popup": "popup.html"
   },
   "options_page": "options.html",

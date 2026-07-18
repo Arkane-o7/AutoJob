@@ -51,14 +51,14 @@
 
   function validateSnapshot(input) {
     if (!input || typeof input !== "object" || input.format !== PAYLOAD_FORMAT || input.version !== BACKUP_VERSION || !input.data || typeof input.data !== "object") {
-      throw new Error("This is not a supported ApplyOS backup.");
+      throw new Error("This is not a supported Scout backup.");
     }
     const data = {};
     for (const [key, value] of Object.entries(input.data)) {
       if (isBackupKey(key)) data[key] = safeClone(value);
     }
     const state = data[ApplyOS.STORAGE_KEY || "applyos_state"];
-    if (state?.schema_version > ApplyOS.SCHEMA_VERSION) throw new Error("This backup was created by a newer ApplyOS version. Update the extension before restoring it.");
+    if (state?.schema_version > ApplyOS.SCHEMA_VERSION) throw new Error("This backup was created by a newer Scout version. Update the extension before restoring it.");
     return {
       format: PAYLOAD_FORMAT,
       version: BACKUP_VERSION,
@@ -129,7 +129,7 @@
     try { envelope = typeof serialized === "string" ? JSON.parse(serialized) : serialized; }
     catch { throw new Error("The selected file is not valid JSON."); }
     if (envelope?.format !== FORMAT || envelope.version !== BACKUP_VERSION || envelope.kdf?.name !== "PBKDF2" || envelope.kdf?.hash !== "SHA-256" || envelope.cipher?.name !== "AES-GCM") {
-      throw new Error("This is not a supported encrypted ApplyOS backup.");
+      throw new Error("This is not a supported encrypted Scout backup.");
     }
     const iterations = Number(envelope.kdf.iterations);
     if (!Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000) throw new Error("The backup uses unsupported encryption settings.");

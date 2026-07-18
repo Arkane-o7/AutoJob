@@ -3,151 +3,64 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Welcome to ApplyOS</title>
+    <title>Welcome to Scout</title>
+    <link rel="icon" href="assets/icons/scout-32.png">
     <link rel="stylesheet" href="onboarding.css">
+    <link rel="stylesheet" href="shared/header.css">
   </head>
-  <body>
-    <header class="masthead">
-      <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
-      <div class="privacy"><span></span> PRIVATE BY DEFAULT</div>
+  <body data-scout-page="setup">
+    <header class="scout-header" data-scout-header>
+      <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
+      <nav class="scout-header__nav" aria-label="Primary navigation">
+        <a href="dashboard.html" data-scout-nav="applications">Applications</a>
+        <a href="dashboard.html?section=contacts" data-scout-nav="contacts">Contacts</a>
+      </nav>
+      <div class="scout-header__actions">
+        <label class="scout-header__profile"><span class="scout-visually-hidden">Active profile</span><select data-scout-profile-select aria-label="Active profile"><option>Loading…</option></select></label>
+        <a class="scout-header__action" href="options.html" data-scout-nav="profile">Profile &amp; answers</a>
+        <a class="scout-header__action" href="account.html" data-scout-nav="account">Account &amp; sync</a>
+      </div>
     </header>
 
     <main>
       <aside class="rail">
-        <p class="eyebrow">SYSTEM SETUP</p>
-        <h1>One profile.<br><em>Less repetition.</em></h1>
-        <p class="promise">Local-first by default. Cloud sync is optional and separately consented. ApplyOS fills; you review and submit.</p>
-        <ol id="steps">
-          <li class="active" data-step="0"><span>01</span> Your identity</li>
-          <li data-step="1"><span>02</span> Career context</li>
-          <li data-step="2"><span>03</span> Defaults</li>
-          <li data-step="3"><span>04</span> Account & privacy</li>
-          <li data-step="4"><span>05</span> Save & autofill</li>
-          <li data-step="5"><span>06</span> CRM & networking</li>
-          <li data-step="6"><span>07</span> Follow-ups</li>
-          <li data-step="7"><span>08</span> Smart tools</li>
-          <li data-step="8"><span>09</span> Ready</li>
-        </ol>
+        <p class="eyebrow">WELCOME ABOARD</p>
+        <h1>Apply with<br><em>less repetition.</em></h1>
+        <p class="promise">Give Scout the essentials once. Then learn the product by using the real dashboard—not by reading a manual.</p>
+        <div class="rail-progress" aria-label="Setup progress"><span id="rail-progress"></span></div>
+        <div class="rail-step"><strong id="rail-step">01</strong><span id="rail-label">A quick hello</span></div>
       </aside>
 
       <form id="onboarding-form" class="stage">
-        <section class="panel active" data-panel="0">
-          <p class="eyebrow">01 / IDENTITY</p>
-          <h2>Start with the details forms ask every time.</h2>
+        <section class="panel active welcome-panel" data-panel="0">
+          <p class="eyebrow">01 / TWO-MINUTE START</p>
+          <h2>Set up the basics.<br>We’ll show you the rest in context.</h2>
+          <p class="lede">After one short profile screen, Scout opens your real application workspace and points out each control with a focused, skippable walkthrough.</p>
+          <div class="promise-grid">
+            <article><span>01</span><strong>Save opportunities</strong><p>Capture the company, role, description, source, and match guidance.</p></article>
+            <article><span>02</span><strong>Autofill confidently</strong><p>Fill known fields and attach your resume while keeping submission manual.</p></article>
+            <article><span>03</span><strong>Keep momentum</strong><p>Track applications, people, interviews, and follow-up reminders.</p></article>
+          </div>
+          <div class="welcome-note"><span>✓</span><p>The walkthrough never creates sample records, submits forms, or changes your answers.</p></div>
+        </section>
+
+        <section class="panel essentials-panel" data-panel="1">
+          <p class="eyebrow">02 / STARTER PROFILE</p>
+          <h2>The details almost every application asks first.</h2>
+          <p class="lede">This is only the minimum. Profile & Settings holds your address, resume, work history, preferences, and reusable answers.</p>
           <div class="grid">
             <label><span>First name *</span><input name="firstName" required autocomplete="given-name"></label>
             <label><span>Last name *</span><input name="lastName" required autocomplete="family-name"></label>
             <label><span>Email *</span><input name="email" required type="email" autocomplete="email"></label>
             <label><span>Phone *</span><input name="phone" required type="tel" autocomplete="tel"></label>
-            <label class="wide"><span>Current location</span><input name="currentLocation" placeholder="Hyderabad, Telangana, India"></label>
-            <label class="wide"><span>Street address</span><input name="address" autocomplete="street-address" placeholder="Stored locally; used only when an application asks"></label>
-            <label><span>City</span><input name="city" autocomplete="address-level2"></label>
-            <label><span>State / province</span><input name="state" autocomplete="address-level1"></label>
-            <label><span>Postal code</span><input name="postalCode" autocomplete="postal-code"></label>
-            <label><span>Country</span><input name="country" autocomplete="country-name"></label>
-            <label><span>LinkedIn</span><input name="linkedin" type="url" placeholder="https://linkedin.com/in/…"></label>
-            <label><span>GitHub / portfolio</span><input name="github" type="url" placeholder="https://github.com/…"></label>
+            <label class="wide"><span>Current location</span><input name="currentLocation" autocomplete="address-level2" placeholder="Bengaluru, Karnataka, India"></label>
           </div>
-        </section>
-
-        <section class="panel" data-panel="1">
-          <p class="eyebrow">02 / CAREER CONTEXT</p>
-          <h2>Give matching and tailoring real evidence.</h2>
-          <div class="grid">
-            <label><span>Current / recent company</span><input name="currentCompany"></label>
-            <label><span>Current / recent title</span><input name="currentTitle"></label>
-            <label class="wide"><span>Experience and achievements</span><textarea name="jobDescription" rows="5" placeholder="Describe your responsibilities, projects, outcomes, and technologies. Keep every claim factual."></textarea></label>
-            <label><span>School / university</span><input name="school"></label>
-            <label><span>Degree & field</span><input name="degree" placeholder="B.Tech — Computer Science"></label>
-            <label class="wide"><span>Resume text</span><textarea name="resumeText" rows="9" placeholder="Paste the text of your resume. Local AI uses this for matching, tailoring, and cover letters."></textarea></label>
-          </div>
-          <p class="hint">You can attach the actual PDF or DOCX later in Profile & Settings.</p>
-        </section>
-
-        <section class="panel" data-panel="2">
-          <p class="eyebrow">03 / REUSABLE DEFAULTS</p>
-          <h2>Set answers that should never be guessed.</h2>
-          <div class="grid">
-            <label><span>Work authorization</span><select name="workAuthorization"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-            <label><span>Need sponsorship</span><select name="visaSponsorship"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-            <label><span>Notice period</span><input name="noticePeriod" placeholder="30 days"></label>
-            <label><span>Desired salary</span><input name="desiredSalary" placeholder="Your preferred format"></label>
-            <label><span>Remote preference</span><select name="remotePreference"><option value="">Choose…</option><option>Remote</option><option>Hybrid</option><option>On-site</option><option>Flexible</option></select></label>
-            <label><span>Willing to relocate</span><select name="willingToRelocate"><option value="">Choose…</option><option value="yes">Yes</option><option value="no">No</option></select></label>
-            <label class="wide"><span>Tell us about yourself</span><textarea name="coverLetter" rows="5" placeholder="A factual reusable introduction. ApplyOS can tailor it locally for each role."></textarea></label>
-          </div>
-          <div class="guardrail"><strong>Always manual</strong><span>Demographics, disability, veteran status, government IDs, consent, CAPTCHAs, assessments, and submission.</span></div>
-        </section>
-
-        <section class="panel" data-panel="3">
-          <p class="eyebrow">04 / ACCOUNT & PRIVACY</p>
-          <h2>Use ApplyOS locally.<br>Or sync on your terms.</h2>
-          <div class="tour-split">
-            <article><span>DEFAULT</span><strong>Continue locally</strong><p>No account required. Autofill, CRM, Smart Tools, and encrypted backups keep working in this browser.</p></article>
-            <article><span>OPTIONAL</span><strong>LinkedIn sign-in</strong><p>Used only for authentication. ApplyOS does not import connections, messages, contacts, or employment history.</p><button id="open-account" type="button">Open Account & sync ↗</button></article>
-          </div>
-          <div class="guardrail"><strong>Recruiter boundary</strong><span>Your private workspace is never recruiter-visible. A separate reviewed candidate card can be published later and returned to private at any time.</span></div>
-        </section>
-
-        <section class="panel" data-panel="4">
-          <p class="eyebrow">05 / SAVE & AUTOFILL</p>
-          <h2>Three deliberate clicks.<br>No hidden submission.</h2>
-          <div class="journey">
-            <article><span>01</span><strong>Save the role</strong><p>Review detected company, title, location, description, and extraction confidence.</p></article>
-            <article><span>02</span><strong>Autofill</strong><p>ApplyOS fills confident empty fields and can attach your saved resume.</p></article>
-            <article><span>03</span><strong>Review & submit</strong><p>You inspect every answer and click Submit yourself. Sensitive and consent fields stay manual.</p></article>
-          </div>
-        </section>
-
-        <section class="panel" data-panel="5">
-          <p class="eyebrow">06 / APPLICATION CRM</p>
-          <h2>Track the work.<br>Remember the people.</h2>
-          <div class="smart-grid">
-            <article><span>PIPELINE</span><strong>Board & list</strong><p>Statuses, priorities, deadlines, search, match guidance, notes, and resume versions.</p></article>
-            <article><span>NETWORK</span><strong>Contacts</strong><p>Recruiters, hiring managers, referrals, employees, and interviewers linked to roles.</p></article>
-            <article><span>MEMORY</span><strong>Reusable answers</strong><p>Reviewed answers and corrections, optionally restricted to one employer.</p></article>
-            <article><span>CONTROL</span><strong>Manual drafts</strong><p>Gmail, Outlook, and email-app buttons open reviewed drafts. ApplyOS never sends.</p></article>
-          </div>
-        </section>
-
-        <section class="panel" data-panel="6">
-          <p class="eyebrow">07 / NEXT ACTIONS</p>
-          <h2>Follow up without<br>losing the thread.</h2>
-          <div class="tour-split">
-            <article><span>7 + 14 DAYS</span><strong>Follow-up reminders</strong><p>After you confirm an application was submitted, ApplyOS schedules editable reminders and surfaces due actions.</p></article>
-            <article><span>INTERVIEWS</span><strong>Preparation workspace</strong><p>Track rounds, interviewers, research, question notes, next actions, and thank-you drafts.</p></article>
-          </div>
-          <div class="guardrail"><strong>Private support</strong><span>Broken-site reports include only fields you select and a reviewed structural payload—never entered values, resume contents, or full URLs.</span></div>
-        </section>
-
-        <section class="panel" data-panel="7">
-          <p class="eyebrow">08 / READY OUT OF THE BOX</p>
-          <h2>No model downloads.<br>No terminal commands.</h2>
-          <p class="lede">ApplyOS Smart Tools work immediately using your profile and the job description. Everything stays in the browser.</p>
-          <div class="smart-grid">
-            <article><span>01</span><strong>Cover-letter draft</strong><p>Creates a factual starting point from your stored experience and matched skills.</p></article>
-            <article><span>02</span><strong>Resume focus plan</strong><p>Shows what to emphasize, which keywords overlap, and what must be verified.</p></article>
-            <article><span>03</span><strong>Keyword gap</strong><p>Compares the job with your profile without uploading either one.</p></article>
-            <article><span>04</span><strong>Answer learning</strong><p>Remembers corrections and reuses them on similar forms.</p></article>
-          </div>
-          <div class="advanced-note"><div><strong>Want generative local AI?</strong><span>Ollama integration remains available in Advanced settings for technical users. It is never required.</span></div><button id="open-ai-settings" type="button">Advanced settings ↗</button></div>
-        </section>
-
-        <section class="panel final" data-panel="8">
-          <div class="finish-mark">A.</div>
-          <p class="eyebrow">SYSTEM READY</p>
-          <h2>Your application workspace is ready.</h2>
-          <p id="completion-copy">Open a job page, save it, autofill, review every answer, and submit it yourself.</p>
-          <div class="finish-actions">
-            <button id="open-dashboard" type="button">Open dashboard <span>↗</span></button>
-            <button id="open-profile" class="outline" type="button">Edit full profile</button>
-          </div>
+          <div class="next-up"><span>UP NEXT</span><strong>Your live Dashboard tour</strong><p>Metrics → follow-ups → application pipeline → contacts → complete profile</p></div>
         </section>
 
         <footer class="controls">
           <button id="back" class="back" type="button" disabled>← Back</button>
-          <div class="progress"><span id="progress"></span></div>
-          <button id="next" type="button">Continue →</button>
+          <button id="next" type="button">Start setup →</button>
         </footer>
       </form>
     </main>
@@ -156,6 +69,8 @@
     <script src="shared/followup.js"></script>
     <script src="shared/profiles.js"></script>
     <script src="shared/storage.js"></script>
+    <script src="shared/header.js"></script>
+    <script src="shared/tour.js"></script>
     <script src="onboarding.js"></script>
   </body>
 </html>

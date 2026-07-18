@@ -1,14 +1,17 @@
-# ApplyOS data and privacy boundaries
+# Scout data and privacy boundaries
 
-ApplyOS stores its workspace locally by default. A configured production build
-can also keep an owner-only cloud copy after explicit consent. The account and
-publication design preserves a strict boundary between a candidate's private
-job search and any future recruiter product.
+Scout requires an account and stores the authoritative private workspace in
+the configured cloud database. Chrome keeps a user-specific offline cache so a
+previously authenticated user can survive temporary connection loss. The cache
+is not an anonymous/local-only product and is locked when the user signs out.
+The account and publication design preserves a strict boundary between a
+candidate's private job search and any future recruiter product.
 
-## Zone 1: Local private workspace
+## Zone 1: Authoritative private account workspace
 
-This is the default product and source of truth while cloud sync is absent or
-disabled. It lives in `chrome.storage.local` and includes:
+This is the source of truth. It is stored in owner-scoped PostgreSQL tables and
+private Storage objects protected by authentication and Row Level Security. It
+includes:
 
 - job-search profiles and active-profile metadata;
 - applications, descriptions, priorities, statuses, deadlines, and notes;
@@ -17,30 +20,33 @@ disabled. It lives in `chrome.storage.local` and includes:
 - interviews, meeting details, research, preparation, and question notes;
 - answer memory, company-scoped answers, corrections, and knowledge graph;
 - resume files, resume text, versions, hashes, and application references;
-- local settings, optional localhost Ollama configuration, and encrypted backup
+- account settings, optional localhost Ollama configuration, and encrypted backup
   checkpoints.
 
-No recruiter, employer, or other user may read this workspace. ApplyOS has no
+No recruiter, employer, or other candidate may read this workspace. Scout has no
 analytics. Explicit Gmail, Outlook, LinkedIn, job, and meeting links navigate to
-those services but do not give ApplyOS access to the user's external account.
+those services but do not give Scout access to the user's external account.
 
-## Zone 2: Opt-in cloud private workspace
+## Zone 2: User-specific offline cache
 
-The version 0.10 runtime and supplied Supabase backend implement an owner-only
-synchronized snapshot of selected Zone 1 records after the user signs in and
-affirmatively enables sync. It is disabled when no production project is
-configured.
+`chrome.storage.local` caches the currently authenticated user's workspace and a
+durable outbox. It exists for responsiveness and temporary offline use; it is
+not authoritative and it cannot be used as a signed-out workspace.
 
 Required rules:
 
-- local-only mode remains available and core autofill does not require network;
-- the first upload shows which collections and resume files will be transmitted;
-- resume-file synchronization is a separate explicit choice;
+- all extension work surfaces require a valid account or a previously validated
+  offline session for the same cache owner;
+- signing out removes active workspace material and prevents a second account
+  from inheriting the first account's cache;
+- pre-account data requires a reviewed Import or Discard decision and is never
+  uploaded silently;
 - data is encrypted in transit and protected by provider storage controls;
 - PostgreSQL Row Level Security proves per-user ownership for every exposed row;
 - privileged credentials and provider secrets never ship in the extension;
-- sync uses a durable client retry record, idempotent change IDs, server versions,
-  and explicit conflict handling rather than client-clock last-write-wins;
+- sync uses per-record durable retries, idempotent mutation IDs, server versions,
+  cursors, tombstones, and explicit conflict handling rather than client-clock
+  last-write-wins;
 - account switching cannot mix one user's local workspace with another's;
 - users can export and delete their cloud account and data; and
 - privacy, retention, support-access, and deletion behavior are documented
@@ -87,23 +93,21 @@ not reference or query the private workspace.
 ## Data-flow rules
 
 ```text
-Job page + user input
+Authenticated user + job page + reviewed input
         |
         v
-Zone 1: local private workspace
+Zone 1: authoritative private account workspace
+        |\
+        | \ separate reviewed preview + publish action
+        |  \
+        |   +--> Zone 3: limited recruiter publication
         |
-        | explicit sign-in + sync consent
-        v
-Zone 2: owner-only cloud workspace
-        |
-        | separate preview + publish action
-        v
-Zone 3: limited recruiter publication
+        +<----> Zone 2: offline cache for the same account
 ```
 
-There is no automatic Zone 1 → Zone 3 path. Cloud sync consent is not recruiter
-publication consent. LinkedIn sign-in is not sync consent. Publishing a profile
-is not permission to expose private job-search activity.
+There is no automatic Zone 1 → Zone 3 path. Creating an account is not recruiter
+publication consent. Publishing a candidate card is not permission to expose
+private job-search activity.
 
 ## Support-report boundary
 
@@ -117,11 +121,11 @@ retention are separate from recruiter publication.
 
 Before production sync is enabled, deploy and verify the backend, then audit:
 
-- all product claims about local-only/default and optional cloud behavior;
+- all product claims about required accounts, cloud authority, and offline-cache behavior;
 - onboarding privacy and consent copy;
 - popup/account sync status and first-upload disclosure;
 - dashboard privacy labels;
-- Profile & Settings account, resume-sync, export, and deletion controls;
+- Profile & Settings account, export, and deletion controls;
 - Smart Draft/Ollama copy if any prompt can leave localhost;
 - the public privacy policy, terms, retention, support, and deletion pages;
 - Chrome Web Store listing, privacy questionnaire, permissions justification,
@@ -129,6 +133,6 @@ Before production sync is enabled, deploy and verify the backend, then audit:
 - this document and `docs/product-feature-map.md`.
 
 The implementation must not be marketed as available until the provider setup,
-two-account RLS tests, private support path, resume consent, export/deletion,
+two-account RLS tests, private support path, resume upload, export/deletion,
 legal disclosures, and Chrome Web Store review are complete. See
 [`cloud-deployment.md`](cloud-deployment.md).

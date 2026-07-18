@@ -394,12 +394,57 @@
     return state.applications.find((item) => ApplyOS.canonicalizeUrl(item.url) === canonical) || null;
   };
 
+  function applicationMatchFields(description, profile) {
+    const match = ApplyOS.calculateMatch?.(description || "", profile) || { score: 0, matchedSkills: [], missingSkills: [], suggestedKeywords: [], suggestedExperiences: [], suggestedAnswers: {} };
+    return {
+      match_score: match.score,
+      matched_skills: match.matchedSkills,
+      missing_skills: match.missingSkills,
+      suggested_keywords: match.suggestedKeywords,
+      suggested_experiences: match.suggestedExperiences,
+      suggested_answers: match.suggestedAnswers
+    };
+  }
+
+  function sameApplicationMatch(application, fields) {
+    return JSON.stringify({
+      match_score: application.match_score,
+      matched_skills: application.matched_skills,
+      missing_skills: application.missing_skills,
+      suggested_keywords: application.suggested_keywords,
+      suggested_experiences: application.suggested_experiences,
+      suggested_answers: application.suggested_answers
+    }) === JSON.stringify(fields);
+  }
+
+  ApplyOS.refreshApplicationMatches = async function refreshApplicationMatches(profile = {}, options = {}) {
+    const applicationId = String(options.applicationId || "");
+    const applications = [];
+    let count = 0;
+    await ApplyOS.mutateState((state) => {
+      state.applications = state.applications.map((application) => {
+        if (applicationId && application.id !== applicationId) return application;
+        const fields = applicationMatchFields(application.description, profile);
+        if (sameApplicationMatch(application, fields)) {
+          applications.push(application);
+          return application;
+        }
+        const updated = { ...application, ...fields, updated_at: ApplyOS.nowISO() };
+        applications.push(updated);
+        count += 1;
+        return updated;
+      });
+      return state;
+    });
+    return { count, applications };
+  };
+
   ApplyOS.upsertApplication = async function upsertApplication(job, profile = {}) {
     let saved = null;
     await ApplyOS.mutateState((state) => {
       const canonical = ApplyOS.canonicalizeUrl(job.url);
       const existing = state.applications.find((item) => ApplyOS.canonicalizeUrl(item.url) === canonical);
-      const match = ApplyOS.calculateMatch?.(job.description || existing?.description || "", profile) || { score: 0, matchedSkills: [], missingSkills: [], suggestedKeywords: [] };
+      const matchFields = applicationMatchFields(job.description || existing?.description || "", profile);
       const now = ApplyOS.nowISO();
       const base = existing || {
         id: ApplyOS.uid("app"),
@@ -420,12 +465,7 @@
         location: job.location || base.location || "",
         deadline: job.deadline || base.deadline || null,
         resume_version_id: job.resume_version_id || base.resume_version_id || state.resume_versions.find((item) => item.is_current)?.id || null,
-        match_score: match.score,
-        matched_skills: match.matchedSkills,
-        missing_skills: match.missingSkills,
-        suggested_keywords: match.suggestedKeywords,
-        suggested_experiences: match.suggestedExperiences,
-        suggested_answers: match.suggestedAnswers,
+        ...matchFields,
         extraction_confidence: job.confidence || base.extraction_confidence || {},
         captured_at: job.captured_at || base.captured_at || now,
         updated_at: now

@@ -36,6 +36,32 @@ let currentView = "board";
 let currentSection = "applications";
 let profile = {};
 let aiConfig = {};
+document.body.inert = true;
+
+function accountGateUrl(reason) {
+  const url = new URL(chrome.runtime.getURL("account.html"));
+  url.searchParams.set("reason", reason);
+  url.searchParams.set("returnTo", `dashboard.html${location.search}${location.hash}`);
+  return url.href;
+}
+
+async function requireWorkspaceAccess() {
+  let response;
+  try { response = await chrome.runtime.sendMessage({ type: "APPLYOS_CLOUD_STATUS" }); }
+  catch { response = null; }
+  const status = response?.ok ? response.status : null;
+  const ready = status?.configured === true
+    && status?.migrationRequired !== true
+    && (status?.workspaceReady === true || status?.offlineAuthorized === true);
+  if (!ready) {
+    const reason = !response?.ok ? "status-unavailable" : status?.configured !== true ? "configuration-required" : status?.migrationRequired === true ? "migration-required" : "sign-in-required";
+    location.replace(accountGateUrl(reason));
+    return null;
+  }
+  document.body.inert = false;
+  if (status.offlineAuthorized === true) globalThis.ScoutHeader?.setStatus("Offline · cached", "offline");
+  return status;
+}
 
 function escapeHTML(value) {
   const span = document.createElement("span");
@@ -53,6 +79,16 @@ function dateTimeLabel(value) {
   if (!value) return "Not scheduled";
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? String(value) : new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(date);
+}
+
+function hasJobDescription(application) {
+  return Boolean(String(application?.description || "").trim());
+}
+
+function matchLabel(application, includeWord = false) {
+  if (!hasJobDescription(application)) return "-";
+  const value = `${Number(application.match_score || 0)}%`;
+  return includeWord ? `${value} match` : value;
 }
 
 function toDateTimeInput(value) {
@@ -114,7 +150,7 @@ function filteredApplications() {
 }
 
 function cardHTML(item) {
-  return `<article class="job-card" draggable="true" data-id="${item.id}" tabindex="0"><div class="card-top"><span class="priority ${item.priority}" title="${item.priority} priority"></span><span class="match-pill">${item.match_score || 0}% match</span></div><h3>${escapeHTML(item.role)}</h3><p>${escapeHTML(item.company)}</p><div class="card-meta"><span>${escapeHTML(item.source)}</span><span>${item.deadline ? `Due ${dateLabel(item.deadline)}` : dateLabel(item.created_at)}</span></div></article>`;
+  return `<article class="job-card" draggable="true" data-id="${item.id}" tabindex="0"><div class="card-top"><span class="priority ${item.priority}" title="${item.priority} priority"></span><span class="match-pill">${matchLabel(item, true)}</span></div><h3>${escapeHTML(item.role)}</h3><p>${escapeHTML(item.company)}</p><div class="card-meta"><span>${escapeHTML(item.source)}</span><span>${item.deadline ? `Due ${dateLabel(item.deadline)}` : dateLabel(item.created_at)}</span></div></article>`;
 }
 
 function renderBoard(items) {
@@ -143,7 +179,7 @@ function renderBoard(items) {
 }
 
 function renderList(items) {
-  elements.list.innerHTML = `<div class="table-row header"><span>ROLE / COMPANY</span><span>SOURCE</span><span>STATUS</span><span>PRIORITY</span><span>DEADLINE</span><span>MATCH</span></div>` + items.map((item) => `<div class="table-row" data-id="${item.id}" tabindex="0"><div><strong>${escapeHTML(item.role)}</strong><span>${escapeHTML(item.company)}</span></div><span>${escapeHTML(item.source)}</span><span class="status-chip">${ApplyOS.STATUS_META[item.status]?.label || item.status}</span><span>${escapeHTML(item.priority)}</span><span>${dateLabel(item.deadline)}</span><span>${item.match_score || 0}%</span></div>`).join("");
+  elements.list.innerHTML = `<div class="table-row header"><span>ROLE / COMPANY</span><span>SOURCE</span><span>STATUS</span><span>PRIORITY</span><span>DEADLINE</span><span>MATCH</span></div>` + items.map((item) => `<div class="table-row" data-id="${item.id}" tabindex="0"><div><strong>${escapeHTML(item.role)}</strong><span>${escapeHTML(item.company)}</span></div><span>${escapeHTML(item.source)}</span><span class="status-chip">${ApplyOS.STATUS_META[item.status]?.label || item.status}</span><span>${escapeHTML(item.priority)}</span><span>${dateLabel(item.deadline)}</span><span>${matchLabel(item)}</span></div>`).join("");
   elements.list.querySelectorAll(".table-row[data-id]").forEach((row) => {
     row.addEventListener("click", () => openDetail(row.dataset.id));
     row.addEventListener("keydown", (event) => { if (event.key === "Enter") openDetail(row.dataset.id); });
@@ -185,6 +221,7 @@ function renderContacts() {
 }
 
 function render() {
+  if (!state) return;
   const items = filteredApplications();
   const active = state.applications.filter((item) => !["rejected", "closed"].includes(item.status)).length;
   const due = state.reminders.filter((item) => !item.completed_at && new Date(item.due_at) <= new Date()).length;
@@ -214,10 +251,10 @@ function openDetail(id) {
   $("#detail-id").value = id; $("#detail-role").value = item.role; $("#detail-company").value = item.company;
   $("#detail-status").value = item.status; $("#detail-priority").value = item.priority; $("#detail-deadline").value = ApplyOS.toDateInput(item.deadline);
   $("#detail-follow-up").value = ApplyOS.toDateInput(item.follow_up_date); $("#detail-notes").value = item.notes || "";
-  $("#detail-score").textContent = `${item.match_score || 0}%`; $("#detail-bar").style.width = `${item.match_score || 0}%`;
-  $("#detail-skills").textContent = `Matched: ${item.matched_skills?.join(", ") || "No explicit skills yet"}`;
+  $("#detail-score").textContent = matchLabel(item); $("#detail-bar").style.width = hasJobDescription(item) ? `${item.match_score || 0}%` : "0%";
+  $("#detail-skills").textContent = hasJobDescription(item) ? `Matched: ${item.matched_skills?.join(", ") || "No explicit skills yet"}` : "A job description is required to calculate a match.";
   const highlight = item.suggested_experiences?.[0] || item.missing_skills?.join(", ") || item.suggested_keywords?.slice(0, 6).join(", ") || "No major gaps detected";
-  $("#detail-missing").textContent = `Consider highlighting: ${highlight}`;
+  $("#detail-missing").textContent = hasJobDescription(item) ? `Consider highlighting: ${highlight}` : "Reopen the job posting or update the saved job after its description is captured.";
   $("#detail-url").href = item.url; $("#detail-applied").classList.toggle("hidden", Boolean(item.applied_at));
   $("#draft").classList.add("hidden");
   $("#thank-you").classList.add("hidden");
@@ -348,14 +385,78 @@ function closeDetail() {
   detailReturnFocus = null;
 }
 
+function showDashboardSection(section, focusSearch = false) {
+  currentSection = section === "contacts" ? "contacts" : "applications";
+  document.querySelectorAll("[data-section]").forEach((item) => item.classList.toggle("active", item.dataset.section === currentSection));
+  globalThis.ScoutHeader?.setActiveNavigation(currentSection);
+  document.querySelectorAll(".application-only").forEach((item) => item.classList.toggle("hidden", currentSection !== "applications"));
+  $("#contacts-workspace").classList.toggle("hidden", currentSection !== "contacts");
+  if (focusSearch && currentSection === "contacts") $("#contact-search").focus();
+}
+
+async function startDashboardTour() {
+  const force = new URLSearchParams(location.search).get("tour") === "1";
+  await ScoutTour.start({
+    id: "main",
+    surface: "dashboard",
+    force,
+    steps: [
+      {
+        target: '[data-tour-target="metrics"]',
+        eyebrow: "YOUR SEARCH AT A GLANCE",
+        title: "Know what needs attention.",
+        body: "These live totals show active applications, follow-ups due, and interviews.",
+        placement: "bottom"
+      },
+      {
+        target: '[data-tour-target="next-actions"]',
+        eyebrow: "DEADLINES & REMINDERS",
+        title: "Your next move stays visible.",
+        body: "Deadlines, seven-day follow-ups, fourteen-day final follow-ups, and interview actions surface here as they become due.",
+        placement: "bottom"
+      },
+      {
+        target: '[data-tour-target="pipeline"]',
+        eyebrow: "APPLICATION CRM",
+        title: "This is your working pipeline.",
+        body: "Search and filter every opportunity, move between board and list views, and open a card to manage status, notes, drafts, interviews, and match guidance.",
+        placement: "top"
+      },
+      {
+        target: '[data-tour-target="contacts-workspace"]',
+        eyebrow: "CONTACTS & NETWORKING",
+        title: "Map the people behind each role.",
+        body: "Keep recruiters, hiring managers, referrals, and interviewers connected to applications—with notes and next-contact dates.",
+        placement: "top",
+        prepare: () => showDashboardSection("contacts")
+      },
+      {
+        target: '[data-tour-target="profile-settings"]',
+        eyebrow: "YOUR SOURCE OF TRUTH",
+        title: "Complete your application profile.",
+        body: "Profile & answers holds your resume, address, work history, preferences, and reusable answers. Next, Scout will show you the most important sections.",
+        placement: "bottom",
+        nextLabel: "Open profile →",
+        prepare: () => showDashboardSection("applications"),
+        onNext: async () => {
+          await ScoutTour.handoff("main", "options");
+          location.assign(chrome.runtime.getURL("options.html?tour=1"));
+          return false;
+        }
+      }
+    ],
+    onSkip: () => showDashboardSection("applications")
+  });
+}
+
 async function initialize() {
-  const [index, activeProfile, config, graphStats] = await Promise.all([ApplyOS.getProfilesIndex(), ApplyOS.getActiveProfile(), ApplyOS.getAIConfig(), ApplyOS.graphStats()]);
+  const access = await requireWorkspaceAccess();
+  if (!access) return;
+  const query = new URLSearchParams(location.search);
+  const isTour = query.get("tour") === "1";
+  const [activeProfile, config] = await Promise.all([ApplyOS.getActiveProfile(), ApplyOS.getAIConfig()]);
   profile = activeProfile; aiConfig = config;
-  const profileSelect = $("#active-profile");
-  profileSelect.replaceChildren(...index.profiles.map((meta) => { const option = document.createElement("option"); option.value = meta.id; option.textContent = meta.targetRole ? `${meta.name} · ${meta.targetRole}` : meta.name; return option; }));
-  profileSelect.value = index.activeId;
-  $("#metric-memory").textContent = graphStats.answers;
-  $("#studio-status").textContent = aiConfig.enabled ? "LOCALLY ENHANCED" : "READY OFFLINE";
+  $("#studio-status").textContent = aiConfig.enabled ? "AI ENHANCED" : "SMART READY";
   $("#studio-status").classList.add("on");
   ApplyOS.APPLICATION_STATUSES.forEach((status) => {
     const label = ApplyOS.STATUS_META[status].label;
@@ -365,28 +466,31 @@ async function initialize() {
   ApplyOS.CONTACT_RELATIONSHIPS.forEach((relationship) => $("#contact-relationship").insertAdjacentHTML("beforeend", `<option value="${relationship}">${titleCase(relationship)}</option>`));
   ApplyOS.INTERVIEW_TYPES.forEach((type) => $("#interview-type").insertAdjacentHTML("beforeend", `<option value="${type}">${titleCase(type)}</option>`));
   ApplyOS.INTERVIEW_FORMATS.forEach((format) => $("#interview-format").insertAdjacentHTML("beforeend", `<option value="${format}">${titleCase(format)}</option>`));
+  // Contextual coach marks are strictly read-only. Normal dashboard visits
+  // refresh any saved scores made stale by profile or resume updates.
+  if (!isTour) await ApplyOS.refreshApplicationMatches(profile);
   await load();
+  if (!query.has("tour")) showDashboardSection(query.get("section") || "applications");
+  await startDashboardTour();
 }
 
 [elements.search, elements.status, elements.source, elements.priority].forEach((control) => control.addEventListener(control === elements.search ? "input" : "change", render));
 document.querySelectorAll("[data-view]").forEach((button) => button.addEventListener("click", () => {
   currentView = button.dataset.view; document.querySelectorAll("[data-view]").forEach((item) => item.classList.toggle("active", item === button)); render();
 }));
-document.querySelectorAll("[data-section]").forEach((button) => button.addEventListener("click", () => {
-  currentSection = button.dataset.section;
-  document.querySelectorAll("[data-section]").forEach((item) => item.classList.toggle("active", item === button));
-  document.querySelectorAll(".application-only").forEach((item) => item.classList.toggle("hidden", currentSection !== "applications"));
-  $("#contacts-workspace").classList.toggle("hidden", currentSection !== "contacts");
-  if (currentSection === "contacts") $("#contact-search").focus();
+document.querySelectorAll("[data-section]").forEach((button) => button.addEventListener("click", (event) => {
+  event.preventDefault();
+  showDashboardSection(button.dataset.section, true);
+  const url = new URL(location.href);
+  if (button.dataset.section === "contacts") url.searchParams.set("section", "contacts");
+  else url.searchParams.delete("section");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }));
 $("#contact-search").addEventListener("input", renderContacts);
 $("#add-contact").addEventListener("click", () => openContact());
 $("#contacts-empty-add").addEventListener("click", () => openContact());
 $("#add-linked-contact").addEventListener("click", () => { const applicationId = selectedId; closeDetail(); openContact(null, applicationId); });
 $("#mock").addEventListener("click", async () => { await ApplyOS.seedMockData(); await load(); toast("Sample applications added"); });
-$("#profile").addEventListener("click", () => chrome.runtime.openOptionsPage());
-$("#account").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("account.html") }));
-$("#active-profile").addEventListener("change", async (event) => { await ApplyOS.setActiveProfile(event.target.value); window.location.reload(); });
 $("#close-detail").addEventListener("click", closeDetail);
 $("#close-contact").addEventListener("click", closeContact);
 elements.scrim.addEventListener("click", () => { closeContact(); closeDetail(); });
@@ -432,7 +536,7 @@ $("#contact-form").addEventListener("submit", async (event) => {
   });
   await load(); closeContact(); toast("Contact saved");
 });
-$("#delete-contact").addEventListener("click", async () => { if (!selectedContactId || !confirm("Delete this contact from ApplyOS?")) return; await ApplyOS.deleteContact(selectedContactId); await load(); closeContact(); toast("Contact deleted"); });
+$("#delete-contact").addEventListener("click", async () => { if (!selectedContactId || !confirm("Delete this contact from Scout?")) return; await ApplyOS.deleteContact(selectedContactId); await load(); closeContact(); toast("Contact deleted"); });
 [$("#contact-subject"), $("#contact-message"), $("#contact-email")].forEach((control) => control.addEventListener("input", updateContactComposeLinks));
 
 $("#add-interview").addEventListener("click", () => openInterviewEditor());
@@ -461,17 +565,28 @@ $("#interview-contact").addEventListener("change", updateThankYouComposeLinks);
 async function runAIStudio(kind) {
   const application = state.applications.find((item) => item.id === selectedId); if (!application) return;
   const buttons = [...document.querySelectorAll(".studio-actions button")]; buttons.forEach((button) => { button.disabled = true; });
-  $("#ai-output-wrap").classList.remove("hidden"); $("#ai-output-title").textContent = "Building from your profile…"; $("#ai-output").value = "ApplyOS is comparing the job description with your active profile.";
+  $("#ai-output-wrap").classList.remove("hidden"); $("#ai-output-title").textContent = "Building from your profile…"; $("#ai-output").value = "Scout is comparing the job description with your active profile.";
   try {
     if (kind === "cover") { const result = await ApplyOS.generateAICoverLetter(application, profile); $("#ai-output-title").textContent = `${result.provider === "ollama" ? "Enhanced" : "Smart"} cover letter · review required`; $("#ai-output").value = result.text; }
     if (kind === "resume") { const result = await ApplyOS.tailorResumeWithAI(application, profile); $("#ai-output-title").textContent = `${result.provider === "ollama" ? "Enhanced resume" : "Resume focus plan"} · review required`; $("#ai-output").value = result.tailoredResume; }
     if (kind === "keywords") { const result = await ApplyOS.analyzeKeywordGapWithAI(application, profile); $("#ai-output-title").textContent = `Keyword gap · ${result.score}%`; $("#ai-output").value = `PRESENT\n${result.present.join(", ") || "None detected"}\n\nMISSING / VERIFY BEFORE ADDING\n${result.missing.join(", ") || "None detected"}\n\nEXPERIENCE TO HIGHLIGHT\n${result.highlights.join("\n") || "No suggestions"}`; }
-  } catch (error) { $("#ai-output-title").textContent = "Local AI error"; $("#ai-output").value = error.message; }
+  } catch (error) { $("#ai-output-title").textContent = "AI enhancement error"; $("#ai-output").value = error.message; }
   finally { buttons.forEach((button) => { button.disabled = false; }); }
 }
 $("#ai-cover-letter").addEventListener("click", () => runAIStudio("cover"));
 $("#ai-tailor-resume").addEventListener("click", () => runAIStudio("resume"));
 $("#ai-keywords").addEventListener("click", () => runAIStudio("keywords"));
 $("#copy-ai-output").addEventListener("click", async () => { await navigator.clipboard.writeText($("#ai-output").value); toast("AI output copied for manual review"); });
-chrome.storage.onChanged.addListener((changes, area) => { if (area === "local" && changes.applyos_state) { state = changes.applyos_state.newValue; render(); } });
-initialize().catch((error) => toast(error.message));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== "local" || !changes.applyos_state) return;
+  // Account/cache transitions can briefly remove the local projection before
+  // replacing it. Keep the last rendered state until a complete value arrives.
+  const nextState = changes.applyos_state.newValue;
+  if (!nextState || !Array.isArray(nextState.applications)) return;
+  state = nextState;
+  render();
+});
+initialize().catch((error) => {
+  document.body.inert = false;
+  toast(error.message);
+});

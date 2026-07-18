@@ -3,12 +3,8 @@
 html,body { width:420px; height:600px; overflow:hidden; }
 body { margin:0; color:var(--ink); background:linear-gradient(rgba(23,24,20,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(23,24,20,.04) 1px,transparent 1px),var(--paper); background-size:24px 24px; font-family:"Avenir Next","Century Gothic",sans-serif; }
 main { height:600px; min-height:0; padding:14px 20px; display:flex; flex-direction:column; overflow:hidden; }
-header,footer,.page-state,.primary,.secondary { display:flex; align-items:center; justify-content:space-between; gap:12px; }
-.header-nav { display:flex; align-items:center; gap:10px; }
-.brand { display:flex; align-items:center; gap:9px; font-size:12px; font-weight:800; letter-spacing:.16em; }
-.mark { display:grid; place-items:center; width:27px; height:27px; color:var(--acid); background:var(--ink); font:italic 17px/1 Georgia,serif; letter-spacing:0; }
-.nav-button,.text-button { padding:0 0 2px; border:0; border-bottom:1px solid currentColor; color:var(--ink); background:transparent; font:700 10px/1.2 "Avenir Next",sans-serif; cursor:pointer; }
-.profile-strip { margin-top:12px; padding:7px 0; display:grid; grid-template-columns:1fr auto auto; align-items:end; gap:9px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
+.page-state,.primary,.secondary { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.profile-strip { padding:7px 0; display:grid; grid-template-columns:1fr auto auto; align-items:end; gap:9px; border-top:1px solid var(--line); border-bottom:1px solid var(--line); }
 .profile-strip label { display:grid; gap:5px; }.profile-strip label span { color:var(--muted); font:700 7px/1 "Courier New",monospace; letter-spacing:.14em; }
 .profile-strip select { border:0; padding:0; background:transparent; font-size:11px; font-weight:800; }.profile-strip button { padding:5px 8px; border:1px solid var(--ink); background:transparent; font-size:8px; font-weight:800; cursor:pointer; }
 .ai-status { padding:6px 7px; background:#d7d3c9; font:800 7px/1 "Courier New",monospace; letter-spacing:.08em; }.ai-status.on { background:var(--acid); }
@@ -44,7 +40,6 @@ button:disabled { opacity:.42; cursor:not-allowed; box-shadow:none; }
 .result { min-height:0; padding-top:7px; color:var(--muted); font-size:10px; line-height:1.4; }
 .result:empty { display:none; }
 .result.success { color:#38531b; }.result.error { color:#a13228; }
-footer { margin-top:auto; padding-top:8px; border-top:1px solid var(--line); color:var(--muted); font-size:9px; }
 .hidden { display:none!important; }
 button:focus-visible,input:focus-visible,select:focus-visible { outline:3px solid #55791f; outline-offset:2px; }
 @media (prefers-reduced-motion:reduce) { * { transition:none!important; } }

@@ -2,6 +2,41 @@
   "use strict";
 
   const ATSCompat = globalThis.ApplyOS?.ATSCompat;
+  const NOTIFICATION_STACK_CLASS = "scout-notification-stack";
+
+  function notificationStack() {
+    let stack = document.querySelector(`.${NOTIFICATION_STACK_CLASS}`);
+    if (stack) return stack;
+    stack = document.createElement("div");
+    stack.className = NOTIFICATION_STACK_CLASS;
+    stack.setAttribute("aria-label", "Scout notifications");
+    const observer = new MutationObserver(() => {
+      if (stack.childElementCount) return;
+      observer.disconnect();
+      stack.remove();
+    });
+    observer.observe(stack, { childList: true });
+    document.documentElement.append(stack);
+    return stack;
+  }
+
+  function showPageNotification(message, options = {}) {
+    const { className = "", duration = 5500, key = "" } = options;
+    const stack = notificationStack();
+    if (key) stack.querySelector(`[data-scout-notification-key="${CSS.escape(key)}"]`)?.remove();
+    const toast = document.createElement("div");
+    toast.className = ["applykit-toast", className].filter(Boolean).join(" ");
+    toast.setAttribute("role", "status");
+    if (key) toast.dataset.scoutNotificationKey = key;
+    toast.textContent = message;
+    stack.append(toast);
+    if (duration > 0) window.setTimeout(() => toast.remove(), duration);
+    return toast;
+  }
+
+  globalThis.ApplyOS = globalThis.ApplyOS || {};
+  globalThis.ApplyOS.showPageNotification = showPageNotification;
+
   const CONTROL_SELECTOR = [
     "input",
     "textarea",
@@ -780,7 +815,7 @@
       if (attached) input.dataset.applyosResumeAttached = resume.name;
       return attached;
     } catch (error) {
-      console.warn("ApplyOS could not attach the stored resume", error);
+      console.warn("Scout could not attach the stored resume", error);
       return false;
     }
   }
@@ -1063,18 +1098,18 @@
   }
 
   async function fillFromStorage() {
-    const stored = await chrome.storage.local.get(["profile", "applyos_state", "applyos_graph"]);
-    const activeProfile = await globalThis.ApplyOS?.getActiveProfile?.();
-    const profile = activeProfile && Object.keys(activeProfile).length ? activeProfile : stored.profile;
-    const { applyos_state: state, applyos_graph: graph } = stored;
+    const response = await chrome.runtime.sendMessage({ type: "APPLYOS_AUTOFILL_BUNDLE" });
+    if (!response?.ok) throw new Error(response?.error || "Sign in to Scout before autofilling.");
+    const bundle = response.bundle || {};
+    const profile = bundle.profile;
     if (!profile) throw new Error("Profile not configured");
-    const remembered = (state?.answer_memory || []).filter(answerMatchesPageScope).map(({ question, answer, scope, company_domain }) => ({ question, answer, scope, company_domain }));
+    const remembered = (bundle.answerMemory || []).filter(answerMatchesPageScope);
     const scopedProfileAnswers = (profile.customAnswers || []).filter(answerMatchesPageScope);
     const mergedProfile = {
       ...profile,
       _learnedAnswers: [
-        ...(state?.learned_answers || []),
-        ...((graph?.nodes || []).filter((node) => node.type === "answer" && answerMatchesPageScope(node)).map((node) => ({
+        ...(bundle.learnedAnswers || []),
+        ...((bundle.graphAnswers || []).filter(answerMatchesPageScope).map((node) => ({
           id: node.id, fingerprint: node.id, question: node.question, normalized_question: ApplyOS.normalizeQuestion(node.question), answer: node.answer,
           canonical_field: node.canonical_field, field_type: node.prompt_type || "text", site: node.platforms?.[0] || "unknown", use_count: node.use_count || 1, updated_at: node.updated_at
         })))
@@ -1124,12 +1159,16 @@
   }
 
   async function runAgentAssist() {
-    const profile = await globalThis.ApplyOS?.getActiveProfile?.();
+    const response = await chrome.runtime.sendMessage({ type: "APPLYOS_AUTOFILL_BUNDLE" });
+    if (!response?.ok) throw new Error(response?.error || "Sign in to Scout before using Smart Assist.");
+    const profile = response.bundle?.profile;
     if (!profile) throw new Error("Profile not configured");
     const { fields, candidateLookup } = collectAgentFields(profile);
     if (!fields.length) return { scanned: 0, filled: 0, skipped: 0, blockedActions: 0, reviewRequired: true, site: detectSite() };
     const job = window === window.top && globalThis.ApplyOS?.captureJob ? globalThis.ApplyOS.captureJob() : {};
-    const plan = await globalThis.ApplyOS.generateAgentPlan(fields, profile, job);
+    const planResponse = await chrome.runtime.sendMessage({ type: "APPLYOS_AGENT_PLAN", fields, job });
+    if (!planResponse?.ok) throw new Error(planResponse?.error || "Smart Assist could not prepare a review plan.");
+    const plan = planResponse.plan;
     const report = { scanned: fields.length, filled: 0, skipped: 0, blockedActions: plan.blockedActions, reviewRequired: true, site: detectSite(), notes: plan.notes };
     const processedGroups = new Set();
     for (const action of plan.actions) {
@@ -1149,26 +1188,21 @@
 
   function showResultToast(report) {
     try {
-      if (window !== window.top) return;
+      if (window !== window.top) return null;
     } catch {
-      return;
+      return null;
     }
-    document.querySelector(".applykit-toast")?.remove();
-    const toast = document.createElement("div");
-    toast.className = "applykit-toast";
-    toast.setAttribute("role", "status");
     const missingProfile = report.missingProfileFields?.length
       ? ` Add ${report.missingProfileFields.join(", ")} in Profile & Settings.`
       : "";
-    toast.textContent = report.resumeStatus === "missing"
-      ? "ApplyOS found a resume upload field, but no resume file is saved in your profile. Add one in Profile & Settings."
+    const message = report.resumeStatus === "missing"
+      ? "Scout found a resume upload field, but no resume file is saved in your profile. Add one in Profile & Settings."
       : report.resumeStatus === "failed"
-        ? "ApplyOS found the resume upload field but could not attach the saved file. Please attach it manually and review the form."
+        ? "Scout found the resume upload field but could not attach the saved file. Please attach it manually and review the form."
         : report.filled || report.attached
-      ? `ApplyOS filled ${report.filled} field${report.filled === 1 ? "" : "s"}${report.attached ? ` + ${report.attached} resume` : ""}. Review the remaining fields.${missingProfile}`
-      : `ApplyOS found no confident matches. ${report.unmatchedRequired || 0} required field${report.unmatchedRequired === 1 ? "" : "s"} may need review.${missingProfile}`;
-    document.documentElement.append(toast);
-    window.setTimeout(() => toast.remove(), 5500);
+      ? `Scout filled ${report.filled} field${report.filled === 1 ? "" : "s"}${report.attached ? ` + ${report.attached} resume` : ""}. Review the remaining fields.${missingProfile}`
+      : `Scout found no confident matches. ${report.unmatchedRequired || 0} required field${report.unmatchedRequired === 1 ? "" : "s"} may need review.${missingProfile}`;
+    return showPageNotification(message);
   }
 
   function diagnosticRawField(element) {
@@ -1218,7 +1252,7 @@
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `applyos-broken-fields-${payload.source_domain}-${Date.now()}.json`;
+    link.download = `scout-broken-fields-${payload.source_domain}-${Date.now()}.json`;
     link.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
@@ -1307,7 +1341,7 @@
 
     const actions = document.createElement("footer");
     const privacy = document.createElement("span");
-    privacy.textContent = "Private ApplyOS support · authenticated and rate-limited";
+    privacy.textContent = "Private Scout support · authenticated and rate-limited";
     const buttonGroup = document.createElement("div");
     const copyButton = document.createElement("button");
     copyButton.type = "button";
@@ -1358,7 +1392,8 @@
         reportButton.textContent = "Sent";
         copyButton.textContent = "Copy for your records";
       } else {
-        privacy.textContent = response?.error || "Sign in under Account & sync, or use Copy/Download while offline.";
+        const reason = String(response?.error || "Private support is temporarily unavailable.").trim();
+        privacy.textContent = `${reason} Use Copy or Download to keep the reviewed report.`;
         reportButton.textContent = "Retry private report";
         reportButton.disabled = false;
       }
@@ -1369,6 +1404,91 @@
     refreshPreview();
     close.focus();
     return { count: fields.length };
+  }
+
+  const AUTO_PROMPT_PREFIX = "scout:page-prompt:";
+  let autoPromptTimer = null;
+
+  function autoPromptKey() {
+    return `${AUTO_PROMPT_PREFIX}${globalThis.ApplyOS.canonicalizeUrl(location.href)}`;
+  }
+
+  function applicationFieldCount() {
+    return queryAllDeep("input, textarea, select, [role='combobox'], [role='radio'], input[type='file']")
+      .filter((element) => visible(element) && !element.closest?.(".scout-page-prompt, .applyos-review-overlay, .applyos-submit-prompt"))
+      .filter((element) => !["hidden", "password", "search"].includes(String(element.type || "").toLowerCase()))
+      .length;
+  }
+
+  function detectedPageAction() {
+    const job = globalThis.ApplyOS?.captureJob?.();
+    if (!job?.company?.trim() || !job?.role?.trim()) return null;
+    const confidence = job.confidence || {};
+    if (Number(confidence.company || 0) < 0.68 || Number(confidence.role || 0) < 0.68) return null;
+    const knownPlatform = job.platform && job.platform !== "company_careers";
+    const jobEvidence = String(job.description || "").length >= 200;
+    const fields = applicationFieldCount();
+    if (!knownPlatform && !jobEvidence && fields < 2) return null;
+    return { job, action: fields >= 2 ? "autofill" : "save", fieldCount: fields };
+  }
+
+  async function showPagePromptIfEligible() {
+    if (window !== window.top || document.hidden || document.querySelector(".scout-page-prompt, .applyos-review-overlay, .applyos-submit-prompt")) return;
+    const key = autoPromptKey();
+    if (sessionStorage.getItem(key)) return;
+    const response = await chrome.runtime.sendMessage({ type: "APPLYOS_CLOUD_STATUS" }).catch(() => null);
+    const status = response?.ok ? response.status : null;
+    if (!status?.configured || (!status.workspaceReady && !status.offlineAuthorized)) return;
+    const detected = detectedPageAction();
+    if (!detected) return;
+
+    const prompt = document.createElement("section");
+    prompt.className = "scout-page-prompt";
+    prompt.setAttribute("role", "dialog");
+    prompt.setAttribute("aria-label", detected.action === "autofill" ? "Scout autofill suggestion" : "Scout save job suggestion");
+    const eyebrow = document.createElement("p");
+    eyebrow.textContent = "SCOUT DETECTED A JOB";
+    const title = document.createElement("h2");
+    title.textContent = detected.action === "autofill" ? "Ready to autofill?" : "Save this opportunity?";
+    const detail = document.createElement("p");
+    detail.textContent = `${detected.job.role} at ${detected.job.company}. Scout will save this job${detected.action === "autofill" ? " and fill only confident fields" : " to your private workspace"}. You still review and submit.`;
+    const actions = document.createElement("div");
+    const primary = document.createElement("button");
+    primary.type = "button";
+    primary.className = "scout-page-primary";
+    primary.textContent = detected.action === "autofill" ? "Save & autofill" : "Save job";
+    const dismiss = document.createElement("button");
+    dismiss.type = "button";
+    dismiss.textContent = "Not now";
+    actions.append(primary, dismiss);
+    prompt.append(eyebrow, title, detail, actions);
+    notificationStack().append(prompt);
+
+    dismiss.addEventListener("click", () => {
+      sessionStorage.setItem(key, "dismissed");
+      prompt.remove();
+    });
+    primary.addEventListener("click", async () => {
+      primary.disabled = true;
+      primary.textContent = detected.action === "autofill" ? "Autofilling…" : "Saving…";
+      const result = await chrome.runtime.sendMessage({ type: "SCOUT_PAGE_ACTION", action: detected.action, job: detected.job, url: location.href }).catch((error) => ({ ok: false, error: error.message }));
+      if (!result?.ok) {
+        primary.disabled = false;
+        primary.textContent = "Try again";
+        detail.textContent = result?.error || "Scout could not complete this action.";
+        return;
+      }
+      sessionStorage.setItem(key, "completed");
+      prompt.remove();
+      // The autofill content action already reports its own result. Adding a
+      // second callback toast here would duplicate the same notification.
+      if (detected.action !== "autofill") showPageNotification("Saved to Scout. Open the extension to review the job details.");
+    });
+  }
+
+  function schedulePagePrompt(delay = 900) {
+    window.clearTimeout(autoPromptTimer);
+    autoPromptTimer = window.setTimeout(() => showPagePromptIfEligible().catch(() => {}), delay);
   }
 
   let submissionSession = null;
@@ -1425,7 +1545,7 @@
     const title = document.createElement("h2");
     title.textContent = "Did you submit this application?";
     const detail = document.createElement("p");
-    detail.textContent = [session.role, session.company].filter(Boolean).join(" at ") || "ApplyOS will only update this after you confirm.";
+    detail.textContent = [session.role, session.company].filter(Boolean).join(" at ") || "Scout will only update this after you confirm.";
     const actions = document.createElement("div");
     const yes = document.createElement("button");
     yes.type = "button";
@@ -1440,16 +1560,14 @@
     suppress.textContent = "Don’t ask again here";
     actions.append(yes, notYet, suppress);
     prompt.append(eyebrow, title, detail, actions);
-    document.documentElement.append(prompt);
+    notificationStack().append(prompt);
     yes.addEventListener("click", async () => {
       yes.disabled = true;
       const response = await chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_CONFIRM_APPLIED" });
       if (!response?.ok) { yes.disabled = false; detail.textContent = response?.error || "Could not update the application."; return; }
       prompt.remove();
       submissionSession = null;
-      showResultToast({ filled: 0, attached: 0, unmatchedRequired: 0, resumeStatus: "not-found" });
-      const toast = document.querySelector(".applykit-toast");
-      if (toast) toast.textContent = "Marked applied. ApplyOS scheduled your reviewed follow-up reminders.";
+      showPageNotification("Marked applied. Scout scheduled your reviewed follow-up reminders.");
     });
     notYet.addEventListener("click", async () => {
       const response = await chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_DISMISS", action: "not_yet" });
@@ -1486,13 +1604,14 @@
       if (location.href === observedUrl) return;
       observedUrl = location.href;
       queueConfirmationCheck(100);
+      schedulePagePrompt(700);
     }, 750);
   }
 
   document.addEventListener("keydown", (event) => {
     if (!(event.altKey && event.shiftKey && event.code === "KeyA")) return;
     event.preventDefault();
-    fillFromStorage().catch((error) => console.warn("ApplyOS autofill failed", error));
+    fillFromStorage().catch((error) => console.warn("Scout autofill failed", error));
   });
 
   window.addEventListener("pagehide", stopAssistMode);
@@ -1526,4 +1645,5 @@
   });
 
   initializeSubmissionDetection();
+  schedulePagePrompt();
 })();

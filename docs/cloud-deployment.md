@@ -1,14 +1,17 @@
-# ApplyOS cloud deployment and launch gate
+# Scout cloud deployment and launch gate
 
-Version 0.10 contains the client runtime, database migration, Row Level Security
-(RLS), private resume bucket, Edge Functions, account UI, consent controls, and
+The current release contains the account-required client runtime, authoritative
+record repository, database migrations, Row Level Security (RLS), private resume
+bucket, Edge Functions, account UI, offline cache, and
 tests. It intentionally contains no production URL, publishable key, LinkedIn
 secret, service-role key, customer data, or billing secret.
 
 ## What the deployer must supply
 
 - A staging and production Supabase project.
+- A Google Cloud OAuth client configured for Supabase Auth.
 - A LinkedIn Developer app with **Sign In with LinkedIn using OpenID Connect**.
+- A production email provider/SMTP configuration for verification-code delivery.
 - The final Chrome Web Store extension ID. `chrome.identity.getRedirectURL()`
   produces `https://<extension-id>.chromiumapp.org/auth/callback`; add that exact
   URL to the Supabase Auth redirect allow list.
@@ -17,11 +20,14 @@ secret, service-role key, customer data, or billing secret.
   redirect URLs. LinkedIn redirects to Supabase; Supabase returns to the exact
   extension URL.
 - A public privacy policy, terms, support contact, retention policy, and account
-  deletion instructions that accurately describe local and optional cloud data.
+  deletion instructions that accurately describe authoritative cloud data and
+  the user-specific offline cache.
 
 Official references:
 
 - [Supabase LinkedIn OIDC setup](https://supabase.com/docs/guides/auth/social-login/auth-linkedin)
+- [Supabase Google setup](https://supabase.com/docs/guides/auth/social-login/auth-google)
+- [Supabase email OTP](https://supabase.com/docs/reference/javascript/auth-signinwithotp)
 - [Chrome Identity API](https://developer.chrome.com/docs/extensions/reference/api/identity)
 - [Supabase Row Level Security](https://supabase.com/docs/guides/database/postgres/row-level-security)
 - [Supabase Storage access control](https://supabase.com/docs/guides/storage/security/access-control)
@@ -53,31 +59,47 @@ npx supabase@2.109.1 functions deploy submit-support-report
 npx supabase@2.109.1 functions deploy delete-account
 ```
 
-Set Edge Function secrets in Supabase, never in Git or the extension:
+Hosted Supabase Edge Functions receive `SUPABASE_URL` and the server-only API
+keys as protected default environment variables. Do not copy, override, commit,
+or embed those server-only values. Set only additional application secrets you
+introduce later (for example, a payment webhook secret) through Edge Function
+Secrets. The extension needs only the project URL and publishable key.
 
-```sh
-npx supabase@2.109.1 secrets set \
-  SUPABASE_URL=https://YOUR_STAGING_REF.supabase.co \
-  SUPABASE_SERVICE_ROLE_KEY=YOUR_SERVER_ONLY_SERVICE_ROLE_KEY
-```
+## 3. Configure email, Google, and LinkedIn authentication
 
-The service-role key bypasses RLS and must stay server-side. The extension needs
-only the project URL and publishable key.
-
-## 3. Configure LinkedIn OIDC
-
-1. Create the LinkedIn Project/App and request the OpenID Connect sign-in
+1. Configure production SMTP and email OTP templates in Supabase Auth. Set
+   appropriate expiry, abuse controls, CAPTCHA/rate limits, and branded sender.
+2. Create a Google OAuth client, add Supabase's callback URL, enable Google in
+   Supabase Auth, and store the Google client secret only in Supabase.
+3. Create the LinkedIn Project/App and request the OpenID Connect sign-in
    product.
-2. Add Supabase's callback URL to LinkedIn.
-3. Enable **LinkedIn (OIDC)** in Supabase Auth and enter the LinkedIn client ID
+4. Add Supabase's callback URL to LinkedIn.
+5. Enable **LinkedIn (OIDC)** in Supabase Auth and enter the LinkedIn client ID
    and secret there.
-4. Add the exact staging extension redirect URL to Supabase's redirect allow
+6. Add the exact staging extension redirect URL to Supabase's redirect allow
    list. Do not use a wildcard in production.
-5. Put the staging project URL and publishable key into the Account page during
-   internal testing. Before public release, set the non-secret defaults in
-   `shared/cloud-config.js` so ordinary users never see deployment setup.
+7. Build the staging extension with the non-secret client configuration:
 
-LinkedIn sign-in provides basic identity claims. It does not authorize ApplyOS
+   ```sh
+   SCOUT_BUILD_MODE=production \
+   SCOUT_SUPABASE_URL=https://YOUR_STAGING_REF.supabase.co \
+   SCOUT_SUPABASE_PUBLISHABLE_KEY=sb_publishable_YOUR_KEY \
+   npm run build:production
+   ```
+
+   The build writes these values into `dist/shared/cloud-config.js` and grants
+   only that Supabase origin. The Account page never asks customers for them.
+
+   Run the deterministic browser suite before this command with `npm run verify`.
+   That suite deliberately installs a local test session and therefore uses a
+   development build. After creating the production build, validate its embedded
+   public configuration without replacing it:
+
+   ```sh
+   npm run test:production-build
+   ```
+
+LinkedIn sign-in provides basic identity claims. It does not authorize Scout
 to import a member's connections, messages, posts, contacts, or work history.
 Do not present it as candidate identity or employment verification.
 
@@ -90,21 +112,22 @@ Test with two unrelated accounts and prove:
 - Support reports can be inserted only through the authenticated Edge Function
   and are redacted, bounded, rate-limited, retained for the documented period,
   and inaccessible to normal clients.
-- Workspace sync is off before explicit consent; resume bytes remain local
-  before separate resume consent.
-- A version conflict pauses without overwriting either copy. **Use cloud copy**
-  and **Replace cloud with local** require typed confirmation, and **Undo cloud
-  restore** restores the local checkpoint.
-- Candidate publication starts private. Recruiter visibility exposes only its
-  reviewed allowlist and never applications, notes, contacts, interviews,
-  answers, or resume files.
+- Signed-out users cannot open profile, popup, dashboard, onboarding, or autofill
+  workspaces; a previously authenticated offline session can use only its own cache.
+- Record mutations retry idempotently, remote changes pull incrementally, and
+  deletion tombstones propagate across devices.
+- A record version conflict pauses without overwriting either copy and remains
+  available for explicit review.
+- The current extension exposes no candidate-publication or recruiter-search
+  controls. Reserved publication tables have no recruiter-facing read policy.
 - Sign-out, export, and cloud-account deletion work on a clean browser profile.
 - Signing a different account into an already linked local workspace triggers an
   account-safety stop instead of uploading or restoring either user's data.
 
-The current sync protocol is owner-only snapshot sync with durable client retry,
-idempotent change IDs, server versions, and explicit conflict resolution. It is
-not end-to-end encrypted or a collaborative per-record merge engine.
+The current sync protocol is an owner-only, record-level repository with durable
+client retries, idempotent mutation IDs, incremental cursors, server versions,
+tombstones, and explicit conflict state. It is not end-to-end encrypted or a
+collaborative real-time document system.
 
 ## 5. Privacy and Chrome Web Store release gate
 
@@ -115,8 +138,8 @@ Before staging becomes production:
 - Complete the Chrome Web Store privacy questionnaire for identity, personal
   information, website content, form data, locally stored data, and optional
   transmissions.
-- Keep the in-product prominent disclosure and affirmative sync/resume/
-  publication choices. A policy page alone is not sufficient consent.
+- Keep the in-product prominent account/cloud disclosure and the separate
+  candidate-publication choice. A policy page alone is not sufficient notice.
 - Document subprocessors, encryption in transit/at rest, retention, support
   access, breach handling, export, and deletion service levels.
 - Establish a private staff support console and least-privilege support roles;
@@ -140,6 +163,6 @@ git diff --exit-code
 ```
 
 Do not mark the cloud release ready if the database tests, two-account isolation
-test, LinkedIn login, deletion, private support, resume consent, conflict flow,
+test, email/Google/LinkedIn login, deletion, private support, resume upload, conflict flow,
 or Chrome Web Store disclosures have not been verified against production-like
 staging.

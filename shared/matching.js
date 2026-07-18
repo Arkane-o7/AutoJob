@@ -65,7 +65,9 @@
     if (Array.isArray(value)) return value.map((item) => objectText(item, depth + 1)).join(" ");
     if (typeof value === "object") {
       return Object.entries(value)
-        .filter(([key]) => !/dataUrl|base64|resume/i.test(key))
+        // Match against the user-reviewed resumeText, but never inspect the
+        // uploaded file object, its data URL, or storage identifiers.
+        .filter(([key]) => !/^(?:resume|currentResumeVersionId|dataUrl|base64)$/i.test(key))
         .map(([, item]) => objectText(item, depth + 1))
         .join(" ");
     }
@@ -117,6 +119,7 @@
       .slice(0, 3);
 
     return {
+      available: Boolean(jobText.trim()),
       score,
       jobSkills,
       matchedSkills,

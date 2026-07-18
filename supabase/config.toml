@@ -18,7 +18,7 @@ port = 54323
 [auth]
 enabled = true
 site_url = "https://example.invalid"
-additional_redirect_urls = ["https://example-extension-id.chromiumapp.org/auth/callback"]
+additional_redirect_urls = ["https://mfjobohldgnoickgkbakbeejjlhbhaen.chromiumapp.org/auth/callback"]
 enable_signup = true
 
 [auth.external.linkedin_oidc]

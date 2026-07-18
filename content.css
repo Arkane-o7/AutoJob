@@ -8,12 +8,34 @@
   box-shadow: 0 0 0 3px rgba(184, 243, 74, 0.35) !important;
 }
 
-.applykit-toast {
+.scout-notification-stack {
   position: fixed !important;
   z-index: 2147483647 !important;
-  right: 20px !important;
-  bottom: 20px !important;
-  max-width: 360px !important;
+  right: 22px !important;
+  bottom: 22px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  width: min(390px, calc(100vw - 44px)) !important;
+  max-height: calc(100vh - 44px) !important;
+  overflow: auto !important;
+  overscroll-behavior: contain !important;
+  padding: 0 7px 7px 0 !important;
+  pointer-events: none !important;
+  scrollbar-width: thin !important;
+}
+
+.scout-notification-stack > * {
+  flex: 0 0 auto !important;
+  pointer-events: auto !important;
+}
+
+.applykit-toast {
+  position: relative !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+  max-width: none !important;
   padding: 14px 16px !important;
   border: 1px solid #181915 !important;
   background: #181915 !important;
@@ -80,7 +102,8 @@
 .applyos-review-dialog footer .applyos-review-report { background: #b9f54a !important; box-shadow: 3px 3px 0 #171814 !important; }
 .applyos-review-dialog footer button:disabled { cursor: not-allowed !important; opacity: .42 !important; box-shadow: none !important; }
 
-.applyos-submit-prompt {
+.applyos-submit-prompt,
+.scout-page-prompt {
   position: fixed !important;
   z-index: 2147483647 !important;
   right: 22px !important;
@@ -94,14 +117,29 @@
   box-shadow: 6px 6px 0 #b9f54a !important;
   font: 500 12px/1.45 "Avenir Next", "Century Gothic", sans-serif !important;
 }
-.applyos-submit-prompt > p, .applyos-submit-prompt > h2 { margin: 0 !important; }
-.applyos-submit-prompt > p:first-child { color: #676a60 !important; font: 800 8px/1 "Courier New", monospace !important; letter-spacing: .14em !important; }
-.applyos-submit-prompt h2 { margin-top: 8px !important; font: 400 25px/1.1 Georgia, serif !important; }
-.applyos-submit-prompt h2 + p { margin-top: 8px !important; color: #676a60 !important; }
-.applyos-submit-prompt div { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-top: 16px !important; }
-.applyos-submit-prompt button { border: 1px solid #171814 !important; padding: 11px 9px !important; color: #171814 !important; background: transparent !important; cursor: pointer !important; font: 800 11px/1 "Avenir Next", sans-serif !important; }
+.scout-notification-stack > .applyos-submit-prompt,
+.scout-notification-stack > .scout-page-prompt {
+  position: relative !important;
+  right: auto !important;
+  bottom: auto !important;
+  width: 100% !important;
+}
+.applyos-submit-prompt > p, .applyos-submit-prompt > h2,
+.scout-page-prompt > p, .scout-page-prompt > h2 { margin: 0 !important; }
+.applyos-submit-prompt > p:first-child,
+.scout-page-prompt > p:first-child { color: #676a60 !important; font: 800 8px/1 "Courier New", monospace !important; letter-spacing: .14em !important; }
+.applyos-submit-prompt h2,
+.scout-page-prompt h2 { margin-top: 8px !important; font: 400 25px/1.1 Georgia, serif !important; }
+.applyos-submit-prompt h2 + p,
+.scout-page-prompt h2 + p { margin-top: 8px !important; color: #676a60 !important; }
+.applyos-submit-prompt div,
+.scout-page-prompt div { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 8px !important; margin-top: 16px !important; }
+.applyos-submit-prompt button,
+.scout-page-prompt button { border: 1px solid #171814 !important; padding: 11px 9px !important; color: #171814 !important; background: transparent !important; cursor: pointer !important; font: 800 11px/1 "Avenir Next", sans-serif !important; }
 .applyos-submit-prompt .applyos-submit-yes { background: #b9f54a !important; box-shadow: 3px 3px 0 #171814 !important; }
 .applyos-submit-prompt .applyos-submit-suppress { grid-column: 1 / -1 !important; border-color: rgba(23,24,20,.3) !important; color: #676a60 !important; font-size: 9px !important; }
+.scout-page-prompt .scout-page-primary { background: #b9f54a !important; box-shadow: 3px 3px 0 #171814 !important; }
+.scout-page-prompt button:disabled { cursor: wait !important; opacity: .62 !important; box-shadow: none !important; }
 
 @media (max-width: 640px) {
   .applyos-review-overlay { padding: 10px !important; }

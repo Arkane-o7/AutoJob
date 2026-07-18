@@ -3,16 +3,13 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>ApplyOS</title>
+    <title>Scout</title>
+    <link rel="icon" href="assets/icons/scout-32.png">
     <link rel="stylesheet" href="popup.css">
+    <link rel="stylesheet" href="shared/tour.css">
   </head>
   <body>
     <main>
-      <header>
-        <div class="brand"><span class="mark">A.</span><span>APPLYOS</span></div>
-        <div class="header-nav"><button id="account" class="nav-button" type="button">Account</button><button id="dashboard" class="nav-button" type="button">Dashboard ↗</button></div>
-      </header>
-
       <section class="profile-strip">
         <label><span>ACTIVE PROFILE</span><select id="profile-select"></select></label>
         <button id="onboarding" type="button">Setup</button>
@@ -25,7 +22,7 @@
           <label class="editable-title"><span>Role</span><input id="role" placeholder="Job title"></label>
           <label class="editable-company"><span>Company</span><input id="company" placeholder="Company"></label>
         </div>
-        <div class="score" id="score" aria-label="Resume match score"><strong>—</strong><span>MATCH</span></div>
+        <div class="score" id="score" aria-label="Resume match score"><strong>-</strong><span>MATCH</span></div>
       </section>
 
       <div id="confidence" class="confidence">Waiting for page details…</div>
@@ -36,19 +33,15 @@
       </section>
 
       <section class="actions">
-        <button id="save" class="primary" type="button" disabled><span>Save to ApplyOS</span><span>＋</span></button>
-        <button id="fill" class="secondary" type="button" disabled><span>Autofill application</span><span>↗</span></button>
+        <button id="save" class="primary" data-tour-target="save-job" type="button" disabled><span>Save to Scout</span><span>＋</span></button>
+        <button id="fill" class="secondary" data-tour-target="autofill" type="button" disabled><span>Autofill application</span><span>↗</span></button>
         <button id="agent" class="secondary ai-action hidden" type="button" disabled><span>Optional AI enhancement</span><span>✦</span></button>
-        <button id="applied" class="secondary dark" type="button" disabled><span>Mark as applied</span><span>✓</span></button>
-        <button id="report" class="report-action" type="button"><span>Report a site problem</span><span>!</span></button>
+        <button id="applied" class="secondary dark" data-tour-target="mark-applied" type="button" disabled><span>Mark as applied</span><span>✓</span></button>
+        <button id="report" class="report-action" data-tour-target="report-problem" type="button"><span>Report a site problem</span><span>!</span></button>
       </section>
 
       <div id="result" class="result" role="status" aria-live="polite"></div>
 
-      <footer>
-        <span>Local-first · cloud only if enabled</span>
-        <span>Review first · never auto-submits</span>
-      </footer>
     </main>
     <script src="shared/constants.js"></script>
     <script src="shared/matching.js"></script>
@@ -56,6 +49,7 @@
     <script src="shared/profiles.js"></script>
     <script src="shared/ai.js"></script>
     <script src="shared/storage.js"></script>
+    <script src="shared/tour.js"></script>
     <script src="popup.js"></script>
   </body>
 </html>

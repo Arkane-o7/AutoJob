@@ -174,7 +174,9 @@
   };
 
   ApplyOS.completeOnboarding = async function completeOnboarding(patch = {}) {
-    return ApplyOS.patchActiveProfile({ ...patch, onboardingCompletedAt: new Date().toISOString() });
+    const profile = await ApplyOS.patchActiveProfile({ ...patch, onboardingCompletedAt: new Date().toISOString() });
+    await ApplyOS.refreshApplicationMatches?.(profile);
+    return profile;
   };
 
   ApplyOS.profileResumeText = function profileResumeText(profile = {}) {

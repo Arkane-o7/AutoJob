@@ -136,7 +136,10 @@ create table public.candidate_publications (
 
 create table public.support_reports (
   id uuid primary key default gen_random_uuid(),
-  reference_code text not null unique default upper(substr(encode(gen_random_bytes(8), 'hex'), 1, 10)),
+  -- Hosted Supabase installs pgcrypto in the `extensions` schema. Qualifying
+  -- this call keeps the migration portable when `extensions` is not on the
+  -- database role's default search_path.
+  reference_code text not null unique default upper(substr(encode(extensions.gen_random_bytes(8), 'hex'), 1, 10)),
   user_id uuid not null references auth.users(id) on delete cascade,
   extension_version text not null,
   source_domain text not null,

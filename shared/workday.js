@@ -27,6 +27,14 @@
     function showWarning(title, message, duration = 10000) {
         if (window !== window.top)
             return;
+        if (typeof ApplyOS.showPageNotification === "function") {
+            ApplyOS.showPageNotification(title + ": " + message, {
+                className: "applyos-workday-warning",
+                duration,
+                key: "workday-warning"
+            });
+            return;
+        }
         document.querySelector(".applyos-workday-warning")?.remove();
         const warning = document.createElement("div");
         warning.className = "applykit-toast applyos-workday-warning";

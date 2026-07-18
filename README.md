@@ -1,8 +1,8 @@
-# ApplyOS
+# Scout
 
-ApplyOS is a private, review-first Chrome extension that combines job capture, application tracking, resume matching, answer memory, follow-up reminders, and the existing autofill engine. It never submits an application or sends a message.
+Scout is a private, review-first Chrome extension that combines job capture, application tracking, resume matching, answer memory, follow-up reminders, and the existing autofill engine. It never submits an application or sends a message.
 
-ApplyOS retains its interface and legacy-profile compatibility while incorporating licensed implementation work adapted from [Offlyn Apply](https://github.com/offlyn-ai/offlyn-apply) and [Job App Filler](https://github.com/berellevy/job_app_filler). See `THIRD_PARTY_NOTICES.md` and `licenses/` for attribution and license terms.
+Scout retains its interface and legacy-profile compatibility while incorporating licensed implementation work adapted from [Offlyn Apply](https://github.com/offlyn-ai/offlyn-apply) and [Job App Filler](https://github.com/berellevy/job_app_filler). See `THIRD_PARTY_NOTICES.md` and `licenses/` for attribution and license terms.
 
 ## Product and data model
 
@@ -10,19 +10,20 @@ ApplyOS retains its interface and legacy-profile compatibility while incorporati
   contacts/networking, interviews, Smart Tools, account/sync controls, and
   exact licensed-source attribution.
 - [Data and privacy boundaries](docs/data-and-privacy-boundaries.md) separates
-  the local private workspace from opt-in private sync and a separately
-  approved recruiter-facing candidate publication.
-- [Cloud deployment guide](docs/cloud-deployment.md) covers Supabase, LinkedIn
-  OIDC, extension redirect URLs, Edge Functions, database checks, privacy
+  the authoritative private account workspace and its user-specific offline
+  cache, and documents the reserved boundary for any future recruiter product.
+- [Cloud deployment guide](docs/cloud-deployment.md) covers Supabase, email,
+  Google and LinkedIn authentication, extension redirect URLs, Edge Functions, database checks, privacy
   disclosures, and the production release gate.
 
-Local mode remains the default and requires no account. Version 0.10 adds an
-optional LinkedIn-authenticated Supabase account, owner-only snapshot sync,
-separate resume-file consent, private support reports, cloud export/deletion,
-and a candidate publication that is private until the user deliberately marks
-that reviewed card eligible for a future recruiter product. Production cloud features remain
-disabled until a deployer supplies a project URL, publishable key, LinkedIn
-application, policies, and hosted legal disclosures. Recruiter accounts/search,
+Scout now requires an account. Email verification code, Google, and LinkedIn
+all connect to the same private Supabase workspace. The database is authoritative;
+`chrome.storage.local` is a user-scoped offline cache that is locked on sign-out
+and never shared across accounts. Sync uses record-level mutations, incremental
+pull cursors, idempotency keys, tombstones, and explicit conflict review. Private
+support reports and account export/deletion use the same authenticated boundary. Production releases
+embed the non-secret project URL and publishable key at build time; users never
+configure infrastructure. Recruiter accounts/search,
 cloud AI, paid plans, and billing are not implemented.
 
 ## Existing architecture and the upgrade
@@ -33,13 +34,20 @@ The original extension was a Manifest V3, plain-JavaScript extension with three 
 - `popup.js` asks the background worker to run a reviewed fill pass; the worker targets every application frame explicitly and aggregates one report.
 - `content.js` detected form fields from labels, ARIA metadata, names, placeholders, nearby text, ATS attributes, custom controls, open shadow roots, and subframes. It filled empty fields, attached the saved resume when allowed, and watched later multi-step fields.
 
-There was no service worker, CRM schema, storage abstraction, job-page extractor, reminder engine, or dashboard. ApplyOS preserves the legacy `profile`, message name, keyboard shortcut, and autofill path, then adds a parallel versioned `applyos_state` store. Migration copies answer and resume metadata into the new store without deleting or rewriting the old profile.
+There was no service worker, CRM schema, storage abstraction, job-page extractor, reminder engine, or dashboard. Scout preserves the legacy `profile`, message name, keyboard shortcut, and autofill path, then adds a parallel versioned `applyos_state` store. Migration copies answer and resume metadata into the new store without deleting or rewriting the old profile.
+
+The internal JavaScript namespace, message constants, storage keys, backup format
+identifier, and `types/applyos.ts` filename intentionally retain the legacy
+`ApplyOS`/`applyos` names. Renaming those identifiers in an early Scout release
+would strand existing profiles, cached workspaces, queued mutations, and encrypted
+backups. They are compatibility implementation details and are not customer-facing
+branding.
 
 The new modules are:
 
 - `capture.js`: JSON-LD-first job extraction with adapters for LinkedIn, Workday, Greenhouse, Lever, Ashby, Wellfound, and generic career pages. Every extracted field has a confidence score and ambiguous title/company fields remain editable.
-- `shared/offlyn-core.js`: MIT-attributed ATS recognition, semantic field classification, type/value safeguards, and correction matching adapted to the ApplyOS profile schema.
-- `shared/ats-compat.js`: a registry-based compatibility layer for ATS field context, custom dropdown options, and resume dropzones. Greenhouse legacy/React patterns are BSD-attributed adaptations from Job App Filler; the remaining adapters use ApplyOS heuristics.
+- `shared/offlyn-core.js`: MIT-attributed ATS recognition, semantic field classification, type/value safeguards, and correction matching adapted to the Scout profile schema.
+- `shared/ats-compat.js`: a registry-based compatibility layer for ATS field context, custom dropdown options, and resume dropzones. Greenhouse legacy/React patterns are BSD-attributed adaptations from Job App Filler; the remaining adapters use Scout heuristics.
 - `shared/profiles.js`: multi-profile index, active-profile switching, legacy `profile` mirroring, completeness checks, and resume-text normalization.
 - `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, reminders, contacts, interviews, scoped answer memory, immutable resume versions, and settings. Schema v5 records its revision and migration history while preserving legacy data.
 - `shared/matching.js`: deterministic, local skill/keyword matching with matched skills, gaps, keywords, experience hints, and answer prompts.
@@ -51,10 +59,11 @@ The new modules are:
 - `shared/diagnostics.js`: privacy-safe broken-field snapshots containing only reviewed labels and allowlisted DOM structure—never entered values or file contents.
 - `shared/submission.js`: conservative confirmation scoring that requires both recent user submit intent and strong confirmation-page evidence.
 - `shared/backup.js`: password-derived AES-256-GCM export/import for the complete local workspace, decrypted summary review, safe version checks, and a one-step local restore checkpoint.
-- `shared/cloud.js`: optional LinkedIn OIDC/PKCE account sessions isolated in the service-worker origin, durable snapshot retries, version conflicts, owner-only cloud restore with one-step undo, consent-gated resume Storage uploads, candidate publication, support submission, export, sign-out, and deletion.
+- `shared/cloud.js`: provider-neutral email/Google/LinkedIn sessions isolated in the service-worker origin, account-specific offline-cache activation and locking, legacy-workspace review, private resume Storage uploads, support submission, sign-out, and deletion. Reserved publication APIs have no customer-facing controls in this release.
+- `shared/cloud-repository.js`: the record-level cloud repository with durable per-user outboxes, idempotent mutations, incremental pulls, tombstones, optimistic versions, and reviewable conflict state.
 - `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, cloud/account message boundaries, and localhost Ollama requests. It has no email credentials or send capability.
-- `onboarding.*`: a resumable, versioned first-run feature tour that patches the canonical profile without replacing fields owned by Profile & Settings.
-- `account.*`: account, sync, resume consent, candidate publication, export/deletion, and tutorial replay controls with local mode as the default.
+- `onboarding.*`: a two-screen first-run welcome and starter profile. The versioned, resumable coach-mark runtime in `shared/tour.*` then teaches the real Dashboard, Profile & Settings, and job-page popup in context. Replaying or skipping the tour never rewrites profile or CRM data.
+- `account.*`: required sign-in, connection/sync state, reviewed legacy import, authoritative export/deletion, and tutorial replay controls. Deployment settings and unreleased recruiter-search controls are never shown to customers.
 - `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, review-only compose handoffs, match guidance, profile switching, and the local-AI studio.
 - `types/applyos.ts`: TypeScript contracts for captured jobs, applications, contacts, interviews, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
 
@@ -62,17 +71,17 @@ The new modules are:
 
 1. Run `npm install` and `npm run verify` from this folder.
 2. Open `chrome://extensions` in Chrome and enable **Developer mode**.
-3. If ApplyOS is already loaded, click its reload icon. Otherwise click **Load unpacked** and choose this project folder (or the generated `dist` folder).
+3. If Scout is already loaded, click its reload icon. Otherwise click **Load unpacked** and choose this project folder (or the generated `dist` folder).
 4. Refresh any job pages that were already open so the updated content scripts load.
-5. Pin **ApplyOS** and choose **Finish setup** once. After completion the same button becomes **Edit profile** and opens the canonical **Profile & Settings** editor.
+5. Pin **Scout** and choose **Finish setup** once. After completion the same button becomes **Edit profile** and opens the canonical **Profile & Settings** editor.
 
-By default, application, contact, interview, profile, answer, and resume data stays in `chrome.storage.local`; ApplyOS has no analytics. If a configured user signs in and explicitly enables sync, a private account copy is transmitted over HTTPS. Resume bytes require a second opt-in and use a private per-user Storage path. Candidate publication requires another separate action. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
+Sign in with email, Google, or LinkedIn before setup. Application, contact, interview, profile, answer, and resume data belongs to that private cloud account and is cached locally for temporary offline use. The cache is namespaced by user and cleared from the active workspace on sign-out. Scout has no analytics and exposes no recruiter-search profile in this release. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
 
 ## Test the complete workflow
 
 ### 1. Save a job
 
-Open a LinkedIn, Workday, Greenhouse, Lever, Ashby, Wellfound, or company job page. Open ApplyOS, review the editable company and role plus the extraction-confidence note, then click **Save to ApplyOS**.
+Open a LinkedIn, Workday, Greenhouse, Lever, Ashby, Wellfound, or company job page. Open Scout, review the editable company and role plus the extraction-confidence note, then click **Save to Scout**.
 
 For a deterministic fixture, run:
 
@@ -84,7 +93,7 @@ Open `http://localhost:4173/demo/job-posting.html`, refresh it after reloading t
 
 ### 2. Autofill an application
 
-Open an application form, choose **Autofill application**, and inspect every highlighted answer. Multi-step assist remains active for later fields. The original **Option/Alt + Shift + A** shortcut still works. ApplyOS never clicks Next, Review, Apply, or Submit.
+Open an application form, choose **Autofill application**, and inspect every highlighted answer. Multi-step assist remains active for later fields. The original **Option/Alt + Shift + A** shortcut still works. Scout never clicks Next, Review, Apply, or Submit.
 
 The fixtures `demo/application.html`, `demo/ats-fixtures.html`, and `demo/site-regressions.html` cover standard controls, Greenhouse legacy Select2 and React-select controls, custom ARIA controls, shadow DOM, Workday compound dates, NorthStarz labels, resume upload, and sensitive-field exclusions. On Workday's **My Experience** step, the specialized handler can manage multiple work/education inline entries. It never clicks the main Save and Continue button.
 
@@ -94,11 +103,11 @@ The fixtures `demo/application.html`, `demo/ats-fixtures.html`, and `demo/site-r
 - Compatibility adapters: Greenhouse (legacy and React), Lever, Ashby, SmartRecruiters, iCIMS, Oracle/Taleo, Microsoft Careers/Eightfold, Workable, Jobvite, SAP SuccessFactors, BambooHR, Recruitee, Teamtailor, and Personio.
 - Generic fallback: semantic labels, ARIA controls, native fields, open shadow roots, and accessible subframes on other company career pages.
 
-An adapter means ApplyOS recognizes that ATS's common field containers, labels, dropdown options, and upload zones. Employer customizations can still differ, so every fill remains review-first and unsupported controls stay untouched.
+An adapter means Scout recognizes that ATS's common field containers, labels, dropdown options, and upload zones. Employer customizations can still differ, so every fill remains review-first and unsupported controls stay untouched.
 
 ### 3. Mark it applied
 
-After you submit the application yourself, ApplyOS can recognize a likely confirmation page and ask **Did you submit this application?** Choose **Yes, mark applied** to record `applied_at` and create a first follow-up 7 days later plus an optional final follow-up 14 days later. **Not yet** changes nothing. You can still reopen ApplyOS and use **Mark as applied** manually.
+After you submit the application yourself, Scout can recognize a likely confirmation page and ask **Did you submit this application?** Choose **Yes, mark applied** to record `applied_at` and create a first follow-up 7 days later plus an optional final follow-up 14 days later. **Not yet** changes nothing. You can still reopen Scout and use **Mark as applied** manually.
 
 Detection never changes an application status on its own. It requires a recent trusted submit interaction, strong confirmation evidence, and your explicit approval.
 
@@ -106,23 +115,26 @@ Detection never changes an application status on its own. It requires a recent t
 
 Choose **Report a site problem** in the popup to open an on-page review. No fields are selected by default. Describe the problem, select only the problematic controls, and inspect the generated JSON. Signed-in users can explicitly submit that reviewed payload to a private, authenticated, validating, and rate-limited support endpoint and receive a private reference code. Signed-out/unconfigured users can copy or download it locally. Reports include bounded labels and allowlisted DOM attributes only; entered answers, resume filenames/data, email addresses, phone numbers, page query parameters, and hidden fields are excluded. The extension never reveals or links to the source repository.
 
-### Optional account and sync
+### Required account and cloud workspace
 
-Open **Account & sync** from the popup or dashboard. The product works locally
-without an account. In a configured production build, **Continue with LinkedIn**
-opens a user-initiated Chrome identity flow. LinkedIn supplies basic sign-in
-identity only; ApplyOS does not import connections, messages, posts, contacts,
-or employment history, and sign-in is not identity verification.
+The first extension page offers email verification code, Google, and LinkedIn.
+Authentication is user-initiated and all providers resolve to the same account
+boundary. LinkedIn supplies basic sign-in identity only; Scout does not import
+connections, messages, posts, contacts, or employment history, and sign-in is
+not identity verification.
 
-Private workspace sync remains off until the user accepts the in-product
-disclosure. Resume-file upload is a separate checkbox. Writes use a durable
-local retry record, idempotent change ID, and server version; a version mismatch
-pauses with a conflict instead of overwriting either copy. **Use cloud copy**
-and **Replace cloud with local** both require typed confirmation; a cloud restore
-creates a one-step local undo checkpoint.
-Candidate publication has a separate private/future-recruiter-eligible switch
-and never exposes the private application workspace. Recruiter accounts and
-search are not yet launched.
+The cloud database is authoritative. Each reviewed local change is queued as a
+record mutation and survives offline/restart conditions until the service worker
+can sync it. Server versions prevent silent replacement; conflicts pause the
+record for review. Deletions are durable tombstones and remote changes are pulled
+incrementally with a server cursor. A pre-account browser workspace is never
+uploaded silently: after sign-in, the user reviews its counts and chooses Import
+or Discard. The current customer UI exposes no recruiter publication or search.
+
+Before production shipping, run and document the two-device, offline-edit,
+restart, retry, resume-upload, conflict, export, deletion, and cross-account RLS
+matrix against staging. This is a deployment verification gate, not missing
+client architecture.
 
 ### 4. View the dashboard
 
@@ -134,7 +146,7 @@ Applied records show the next follow-up in the popup and dashboard. Due reminder
 
 ### 6. Generate a follow-up draft
 
-Open an application record, choose first or final follow-up, and click **Generate draft**. Select a linked contact if available, edit the subject and body, then copy it or open the reviewed draft in Gmail, Outlook, or the device email app. ApplyOS has no email credentials and no send function.
+Open an application record, choose first or final follow-up, and click **Generate draft**. Select a linked contact if available, edit the subject and body, then copy it or open the reviewed draft in Gmail, Outlook, or the device email app. Scout has no email credentials and no send function.
 
 ### 7. Track contacts and networking
 
@@ -146,11 +158,11 @@ Open an application and choose **Add interview**. Record the round, format, sche
 
 ### 9. Use Smart Drafts
 
-Open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These work immediately without accounts, model downloads, terminal commands, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Settings → Advanced**, but it is never part of onboarding or required for core functionality.
+After signing in, open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These need no model download, terminal command, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Settings → Advanced**, but it is never part of onboarding or required for core functionality.
 
 ### 10. Export or restore an encrypted backup
 
-Open **Profile & Settings → Encrypted backup**. Choose a password of at least 10 characters and download the `.applyos` file. The file includes the complete local workspace, including saved resume files, and is encrypted before download. To restore, select the file, enter its password, review the decrypted record counts, type `RESTORE`, and confirm. A successful restore keeps one local undo checkpoint. ApplyOS never stores or recovers the backup password.
+Open **Profile & Settings → Encrypted backup**. Choose a password of at least 10 characters and download the `.scout` file. The file includes the complete cached workspace, including saved resume files, and is encrypted before download. To restore, select the file, enter its password, review the decrypted record counts, type `RESTORE`, and confirm. A successful restore keeps one local undo checkpoint. Scout never stores or recovers the backup password. Legacy `.applyos` backups remain importable.
 
 ## Answer memory
 
@@ -192,9 +204,9 @@ npm run test:browser:dist
 npm run verify
 ```
 
-`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, encrypted backup round trips and rollback, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, review-only draft generation, cloud-origin validation, token isolation, and static RLS/publication contracts.
+`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, encrypted backup round trips and rollback, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, review-only draft generation, cloud-origin validation, token isolation, account/onboarding surface boundaries, and reserved database RLS contracts.
 
-`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed private diagnostics and post-submit confirmation, popup sizing, account privacy defaults, contact creation, compose handoffs, interview preparation, and thank-you drafting. Set `APPLYOS_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
+`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed private diagnostics and post-submit confirmation, popup sizing, account privacy defaults, contact creation, compose handoffs, interview preparation, and thank-you drafting. Set `SCOUT_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
 
 ## Safety boundaries and limitations
 
@@ -203,4 +215,4 @@ npm run verify
 - Closed shadow roots and inaccessible cross-origin frames cannot be inspected.
 - Employer-specific custom widgets may still need manual entry; low-confidence job metadata is explicitly surfaced for review.
 - PDF/DOCX binary contents are not parsed. Matching and AI use pasted resume text plus the structured profile; saved files remain local for attachment.
-- Encrypted backups cannot be recovered without their password. Cloud snapshot sync is local-first and version-gated; it is not end-to-end encrypted, collaborative real-time sync, or an automatic merge engine. Production use requires deploying and validating the supplied backend, provider configuration, privacy policy, retention process, and deletion flow.
+- Encrypted backups cannot be recovered without their password. Cloud records are protected by authentication and Row Level Security but are not end-to-end encrypted or collaborative real-time documents. Production use requires deploying and validating the supplied backend, all authentication providers, privacy policy, retention process, and deletion flow.
