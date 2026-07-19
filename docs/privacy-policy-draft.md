@@ -1,14 +1,14 @@
 # Scout Privacy Policy — launch draft
 
 **Effective date:** July 18, 2026  
-**Last updated:** July 18, 2026
+**Last updated:** July 19, 2026
 
 > **Before publishing:** replace every bracketed placeholder, have the final
 > policy reviewed for the countries where Scout will be offered, and host it at
 > a stable public HTTPS URL. This repository draft is not legal advice.
 
 Scout is a job-application organization and autofill service operated by
-**[OPERATOR LEGAL NAME]** ("Scout", "we", "us", or "our"). This policy explains
+**Abhilaksh Chauhan** ("Scout", "we", "us", or "our"). This policy explains
 what information Scout processes, why it is processed, and the choices available
 to you.
 
@@ -106,7 +106,7 @@ Scout currently relies on:
 - **Supabase** for authentication, database hosting, private file storage, and
   server-side functions;
 - **Google** and **LinkedIn**, only when you choose those authentication methods;
-- **[CUSTOM SMTP PROVIDER]** to deliver email verification codes; and
+- **Google Gmail SMTP (`smtp.gmail.com`)** to deliver email verification codes; and
 - **Google Chrome and the Chrome Web Store** to distribute and run the extension.
 
 When you explicitly choose a Gmail, Outlook, or default-email compose button,
@@ -148,7 +148,7 @@ Scout provides controls to:
 
 Depending on your location, you may also have rights to access, correct, delete,
 restrict, object to, or receive a portable copy of personal information. Contact
-us at **[PRIVACY EMAIL]**. We may need to verify that the request belongs to the
+us at **tryjobscout@gmail.com**. We may need to verify that the request belongs to the
 account holder.
 
 ## 7. Security
@@ -156,7 +156,7 @@ account holder.
 Scout uses user-scoped database and storage policies, encrypted transport,
 server-side secrets, limited diagnostic payloads, and review gates for external
 actions. No online service can guarantee absolute security. If you believe your
-account or Scout data is at risk, contact **[SECURITY EMAIL]**.
+account or Scout data is at risk, contact **tryjobscout@gmail.com**.
 
 ## 8. Children
 
@@ -169,7 +169,7 @@ it.
 
 Scout's current Supabase project is hosted in the Seoul, South Korea region.
 Authentication and other providers may process information in additional
-countries. Before public launch, **[OPERATOR LEGAL NAME]** will publish the
+countries. Before public launch, **Abhilaksh Chauhan** will publish the
 applicable transfer safeguards and update this section if the production region
 changes.
 
@@ -181,8 +181,8 @@ provide an in-product notice or request new consent where required.
 
 ## 11. Contact
 
-**[OPERATOR LEGAL NAME]**  
-**[POSTAL OR REGISTERED BUSINESS ADDRESS]**  
-Privacy: **[PRIVACY EMAIL]**  
-Support: **[SUPPORT EMAIL]**  
-Security: **[SECURITY EMAIL]**
+**Abhilaksh Chauhan**  
+**Online-only service; no public postal address**  
+Privacy: **tryjobscout@gmail.com**  
+Support: **tryjobscout@gmail.com**  
+Security: **tryjobscout@gmail.com**
