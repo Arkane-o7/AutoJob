@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -81,7 +81,7 @@ async function installBrowserAccount(worker) {
   await worker.evaluate(async ({ fakeProfile, userId }) => {
     await chrome.storage.local.clear();
     const bundledCloud = await ApplyOS.getCloudConfig();
-    if (!bundledCloud.projectUrl) {
+    if (bundledCloud.allowRuntimeConfig === true) {
       await ApplyOS.saveCloudConfig({
         projectUrl: "http://127.0.0.1:54321",
         publishableKey: "sb_publishable_browser_regression"
@@ -192,6 +192,7 @@ async function snapshot(target) {
     microsoftSponsorshipClicks: window.__fixture.microsoftSponsorshipClicks,
     microsoftSponsorshipExpanded: document.querySelector("#microsoft-sponsorship")?.getAttribute("aria-expanded"),
     microsoftStrayOptionClicks: window.__fixture.microsoftStrayOptionClicks,
+    manualAnswer: document.querySelector("#manual-answer")?.value || "",
     ssn: document.querySelector("#ssn")?.value, verificationCode: document.querySelector("#verification-code")?.value,
     gender: document.querySelector("#gender")?.value,
     consent: document.querySelector("#privacy-consent")?.checked,
@@ -315,6 +316,30 @@ async function main() {
       assert.equal(repeated.events["resume:change"] || 0, testCase.existingResume ? 0 : 1, `${testCase.id}: resume must not attach twice`);
       assert.equal(repeated.resumeName, testCase.existingResume ? "" : resumeName, `${testCase.id}: repeat fill preserves attachment state`);
 
+      if (testCase.id === "react-dropzone") {
+        await target.locator("#ssn").fill("000-00-0000");
+        await target.locator("#ssn").press("Tab");
+        await target.waitForTimeout(400);
+        const sensitiveLearned = await worker.evaluate(async () => (await ApplyOS.getActiveProfile()).customAnswers?.some((item) => /social security|ssn/i.test(item.question)) || false);
+        assert.equal(sensitiveLearned, false, "sensitive manual fields must never enter custom answer memory");
+        await target.locator("#ssn").fill("");
+        await target.locator("#ssn").press("Tab");
+        await target.locator("#manual-answer").fill("I enjoy building reliable distributed systems.");
+        await target.locator("#manual-answer").press("Tab");
+        const learnedAnswer = await worker.evaluate(async () => {
+          const deadline = Date.now() + 5000;
+          while (Date.now() < deadline) {
+            const activeProfile = await ApplyOS.getActiveProfile();
+            const learned = (activeProfile.customAnswers || []).find((item) => item.question === "What kind of systems do you enjoy building?");
+            if (learned) return learned;
+            await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+          }
+          return null;
+        });
+        assert.equal(learnedAnswer?.answer, "I enjoy building reliable distributed systems.", "manual completion should become a reusable custom answer");
+        assert.equal(learnedAnswer?.source, "application", "application-learned answers remain identifiable in Profile & Settings");
+      }
+
       if (testCase.id === "microsoft") {
         const clickBaseline = repeated.microsoftSponsorshipClicks;
         assert.ok(clickBaseline > 0, "microsoft: unmatched controlled dropdown is attempted during explicit autofill");
@@ -340,6 +365,17 @@ async function main() {
         });
         await target.waitForTimeout(1500);
         assert.equal(await target.locator("#post-route-phone").inputValue(), "", `${testCase.id}: assist mode stops when an SPA changes route`);
+
+        await page.goto(url, { waitUntil: "domcontentloaded" });
+        await page.bringToFront();
+        const learnedTarget = await fixtureTarget(page, testCase);
+        await learnedTarget.waitForSelector("#manual-answer");
+        await learnedTarget.evaluate(() => { document.querySelector('label[for="manual-answer"]').textContent = "What kind of software systems do you enjoy building?"; });
+        const learnedFill = await sendFill(worker);
+        assert.equal(learnedFill?.ok, true, `${testCase.id}: learned-answer refill should succeed`);
+        await learnedTarget.waitForFunction(() => Boolean(document.querySelector("#manual-answer")?.value));
+        assert.equal(await learnedTarget.locator("#manual-answer").inputValue(), "I enjoy building reliable distributed systems.", `${testCase.id}: a similar future question reuses the reviewed manual answer`);
+        assert.equal(await learnedTarget.evaluate(() => window.__fixture.submitCount), 0, `${testCase.id}: learned-answer reuse must not submit`);
       }
       console.log(`PASS ${testCase.id.padEnd(15)} values, events, resume, privacy and no-navigation invariants`);
     }
@@ -350,6 +386,24 @@ async function main() {
     const pagePrompt = page.locator(".scout-page-prompt");
     await pagePrompt.waitFor({ state: "visible", timeout: 5000 });
     assert.match(await pagePrompt.locator("h2").textContent(), /autofill/i, "known ATS form should offer review-gated autofill");
+    const promptLayout = await pagePrompt.evaluate((prompt) => {
+      const card = prompt.getBoundingClientRect();
+      const stack = prompt.parentElement;
+      const actions = Array.from(prompt.querySelectorAll("button")).map((button) => {
+        const rect = button.getBoundingClientRect();
+        return { left: rect.left, right: rect.right };
+      });
+      return {
+        card: { left: card.left, right: card.right, width: card.width },
+        viewportWidth: document.documentElement.clientWidth,
+        stackClientWidth: stack?.clientWidth || 0,
+        stackScrollWidth: stack?.scrollWidth || 0,
+        actions
+      };
+    });
+    assert.ok(promptLayout.card.left >= 0 && promptLayout.card.right <= promptLayout.viewportWidth, "page prompt stays within the viewport");
+    assert.ok(promptLayout.stackScrollWidth <= promptLayout.stackClientWidth, "page prompt stack has no horizontal overflow");
+    assert.ok(promptLayout.actions.every((button) => button.left >= promptLayout.card.left && button.right <= promptLayout.card.right), "page prompt actions stay inside the card");
     await pagePrompt.locator(".scout-page-primary").click();
     await pagePrompt.waitFor({ state: "detached" });
     assert.equal(await page.locator("#Contact_Information_q_address").inputValue(), profile.address, "page prompt invokes the same safe autofill path");
@@ -368,6 +422,17 @@ async function main() {
     }));
     assert.ok(toastLayout.every((item, index) => index === 0 || toastLayout[index - 1].bottom < item.top), "simultaneous page notifications stack vertically without overlap");
     console.log("PASS detected ATS page offers explicit save-and-autofill without submission");
+
+    await page.goto(`http://apply.example.test:${server.port}/delayed-job`, { waitUntil: "domcontentloaded" });
+    await page.bringToFront();
+    const delayedPrompt = page.locator(".scout-page-prompt");
+    await delayedPrompt.waitFor({ state: "visible", timeout: 6000 });
+    assert.match(await delayedPrompt.textContent(), /Platform Engineer at Dynamic Labs/, "late-rendered SPA job details should trigger the autofill prompt");
+    await delayedPrompt.getByRole("button", { name: "Not now" }).click();
+    await page.evaluate(() => document.querySelector("#app")?.append(document.createElement("span")));
+    await page.waitForTimeout(700);
+    assert.equal(await page.locator(".scout-page-prompt").count(), 0, "dismissing a job prompt suppresses it for that page session");
+    console.log("PASS late-rendered job pages prompt once and respect dismissal");
 
     await page.goto(`http://apply.example.test:${server.port}/react-dropzone`, { waitUntil: "domcontentloaded" });
     await sendFill(worker);
@@ -460,7 +525,9 @@ async function main() {
 
     const accountProbe = await context.newPage();
     const accountMessages = [];
+    const accountNativeDialogs = [];
     accountProbe.on("console", (message) => { if (["warning", "error"].includes(message.type())) accountMessages.push(message.text()); });
+    accountProbe.on("dialog", async (dialog) => { accountNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
     await accountProbe.goto(`chrome-extension://${extensionId}/account.html`, { waitUntil: "domcontentloaded" });
     await accountProbe.locator("#identity-title").waitFor({ state: "visible" });
     await accountProbe.waitForFunction(() => !document.querySelector("#signed-in-actions")?.classList.contains("hidden"));
@@ -470,6 +537,10 @@ async function main() {
     assert.equal(await accountProbe.locator("#google-sign-in").count(), 1, "Google is available as a supported sign-in method");
     assert.equal(await accountProbe.locator("#linkedin-sign-in").count(), 1, "LinkedIn is available as a supported sign-in method");
     assert.equal(await accountProbe.locator("#email-request-form").count(), 1, "email code login is available as a supported sign-in method");
+    assert.match(await accountProbe.locator(".auth-consent").textContent(), /stores personal data you choose to provide/i, "account consent keeps the storage disclosure concise and clear");
+    assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/terms.html"]').count(), 1, "account consent links the User Agreement");
+    assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/index.html"]').count(), 1, "account consent links the Privacy Policy");
+    assert.equal(await accountProbe.locator("details.consent-details").count(), 1, "account consent offers a compact data-category explanation");
     assert.equal(await accountProbe.locator("#publication-section").count(), 0, "unreleased recruiter search has no customer-facing controls");
     await accountProbe.evaluate((conflict) => renderConflict(conflict), conflictFixture.meta.conflict);
     await accountProbe.locator("#conflict-panel").waitFor({ state: "visible" });
@@ -482,13 +553,46 @@ async function main() {
     assert.match(await accountProbe.locator("body").innerText(), /account|required|offline|cache/i, "account page explains cloud authority and the user-specific offline cache");
     assert.equal((await accountProbe.locator("body").innerText()).includes("github.com/Arkane-o7"), false, "account and support surfaces never expose the source repository");
     assert.deepEqual(accountMessages, [], `account page should not emit console warnings or errors: ${accountMessages.join(" | ")}`);
+    await accountProbe.locator("#delete-account").click();
+    const accountConfirm = accountProbe.locator(".scout-system-dialog");
+    await accountConfirm.waitFor({ state: "visible" });
+    assert.match(await accountConfirm.locator("#scout-dialog-title").textContent(), /Delete your Scout account/i, "account deletion uses the Scout dialog");
+    assert.equal(await accountConfirm.locator('[data-scout-dialog-field="confirmation"]').count(), 1, "permanent account deletion keeps typed confirmation inside the page");
+    assert.equal(await accountConfirm.locator(".scout-system-dialog__confirm").isDisabled(), true, "permanent deletion remains locked until the exact phrase is typed");
+    await accountConfirm.locator(".scout-system-dialog__cancel").click();
+    await accountConfirm.waitFor({ state: "hidden" });
+    assert.deepEqual(accountNativeDialogs, [], "account controls never open native browser dialogs");
+
+    await worker.evaluate(async () => ApplyOS.saveCloudConfig({ projectUrl: "", publishableKey: "" }));
+    await accountProbe.goto(`chrome-extension://${extensionId}/dashboard.html`, { waitUntil: "domcontentloaded" });
+    await accountProbe.waitForURL(/account\.html\?reason=configuration-required&returnTo=dashboard\.html/);
+    await accountProbe.locator("#identity-title", { hasText: "Scout needs an update" }).waitFor({ state: "visible" });
+    await accountProbe.waitForTimeout(900);
+    assert.match(accountProbe.url(), /account\.html\?reason=configuration-required/, "an unconfigured build stays on the account page instead of starting a redirect loop");
+    assert.doesNotMatch(await accountProbe.locator("#identity-result").textContent(), /Returning to Scout/i, "an unconfigured build never claims it is returning to Scout");
+    assert.equal(await accountProbe.locator("#connection-state").textContent(), "Unavailable", "the configuration gate never presents a contradictory online state");
+    await worker.evaluate(async () => ApplyOS.saveCloudConfig({
+      projectUrl: "http://127.0.0.1:54321",
+      publishableKey: "sb_publishable_browser_regression"
+    }));
     await accountProbe.close();
+
+    const legalProbe = await context.newPage();
+    await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/index.html`, { waitUntil: "domcontentloaded" });
+    assert.match(await legalProbe.locator("h1").textContent(), /job search is/i, "packaged Privacy Policy renders");
+    assert.equal(await legalProbe.locator('a[href="terms.html"]').count() > 0, true, "Privacy Policy links the User Agreement");
+    await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/terms.html`, { waitUntil: "domcontentloaded" });
+    assert.match(await legalProbe.locator("h1").textContent(), /helpful automation/i, "packaged User Agreement renders");
+    assert.equal(await legalProbe.locator('a[href="index.html"]').count() > 0, true, "User Agreement links the Privacy Policy");
+    await legalProbe.close();
+    console.log("PASS concise account consent links complete packaged legal disclosures");
     await worker.evaluate(async () => {
       const keys = ApplyOS.cloudRepositoryKeys("11111111-1111-4111-8111-111111111111");
       const stored = await chrome.storage.local.get([keys.meta, keys.outbox]);
       await chrome.storage.local.set({ [keys.meta]: { ...(stored[keys.meta] || {}), status: "synced", conflict: null }, [keys.outbox]: [] });
     });
     console.log("PASS account page shows a readable newest-version conflict choice without raw JSON");
+    console.log("PASS stale account sessions cannot create an account/dashboard redirect loop");
 
     const starterProbe = await context.newPage();
     await starterProbe.goto(`chrome-extension://${extensionId}/onboarding.html?start=1`, { waitUntil: "domcontentloaded" });
@@ -567,7 +671,9 @@ async function main() {
 
     const helper = await context.newPage();
     const dashboardMessages = [];
+    const dashboardNativeDialogs = [];
     helper.on("console", (message) => { if (["warning", "error"].includes(message.type())) dashboardMessages.push(message.text()); });
+    helper.on("dialog", async (dialog) => { dashboardNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
     await helper.goto(`chrome-extension://${extensionId}/dashboard.html`, { waitUntil: "domcontentloaded" });
     await helper.locator("[data-scout-header]").waitFor({ state: "visible" });
     const headerSnapshot = (target) => target.evaluate(() => {
@@ -595,7 +701,7 @@ async function main() {
       assert.equal(sample.height, 68, `${sample.page} uses the shared 68px header geometry`);
       assert.equal(sample.brand, "Scout", `${sample.page} uses the supplied Scout wordmark`);
       assert.equal(sample.brandLoaded, true, `${sample.page} loads the supplied Scout wordmark asset`);
-      assert.deepEqual(sample.nav, ["Applications", "Contacts"], `${sample.page} uses the shared primary navigation`);
+      assert.deepEqual(sample.nav, ["Applications", "Today", "Contacts"], `${sample.page} uses the shared primary navigation`);
       assert.deepEqual(sample.actions, ["Profile & answers", "Account & sync"], `${sample.page} uses the shared account actions`);
       assert.equal(sample.profile, "browser_test", `${sample.page} uses the active workspace profile`);
     }
@@ -666,6 +772,20 @@ async function main() {
     assert.equal(await detail.getAttribute("aria-modal"), "true", "open detail drawer is exposed as the active modal");
     assert.equal(await detail.getAttribute("data-state"), "open", "application drawer reports its open state");
     assert.equal(await helper.evaluate(() => document.activeElement?.id), "detail-role", "detail drawer moves focus to its first editable field");
+    await helper.locator("#delete-application").click();
+    const deleteApplicationDialog = helper.locator(".scout-system-dialog");
+    await deleteApplicationDialog.waitFor({ state: "visible" });
+    assert.match(await deleteApplicationDialog.locator("#scout-dialog-title").textContent(), /Remove Test Engineer/i, "application deletion uses the in-page Scout dialog");
+    assert.equal(await detail.getAttribute("aria-modal"), "false", "the underlying drawer yields modal authority to the confirmation dialog");
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await helper.waitForTimeout(250);
+      await helper.screenshot({ path: resolve(root, "output/playwright/delete-application-dialog.png") });
+    }
+    await deleteApplicationDialog.locator(".scout-system-dialog__cancel").click();
+    await deleteApplicationDialog.waitFor({ state: "hidden" });
+    assert.equal(await detail.getAttribute("aria-modal"), "true", "cancelling confirmation restores the application drawer’s modal state");
+    assert.deepEqual(dashboardNativeDialogs, [], "dashboard controls never open native browser dialogs");
     await helper.locator("#close-detail").click();
     assert.equal(await detail.getAttribute("aria-modal"), "false", "closed detail drawer is no longer modal");
     assert.equal(await detail.getAttribute("data-state"), "closed", "application drawer reports its closed state");
@@ -694,7 +814,54 @@ async function main() {
     assert.match(await helper.locator("#contact-gmail").getAttribute("href"), /mail\.google\.com\/mail\/\?.*to=casey%40example\.test/);
     assert.match(await helper.locator("#contact-outlook").getAttribute("href"), /outlook\.office\.com\/mail\/deeplink\/compose\?/);
     assert.match(await helper.locator("#contact-mailto").getAttribute("href"), /^mailto:casey@example\.test\?/);
+    const activityCountBeforeCompose = await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities.length);
+    await helper.evaluate(() => {
+      const link = document.querySelector("#contact-gmail");
+      link.addEventListener("click", (event) => event.preventDefault(), { once: true });
+      link.click();
+    });
+    await helper.locator("#activity-form").waitFor({ state: "visible" });
+    assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities.length), activityCountBeforeCompose, "opening a reviewed compose handoff does not infer that a message was sent");
+    await helper.locator("#activity-summary").fill("Sent the reviewed follow-up after checking every line.");
+    await helper.locator("#activity-outcome").fill("Awaiting response");
+    await helper.locator("#activity-next-title").fill("Check for Casey's reply");
+    await helper.locator("#activity-next-date").fill("2026-08-08T09:00");
+    await helper.locator("#activity-form button[type='submit']").click();
+    await helper.locator("#contact-timeline", { hasText: "Sent the reviewed follow-up" }).waitFor({ state: "visible" });
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await helper.screenshot({ path: resolve(root, "output/playwright/contact-timeline.png"), fullPage: true });
+    }
     await helper.locator("#close-contact").click();
+    assert.equal(await contactDetail.getAttribute("data-state"), "closed", "contact timeline drawer closes before navigating to Today");
+
+    await helper.locator("[data-section='actions']").click();
+    assert.equal(await helper.locator("[data-scout-nav='actions']").getAttribute("aria-current"), "page", "Today navigation becomes active without a reload");
+    assert.equal(new URL(helper.url()).searchParams.get("section"), "actions", "Today keeps a shareable dashboard URL");
+    const relationshipAction = helper.locator(".action-row", { hasText: "Check for Casey's reply" });
+    await relationshipAction.waitFor({ state: "visible" });
+    const snoozedActionId = await relationshipAction.getAttribute("data-action-id");
+    await relationshipAction.locator("[data-action-snooze]").click();
+    const snoozeDialog = helper.locator("#snooze-dialog");
+    await snoozeDialog.waitFor({ state: "visible" });
+    assert.equal(await snoozeDialog.getAttribute("open"), "", "Snooze uses an in-page modal instead of a browser prompt");
+    assert.match(await snoozeDialog.locator("#snooze-copy").textContent(), /Check for Casey's reply/);
+    await snoozeDialog.locator('[data-snooze-preset="3"]').click();
+    assert.equal(await snoozeDialog.locator("#snooze-days").inputValue(), "3", "Snooze presets update the reviewed delay");
+    assert.match(await snoozeDialog.locator("#snooze-preview").textContent(), /Back on your action desk/);
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await helper.screenshot({ path: resolve(root, "output/playwright/snooze-dialog.png") });
+    }
+    await snoozeDialog.locator("#snooze-submit").click();
+    await snoozeDialog.waitFor({ state: "hidden" });
+    assert.equal(await worker.evaluate(async (id) => {
+      const action = (await ApplyOS.getState()).reminders.find((item) => item.id === id);
+      return Boolean(action?.snoozed_until && new Date(action.snoozed_until).getTime() > Date.now() + 2 * 86400000);
+    }, snoozedActionId), true, "Snooze modal persists the selected delay");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(300); await helper.screenshot({ path: resolve(root, "output/playwright/today-workspace.png") }); }
+    await relationshipAction.locator("[data-action-done]").click();
+    assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).reminders.some((item) => item.title === "Check for Casey's reply" && item.status === "done")), true, "Today completes a relationship action persistently");
 
     await helper.locator("[data-section='applications']").click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
@@ -726,18 +893,29 @@ async function main() {
       const current = await ApplyOS.getState();
       return {
         contact: current.contacts.find((item) => item.application_ids.includes(id)),
+        activity: current.contact_activities.find((item) => item.application_id === id),
         interview: current.interviews.find((item) => item.application_id === id),
         application: current.applications.find((item) => item.id === id)
       };
     }, applicationId);
     assert.equal(crmState.contact.email, "casey@example.test", "contact CRM persists the reviewed recipient");
+    assert.equal(crmState.activity.outcome, "Awaiting response", "contact timeline persists the explicitly logged interaction");
     assert.equal(crmState.interview.preparation_notes, "Prepare a system-design story.", "interview workspace persists preparation");
     assert.equal(crmState.application.status, "interview", "saving an interview advances an active application to interview");
     await helper.locator("#close-detail").click();
 
     const backupPassword = "fixture backup password";
     const optionsPage = await context.newPage();
+    const optionsNativeDialogs = [];
+    optionsPage.on("dialog", async (dialog) => { optionsNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
+    await optionsPage.locator("#new-profile").click();
+    const profileDialog = optionsPage.locator(".scout-system-dialog");
+    await profileDialog.waitFor({ state: "visible" });
+    assert.equal(await profileDialog.locator("[data-scout-dialog-field]").count(), 2, "profile creation uses one reviewed in-page form instead of sequential prompts");
+    await profileDialog.locator(".scout-system-dialog__cancel").click();
+    await profileDialog.waitFor({ state: "hidden" });
+    assert.deepEqual(optionsNativeDialogs, [], "profile and backup controls never open native browser dialogs");
     const encryptedBackup = await optionsPage.evaluate((password) => ApplyOS.exportEncryptedBackup(password, "browser-test"), backupPassword);
     await optionsPage.locator("#backup-password").fill(backupPassword);
     await optionsPage.locator("#backup-confirm").fill(backupPassword);

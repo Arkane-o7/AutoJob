@@ -59,15 +59,28 @@ function downloadTextFile(contents, filename) {
 function backupSummaryText(summary) {
   const created = new Date(summary.created_at);
   const date = Number.isNaN(created.getTime()) ? summary.created_at : created.toLocaleString();
-  return `${summary.profiles} profiles · ${summary.applications} applications · ${summary.contacts} contacts · ${summary.interviews} interviews · ${summary.answers} remembered answers · Created ${date} with Scout ${summary.extension_version}`;
+  return `${summary.profiles} profiles · ${summary.applications} applications · ${summary.contacts} contacts · ${summary.actions || 0} open actions · ${summary.activities || 0} interactions · ${summary.interviews} interviews · ${summary.answers} remembered answers · Created ${date} with Scout ${summary.extension_version}`;
 }
 
 function createAnswerRow(answer = {}) {
   const row = document.createElement("div");
   row.className = "answer-row";
+  if (answer.source === "application") {
+    row.dataset.answerSource = "application";
+    row.dataset.learnedAt = answer.learned_at || answer.updated_at || "";
+    row.classList.add("learned-answer-row");
+  }
 
   const questionLabel = document.createElement("label");
-  questionLabel.innerHTML = "<span>Question phrase</span>";
+  const questionTitle = document.createElement("span");
+  questionTitle.textContent = "Question phrase";
+  if (answer.source === "application") {
+    const learnedBadge = document.createElement("small");
+    learnedBadge.className = "learned-answer-badge";
+    learnedBadge.textContent = "Learned from an application";
+    questionTitle.append(learnedBadge);
+  }
+  questionLabel.append(questionTitle);
   const question = document.createElement("input");
   question.className = "custom-question";
   question.placeholder = "e.g. Why do you want to work here?";
@@ -225,7 +238,7 @@ async function extractAndApplyResumeText(source, { allowReplace = false } = {}) 
     const current = resumeTextInput.value.trim();
     const sameText = ApplyOS.normalizeExtractedResumeText(current) === extracted;
     if (current && !sameText) {
-      const replace = allowReplace && window.confirm("Scout extracted text from the new PDF. Replace the existing resume text with it?");
+      const replace = allowReplace && await ScoutDialog.confirm({ eyebrow: "RESUME TEXT", title: "Replace the existing text?", message: "Scout extracted selectable text from the new PDF. You can use it for matching and Smart Tools instead of the text currently saved.", confirmLabel: "Use extracted text", cancelLabel: "Keep existing text" });
       if (!replace) {
         setResumeTextStatus(`Extracted ${extracted.length.toLocaleString()} characters. Your existing resume text was kept.`, "success");
         return false;
@@ -276,8 +289,12 @@ async function initialize() {
   document.querySelector("#embedding-model").value = config.embeddingModel;
   if (config.enabled) { document.querySelector("#ai-result").textContent = `Connected · Ollama ${config.version || "ready"}`; document.querySelector("#ai-result").className = "success"; }
   document.querySelector("#undo-restore").classList.toggle("hidden", !(await ApplyOS.hasRestoreCheckpoint()));
-  document.querySelector("#enable-final-follow-up").checked = state.settings.final_follow_up_enabled !== false;
   document.querySelector("#enable-notifications").checked = state.settings.notification_enabled !== false;
+  document.querySelector("#follow-up-offsets").value = (state.settings.follow_up_offsets_days || [7, 14]).join(", ");
+  document.querySelector("#notification-digest-time").value = state.settings.notification_digest_time || "09:00";
+  const desktopGranted = await chrome.permissions?.contains?.({ permissions: ["notifications"] }).catch(() => false);
+  document.querySelector("#desktop-notification-status").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Enabled" : desktopGranted ? "Permission granted · turn on" : "Not enabled";
+  document.querySelector("#enable-desktop-notifications").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Disable desktop reminders" : "Enable desktop reminders";
   await startProfileTour();
 }
 
@@ -285,13 +302,13 @@ resumeInput.addEventListener("change", async () => {
   const file = resumeInput.files?.[0];
   if (!file) return;
   if (file.size > 8 * 1024 * 1024) {
-    window.alert("Please choose a resume smaller than 8 MB.");
+    await ScoutDialog.alert({ eyebrow: "UPLOAD LIMIT", title: "That resume is too large.", message: "Choose a resume smaller than 8 MB, then try again.", confirmLabel: "Choose another file" });
     resumeInput.value = "";
     return;
   }
   const allowed = /pdf|msword|officedocument/.test(file.type) || /\.(pdf|doc|docx)$/i.test(file.name);
   if (!allowed) {
-    window.alert("Please choose a PDF, DOC, or DOCX resume.");
+    await ScoutDialog.alert({ eyebrow: "FILE TYPE", title: "That format isn’t supported.", message: "Choose a PDF, DOC, or DOCX resume, then try again.", confirmLabel: "Choose another file" });
     resumeInput.value = "";
     return;
   }
@@ -337,7 +354,11 @@ form.addEventListener("submit", async (event) => {
       question: row.querySelector(".custom-question").value.trim(),
       answer: row.querySelector(".custom-answer").value.trim(),
       scope: row.querySelector(".custom-answer-scope").value,
-      company_domain: row.querySelector(".custom-answer-domain").value.trim().toLowerCase()
+      company_domain: row.querySelector(".custom-answer-domain").value.trim().toLowerCase(),
+      ...(row.dataset.answerSource === "application" ? {
+        source: "application",
+        learned_at: row.dataset.learnedAt || new Date().toISOString()
+      } : {})
     }))
     .filter((item) => item.question && item.answer);
   data.updatedAt = new Date().toISOString();
@@ -346,8 +367,10 @@ form.addEventListener("submit", async (event) => {
     const profileId = profilesIndex?.activeId || "default";
     const savedProfile = await ApplyOS.completeOnboarding(data);
     await ApplyOS.updateSettings({
-      final_follow_up_enabled: document.querySelector("#enable-final-follow-up").checked,
-      notification_enabled: document.querySelector("#enable-notifications").checked
+      final_follow_up_enabled: document.querySelector("#follow-up-offsets").value.split(",").map(Number).includes(14),
+      notification_enabled: document.querySelector("#enable-notifications").checked,
+      follow_up_offsets_days: document.querySelector("#follow-up-offsets").value.split(",").map((item) => Number(item.trim())).filter((value) => Number.isInteger(value) && value >= 1 && value <= 60),
+      notification_digest_time: document.querySelector("#notification-digest-time").value || "09:00"
     });
     await ApplyOS.syncAnswerMemory(data.customAnswers, {
       authoritative: true,
@@ -384,25 +407,39 @@ initialize().catch((error) => {
   saveStatus.textContent = `Could not load profile — ${error.message}`;
 });
 
+document.querySelector("#enable-desktop-notifications").addEventListener("click", async () => {
+  const status = document.querySelector("#desktop-notification-status");
+  const current = await chrome.permissions.contains({ permissions: ["notifications"] });
+  const state = await ApplyOS.getState();
+  if (current && state.settings.desktop_notifications_enabled) {
+    await ApplyOS.updateSettings({ desktop_notifications_enabled: false });
+    status.textContent = "Disabled";
+    document.querySelector("#enable-desktop-notifications").textContent = "Enable desktop reminders";
+    return;
+  }
+  const granted = current || await chrome.permissions.request({ permissions: ["notifications"] });
+  await ApplyOS.updateSettings({ desktop_notifications_enabled: granted });
+  status.textContent = granted ? "Enabled" : "Permission not granted";
+  document.querySelector("#enable-desktop-notifications").textContent = granted ? "Disable desktop reminders" : "Enable desktop reminders";
+});
+
 document.querySelector("#profile-select").addEventListener("change", async (event) => { await ApplyOS.setActiveProfile(event.target.value); window.location.reload(); });
 document.querySelector("#new-profile").addEventListener("click", async () => {
-  const name = window.prompt("Name this profile (for example: Frontend roles)");
-  if (!name?.trim()) return;
-  const targetRole = window.prompt("Optional target role", "") || "";
-  await ApplyOS.createProfile(name.trim(), targetRole.trim(), profilesIndex?.activeId); window.location.reload();
+  const values = await ScoutDialog.form({ eyebrow: "NEW PROFILE", title: "Create another version of you.", message: "Use profiles to keep different resumes, answers, and targets organized.", fields: [{ name: "name", label: "Profile name", placeholder: "Frontend roles", required: true, maxLength: 80 }, { name: "targetRole", label: "Target role (optional)", placeholder: "Senior Frontend Engineer", maxLength: 120 }], confirmLabel: "Create profile", cancelLabel: "Not now" });
+  if (!values?.name.trim()) return;
+  await ApplyOS.createProfile(values.name.trim(), values.targetRole.trim(), profilesIndex?.activeId); window.location.reload();
 });
 document.querySelector("#rename-profile").addEventListener("click", async () => {
   const current = profilesIndex.profiles.find((item) => item.id === profilesIndex.activeId);
-  const name = window.prompt("Rename this profile", current?.name || "");
-  if (!name?.trim()) return;
-  const targetRole = window.prompt("Target role", current?.targetRole || "") ?? current?.targetRole ?? "";
-  await ApplyOS.updateProfileMeta(profilesIndex.activeId, { name: name.trim(), targetRole: targetRole.trim() });
+  const values = await ScoutDialog.form({ eyebrow: "EDIT PROFILE", title: "Rename this profile.", message: "The saved application data in your CRM will not change.", fields: [{ name: "name", label: "Profile name", value: current?.name || "", required: true, maxLength: 80 }, { name: "targetRole", label: "Target role (optional)", value: current?.targetRole || "", maxLength: 120 }], confirmLabel: "Save profile name", cancelLabel: "Keep current name" });
+  if (!values?.name.trim()) return;
+  await ApplyOS.updateProfileMeta(profilesIndex.activeId, { name: values.name.trim(), targetRole: values.targetRole.trim() });
   window.location.reload();
 });
 document.querySelector("#delete-profile").addEventListener("click", async () => {
   const current = profilesIndex.profiles.find((item) => item.id === profilesIndex.activeId);
-  if (profilesIndex.profiles.length <= 1) { window.alert("The final profile cannot be deleted."); return; }
-  if (!window.confirm(`Delete the profile “${current?.name || "this profile"}”? Applications will remain in the CRM.`)) return;
+  if (profilesIndex.profiles.length <= 1) { await ScoutDialog.alert({ eyebrow: "PROFILE REQUIRED", title: "Keep at least one profile.", message: "Scout needs one active profile for autofill and saved answers.", confirmLabel: "Keep profile" }); return; }
+  if (!await ScoutDialog.confirm({ eyebrow: "DELETE PROFILE", title: `Delete “${current?.name || "this profile"}”?`, message: "Applications will remain in the CRM.", consequences: ["The profile’s resume, autofill details, and saved answers will be removed."], tone: "danger", confirmLabel: "Delete profile", cancelLabel: "Keep profile" })) return;
   await ApplyOS.deleteProfile(profilesIndex.activeId);
   window.location.reload();
 });
@@ -461,7 +498,7 @@ document.querySelector("#restore-confirmation").addEventListener("input", (event
 
 document.querySelector("#restore-backup").addEventListener("click", async (event) => {
   if (!pendingRestore || document.querySelector("#restore-confirmation").value !== "RESTORE") return;
-  if (!window.confirm("Replace this browser's Scout data with the reviewed backup? A one-step local undo checkpoint will be kept.")) return;
+  if (!await ScoutDialog.confirm({ eyebrow: "RESTORE CHECKPOINT", title: "Replace this browser’s Scout data?", message: "You already reviewed and unlocked this encrypted backup.", consequences: ["Current browser workspace data will be replaced.", "Scout will keep a one-step local undo checkpoint."], tone: "danger", confirmLabel: "Restore backup", cancelLabel: "Keep current data" })) return;
   const button = event.currentTarget; button.disabled = true; setBackupStatus("Restoring and validating workspace data…");
   try {
     const summary = await ApplyOS.restoreBackup(pendingRestore);
@@ -471,7 +508,7 @@ document.querySelector("#restore-backup").addEventListener("click", async (event
 });
 
 document.querySelector("#undo-restore").addEventListener("click", async (event) => {
-  if (!window.confirm("Undo the last successful restore and return to the previous workspace state?")) return;
+  if (!await ScoutDialog.confirm({ eyebrow: "UNDO RESTORE", title: "Return to the previous workspace?", message: "Scout will use the local checkpoint created before your last successful restore.", confirmLabel: "Undo restore", cancelLabel: "Keep restored data" })) return;
   const button = event.currentTarget; button.disabled = true; setBackupStatus("Recovering the pre-restore checkpoint…");
   try { await ApplyOS.undoLastRestore(); setBackupStatus("Previous workspace state recovered. Reloading…", "success"); window.setTimeout(() => window.location.reload(), 700); }
   catch (error) { setBackupStatus(error.message, "error"); button.disabled = false; }

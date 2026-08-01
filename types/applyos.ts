@@ -14,6 +14,11 @@ export type Priority = "low" | "medium" | "high";
 export type ContactRelationship = "recruiter" | "hiring_manager" | "interviewer" | "employee" | "referral" | "other";
 export type InterviewType = "recruiter_screen" | "hiring_manager" | "technical" | "behavioral" | "panel" | "final" | "other";
 export type InterviewFormat = "video" | "phone" | "onsite" | "other";
+export type ActionKind = "application_follow_up" | "application_final_follow_up" | "contact_follow_up" | "interview_prep" | "interview_thank_you" | "custom";
+export type ActionStatus = "open" | "done" | "skipped" | "cancelled";
+export type ActionChannel = "email" | "linkedin" | "phone" | "meeting" | "other";
+export type ContactActivityType = "email" | "linkedin" | "phone" | "meeting" | "note";
+export type ContactActivityDirection = "outbound" | "inbound" | "none";
 
 export type ATSPlatform =
   | "greenhouse"
@@ -96,14 +101,28 @@ export interface ApplicationRecord {
   updated_at: string;
 }
 
-export interface FollowUpReminder {
+export interface ActionItem {
   id: string;
-  application_id: string;
-  type: "follow_up" | "final_follow_up";
+  kind: ActionKind;
+  title: string;
+  status: ActionStatus;
   due_at: string;
+  snoozed_until: string | null;
+  priority: Priority;
+  channel: ActionChannel;
+  application_id: string | null;
+  contact_id: string | null;
+  interview_id: string | null;
+  notes: string;
+  source: "system" | "user";
   completed_at: string | null;
+  last_notified_at: string | null;
   created_at: string;
+  updated_at: string;
 }
+
+/** @deprecated Serialized as `reminders` for backup/cloud compatibility. */
+export type FollowUpReminder = ActionItem;
 
 export interface AnswerMemoryItem {
   id: string;
@@ -151,12 +170,31 @@ export interface ContactRecord {
   title: string;
   company: string;
   email: string;
+  phone: string;
   linkedin_url: string;
+  preferred_channel: ActionChannel;
+  tags: string[];
   relationship: ContactRelationship;
   application_ids: string[];
   notes: string;
   last_contacted_at: string | null;
   next_action_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactActivity {
+  id: string;
+  contact_id: string;
+  application_id: string | null;
+  interview_id: string | null;
+  action_id: string | null;
+  type: ContactActivityType;
+  direction: ContactActivityDirection;
+  occurred_at: string;
+  subject: string;
+  summary: string;
+  outcome: string;
   created_at: string;
   updated_at: string;
 }
@@ -191,15 +229,20 @@ export interface ApplyOSState {
   revision: number;
   migration_history: StateMigrationRecord[];
   applications: ApplicationRecord[];
-  reminders: FollowUpReminder[];
+  /** Compatibility serialization key; entries use the ActionItem contract. */
+  reminders: ActionItem[];
   answer_memory: AnswerMemoryItem[];
   learned_answers: LearnedAnswer[];
   resume_versions: ResumeVersion[];
   contacts: ContactRecord[];
+  contact_activities: ContactActivity[];
   interviews: InterviewRecord[];
   settings: {
     final_follow_up_enabled: boolean;
     notification_enabled: boolean;
+    follow_up_offsets_days: number[];
+    desktop_notifications_enabled: boolean;
+    notification_digest_time: string;
     cloud_sync_enabled?: boolean;
     resume_sync_enabled?: boolean;
   };
@@ -232,7 +275,7 @@ export interface CloudSyncMeta {
   error?: string | null;
 }
 
-export type CloudEntityType = "profile" | "application" | "contact" | "interview" | "reminder" | "answer_memory" | "learned_answer" | "resume_version" | "knowledge_graph" | "settings" | "onboarding_progress";
+export type CloudEntityType = "profile" | "application" | "contact" | "contact_activity" | "interview" | "reminder" | "answer_memory" | "learned_answer" | "resume_version" | "knowledge_graph" | "settings" | "onboarding_progress";
 
 export interface CloudMutation {
   mutationId: string;
@@ -337,7 +380,7 @@ export interface UserProfile {
   resumeText?: string;
   employment?: EmploymentEntry[];
   education?: EducationEntry[];
-  customAnswers?: Array<{ question: string; answer: string; scope?: "global" | "company"; company_domain?: string }>;
+  customAnswers?: Array<{ question: string; answer: string; scope?: "global" | "company"; company_domain?: string; source?: "application"; learned_at?: string }>;
   resume?: { name: string; type: string; size: number; dataUrl: string } | null;
   updatedAt?: string;
   profileSchemaVersion?: number;

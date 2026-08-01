@@ -11,6 +11,7 @@
     "profile",
     "application",
     "contact",
+    "contact_activity",
     "interview",
     "reminder",
     "answer_memory",
@@ -22,6 +23,7 @@
   ]);
   const ENTITY_TYPE_SET = new Set(ENTITY_TYPES);
   const PRIVATE_ENTITY_TYPES = new Set([
+    "contact_activity",
     "reminder",
     "answer_memory",
     "learned_answer",
@@ -601,6 +603,7 @@
 
     for (const item of Array.isArray(state.applications) ? state.applications : []) addProjected(records, "application", item);
     for (const item of Array.isArray(state.contacts) ? state.contacts : []) addProjected(records, "contact", item);
+    for (const item of Array.isArray(state.contact_activities) ? state.contact_activities : []) addProjected(records, "contact_activity", item);
     for (const item of Array.isArray(state.interviews) ? state.interviews : []) addProjected(records, "interview", item);
     for (const item of Array.isArray(state.reminders) ? state.reminders : []) addProjected(records, "reminder", item);
     for (const item of Array.isArray(state.answer_memory) ? state.answer_memory : []) addProjected(records, "answer_memory", item);

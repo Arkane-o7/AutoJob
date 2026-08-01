@@ -7,6 +7,7 @@
     <link rel="icon" href="assets/icons/scout-32.png">
     <link rel="stylesheet" href="options.css">
     <link rel="stylesheet" href="shared/header.css">
+    <link rel="stylesheet" href="shared/dialog.css">
     <link rel="stylesheet" href="shared/tour.css">
   </head>
   <body data-scout-page="profile">
@@ -14,6 +15,7 @@
       <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
       <nav class="scout-header__nav" aria-label="Primary navigation">
         <a href="dashboard.html" data-scout-nav="applications">Applications</a>
+        <a href="dashboard.html?section=actions" data-scout-nav="actions">Today</a>
         <a href="dashboard.html?section=contacts" data-scout-nav="contacts">Contacts</a>
       </nav>
       <div class="scout-header__actions">
@@ -129,10 +131,12 @@
             <label class="wide"><span>General cover letter / introduction</span><textarea name="coverLetter" placeholder="Use a general version here; tailor it for important applications."></textarea></label>
           </div>
           <div class="reminder-settings">
-            <strong>FOLLOW-UP DEFAULTS</strong>
-            <label><input id="enable-final-follow-up" type="checkbox"> Schedule an optional final follow-up 14 days after applying</label>
-            <label><input id="enable-notifications" type="checkbox"> Show follow-ups due on the Scout toolbar badge</label>
-            <small>Changes apply to new applications. Every reminder remains editable and nothing is sent automatically.</small>
+            <strong>ACTION &amp; REMINDER DEFAULTS</strong>
+            <label class="setting-field"><span>Follow-up days after applying</span><input id="follow-up-offsets" value="7, 14" inputmode="numeric" placeholder="7, 14"><small>Use up to four days between 1 and 60, separated by commas.</small></label>
+            <label><input id="enable-notifications" type="checkbox"> Show due actions on the Scout toolbar badge</label>
+            <div class="desktop-reminder-row"><button id="enable-desktop-notifications" class="outline" type="button">Enable desktop reminders</button><span id="desktop-notification-status">Not enabled</span></div>
+            <label class="setting-field"><span>Daily reminder time</span><input id="notification-digest-time" type="time" value="09:00"></label>
+            <small>Desktop reminders are optional and use generic wording. Scout never sends a message or includes private notes in an operating-system notification.</small>
           </div>
           <div class="safety-note"><strong>Intentionally manual</strong><span>Scout does not autofill demographic, disability, veteran, government-ID, birth-date, assessment, CAPTCHA, or consent fields.</span></div>
         </section>
@@ -157,7 +161,7 @@
         <section id="answers" data-tour-target="answers">
           <div class="section-number">07</div>
           <div class="section-heading"><p>FOR REPEATED QUESTIONS</p><h2>Custom answers</h2></div>
-          <p class="section-copy">Add phrases from questions you see often—including skill-specific experience such as “years handling 100 TB of data.” Use company-only scope for employer-history, employee-relationship, and company-specific answers.</p>
+          <p class="section-copy">Add phrases from questions you see often—including skill-specific experience such as “years handling 100 TB of data.” After you ask Scout to autofill, safe unanswered fields you complete are added here as editable learned answers. Passwords, identity/demographic questions, consent, payment, verification, and uploaded files are never learned. Use company-only scope for employer-history, employee-relationship, and company-specific answers.</p>
           <div id="custom-answers"></div>
           <button id="add-answer" type="button" class="add-answer">+ Add a question and answer</button>
         </section>
@@ -226,6 +230,7 @@
     <script src="shared/backup.js"></script>
     <script src="shared/resume-parser.js"></script>
     <script src="shared/header.js"></script>
+    <script src="shared/dialog.js"></script>
     <script src="shared/tour.js"></script>
     <script src="options.js"></script>
   </body>

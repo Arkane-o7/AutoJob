@@ -9,6 +9,7 @@ ApplyOS.configureCloudRepository({
 
 const SESSION_STORAGE_KEY = "applyos_application_sessions";
 let sessionWriteQueue = Promise.resolve();
+let applicationAnswerLearningQueue = Promise.resolve();
 let repositoryProjectionQueue = Promise.resolve();
 let repositoryProjectionTimer = null;
 let materializingRepository = false;
@@ -82,6 +83,7 @@ async function materializeRepositoryWorkspace() {
     ...current,
     applications: byType("application"),
     contacts: byType("contact"),
+    contact_activities: byType("contact_activity"),
     interviews: byType("interview"),
     reminders: byType("reminder"),
     answer_memory: byType("answer_memory"),
@@ -227,10 +229,56 @@ async function updateBadge(refreshStatuses = true) {
     return;
   }
   const state = refreshStatuses ? await ApplyOS.refreshDueApplications() : await ApplyOS.getState();
-  const due = state.settings.notification_enabled === false ? 0 : state.reminders.filter((item) => !item.completed_at && new Date(item.due_at) <= new Date()).length;
+  const due = state.settings.notification_enabled === false ? 0 : state.reminders.filter((item) => item.status === "open" && new Date(item.snoozed_until || item.due_at) <= new Date()).length;
   await chrome.action.setBadgeBackgroundColor({ color: "#ff5c35" });
   await chrome.action.setBadgeText({ text: due ? String(Math.min(due, 99)) : "" });
-  await chrome.action.setTitle({ title: due ? `Scout · ${due} follow-up${due === 1 ? "" : "s"} due` : "Scout" });
+  await chrome.action.setTitle({ title: due ? `Scout · ${due} action${due === 1 ? "" : "s"} due` : "Scout" });
+}
+
+function actionsEligibleForNotification(state, at = new Date()) {
+  return ApplyOS.actionsEligibleForNotification(state, at);
+}
+
+function nextDigestAt(time = "09:00", at = new Date()) {
+  return ApplyOS.nextDigestAt(time, at);
+}
+
+async function scheduleActionAlarms(state) {
+  const now = Date.now();
+  const open = state.reminders.filter((item) => item.status === "open").map((item) => {
+    const due = new Date(item.snoozed_until || item.due_at).getTime();
+    if (!Number.isFinite(due)) return null;
+    if (due > now) return due;
+    if (!state.settings.desktop_notifications_enabled) return null;
+    const notified = item.last_notified_at ? new Date(item.last_notified_at).getTime() : 0;
+    return notified ? Math.max(now + 1000, notified + 86400000) : now + 1000;
+  }).filter(Number.isFinite).sort((a, b) => a - b);
+  await chrome.alarms.clear("applyos-next-action");
+  if (open.length) chrome.alarms.create("applyos-next-action", { when: Math.max(Date.now() + 1000, open[0]) });
+  chrome.alarms.create("applyos-action-digest", { when: nextDigestAt(state.settings.notification_digest_time), periodInMinutes: 1440 });
+}
+
+async function notifyDueActions() {
+  const state = await ApplyOS.refreshDueApplications();
+  await scheduleActionAlarms(state);
+  if (!state.settings.desktop_notifications_enabled || !chrome.notifications) return;
+  const granted = await chrome.permissions.contains({ permissions: ["notifications"] });
+  if (!granted) { await ApplyOS.updateSettings({ desktop_notifications_enabled: false }); return; }
+  const due = actionsEligibleForNotification(state);
+  if (!due.length) return;
+  await chrome.notifications.create("applyos-actions-due", {
+    type: "basic",
+    iconUrl: chrome.runtime.getURL("assets/icons/scout-128.png"),
+    title: "Scout · actions due",
+    message: `${due.length} Scout action${due.length === 1 ? " is" : "s are"} due. Open Today to review.`,
+    priority: 1
+  });
+  const notifiedAt = new Date().toISOString();
+  const ids = new Set(due.map((item) => item.id));
+  await ApplyOS.mutateState((draft) => {
+    draft.reminders = draft.reminders.map((item) => ids.has(item.id) ? { ...item, last_notified_at: notifiedAt, updated_at: notifiedAt } : item);
+    return draft;
+  });
 }
 
 async function initialize() {
@@ -244,6 +292,7 @@ async function initialize() {
     await ApplyOS.ensureGraph();
     await bootstrapAuthoritativeWorkspace().catch(() => {});
     await updateBadge();
+    await scheduleActionAlarms(await ApplyOS.getState());
   } else {
     await updateBadge(false);
   }
@@ -256,15 +305,28 @@ chrome.runtime.onInstalled.addListener((details) => {
 });
 chrome.runtime.onStartup.addListener(() => initialize().catch(console.error));
 chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "applyos-follow-ups") updateBadge().catch(console.error);
+  if (["applyos-follow-ups", "applyos-next-action", "applyos-action-digest"].includes(alarm.name)) notifyDueActions().then(() => updateBadge(false)).catch(console.error);
   if (alarm.name === "applyos-cloud-sync") {
     projectCurrentWorkspace()
       .then(() => ApplyOS.flushCloudMutations?.())
       .catch(() => {});
   }
 });
+chrome.notifications?.onClicked?.addListener((notificationId) => {
+  if (notificationId !== "applyos-actions-due") return;
+  const url = chrome.runtime.getURL("dashboard.html?section=actions");
+  chrome.tabs.query({ url: `${chrome.runtime.getURL("dashboard.html")}*` }, (tabs) => {
+    const existing = tabs[0];
+    if (existing?.id) chrome.tabs.update(existing.id, { active: true, url }, () => chrome.windows.update(existing.windowId, { focused: true }));
+    else chrome.tabs.create({ url });
+  });
+});
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && changes[ApplyOS.STORAGE_KEY]) updateBadge(false).catch(console.error);
+  if (area === "local" && changes[ApplyOS.STORAGE_KEY]) {
+    updateBadge(false).catch(console.error);
+    const next = changes[ApplyOS.STORAGE_KEY].newValue;
+    if (next) scheduleActionAlarms(next).catch(console.error);
+  }
   if (area === "local" && !materializingRepository && Object.keys(changes).some(isWorkspaceStorageKey)) queueWorkspaceProjection();
 });
 
@@ -296,6 +358,77 @@ async function autofillBundle() {
     learnedAnswers: state.learned_answers || [],
     graphAnswers: (graphStored.applyos_graph?.nodes || []).filter((node) => node.type === "answer")
   };
+}
+
+const APPLICATION_ANSWER_BLOCKED = /password|passcode|one.?time.?code|\botp\b|verification code|social security|\bssn\b|national id|aadhaar|passport number|date of birth|birth date|gender|sex assigned|race|ethnicity|disability|veteran|religion|sexual orientation|caste|marital status|credit card|card number|\bcvv\b|bank|payment|consent|i agree|agree to|terms of|privacy policy|captcha/i;
+
+function contentSenderDomain(sender) {
+  if (sender?.id !== chrome.runtime.id || !Number.isInteger(sender.tab?.id)) return "";
+  try {
+    const url = new URL(sender.url || "");
+    return ["http:", "https:"].includes(url.protocol) ? url.hostname.toLowerCase().replace(/^www\./, "") : "";
+  } catch { return ""; }
+}
+
+async function rememberApplicationAnswer(entry = {}, sender) {
+  const senderDomain = contentSenderDomain(sender);
+  if (!senderDomain) throw new Error("Scout could not verify this application page.");
+  const question = String(entry.question || "").replace(/\s+/g, " ").trim().slice(0, 500);
+  const answer = String(entry.answer || "").trim().slice(0, 5000);
+  if (!question || !answer || APPLICATION_ANSWER_BLOCKED.test(question)) throw new Error("This field is not eligible for answer learning.");
+  const scope = entry.scope === "company" ? "company" : "global";
+  const companyDomain = scope === "company" ? senderDomain : "";
+  const [index, profile] = await Promise.all([ApplyOS.getProfilesIndex(), ApplyOS.getActiveProfile()]);
+  const profileId = index.activeId || "default";
+  const customAnswers = Array.isArray(profile.customAnswers) ? structuredClone(profile.customAnswers) : [];
+  const normalizedQuestion = ApplyOS.normalizeQuestion(question);
+  const existing = customAnswers.find((item) => ApplyOS.normalizeQuestion(item.question) === normalizedQuestion
+    && (item.scope === "company" ? "company" : "global") === scope
+    && String(item.company_domain || "") === companyDomain);
+  const learnedAt = new Date().toISOString();
+  if (existing) {
+    existing.answer = answer;
+    existing.updated_at = learnedAt;
+  } else {
+    customAnswers.push({
+      question,
+      answer,
+      scope,
+      company_domain: companyDomain,
+      source: "application",
+      learned_at: learnedAt
+    });
+  }
+  await ApplyOS.patchActiveProfile({ customAnswers });
+  const remembered = await ApplyOS.rememberApplicationAnswer({
+    question,
+    answer,
+    scope,
+    company_domain: companyDomain,
+    profile_id: profileId
+  });
+  await ApplyOS.recordGraphAnswer({
+    question,
+    answer,
+    canonicalField: entry.canonical_field || null,
+    promptType: entry.prompt_type || "free_text_short",
+    source: "profile",
+    profileId,
+    scope,
+    companyDomain,
+    platform: entry.site || senderDomain,
+    confidence: 1
+  });
+  return remembered;
+}
+
+function queueApplicationAnswerLearning(entry, sender) {
+  const task = applicationAnswerLearningQueue.then(
+    () => rememberApplicationAnswer(entry, sender),
+    () => rememberApplicationAnswer(entry, sender)
+  );
+  applicationAnswerLearningQueue = task.then(() => undefined, () => undefined);
+  return task;
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
@@ -583,6 +716,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         });
         sendResponse({ ok: true, learned });
       })
+      .catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_LEARN_APPLICATION_ANSWER") {
+    queueApplicationAnswerLearning(message.answer, _sender)
+      .then((remembered) => sendResponse({ ok: Boolean(remembered), remembered }))
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
   }

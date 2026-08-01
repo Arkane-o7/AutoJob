@@ -10,12 +10,16 @@ const scripts = [
   manifest.background?.service_worker,
   ...manifest.content_scripts.flatMap((entry) => entry.js || []),
   "popup.js", "options.js", "dashboard.js", "onboarding.js", "account.js",
-  "shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/storage.js", "shared/backup.js", "shared/resume-parser.js", "shared/cloud-config.js", "shared/cloud.js", "shared/header.js", "shared/tour.js"
+  "shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/storage.js", "shared/backup.js", "shared/resume-parser.js", "shared/cloud-config.js", "shared/cloud.js", "shared/header.js", "shared/dialog.js", "shared/tour.js"
 ].filter(Boolean);
 
 for (const file of new Set(scripts)) {
   await access(resolve(root, file));
   execFileSync(process.execPath, ["--check", resolve(root, file)], { stdio: "pipe" });
+  if (file !== "shared/dialog.js") {
+    const source = await readFile(resolve(root, file), "utf8");
+    if (/(^|[^.\w])(?:window\.)?(?:alert|confirm|prompt)\s*\(/m.test(source)) throw new Error(`${file} uses a native browser dialog; use ScoutDialog instead.`);
+  }
 }
 
 for (const page of [manifest.action.default_popup, manifest.options_page, "dashboard.html", "onboarding.html", "account.html"]) {

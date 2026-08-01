@@ -174,11 +174,13 @@ test("legacy projection creates record-level mutations and strips inline resume 
     profile: { id: "primary", fullName: "Ada Lovelace", resume: { dataUrl: "data:application/pdf;base64,private" } },
     applyos_state: {
       applications: [{ id: "job_1", role: "Engineer" }],
+      contact_activities: [{ id: "activity_1", contact_id: "contact_1", summary: "Reviewed note" }],
       resume_versions: [{ id: "resume_1", name: "resume.pdf", dataUrl: "data:application/pdf;base64,private" }],
       settings: { theme: "system" }
     }
   });
-  assert.deepEqual(Array.from(records, (record) => String(record.entity_type)), ["profile", "application", "resume_version", "settings"]);
+  assert.deepEqual(Array.from(records, (record) => String(record.entity_type)), ["profile", "application", "contact_activity", "resume_version", "settings"]);
+  assert.equal(records.find((record) => record.entity_type === "contact_activity").payload.summary, "Reviewed note");
   assert.equal(records.find((record) => record.entity_type === "profile").payload.resume.dataUrl, "");
   assert.equal(records.find((record) => record.entity_type === "resume_version").payload.dataUrl, "");
 });

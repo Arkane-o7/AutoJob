@@ -42,7 +42,7 @@ test("migrates legacy profile without removing it", async () => {
   assert.equal(state.resume_versions[0].name, "ada.pdf");
 });
 
-test("migrates a v2 state through v5 without losing applications or the legacy profile", async () => {
+test("migrates a v2 state through v6 without losing applications or the legacy profile", async () => {
   const profile = { firstName: "Ada", email: "ada@example.com" };
   const application = {
     id: "app_existing",
@@ -77,12 +77,12 @@ test("migrates a v2 state through v5 without losing applications or the legacy p
   });
 
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 5);
+  assert.equal(state.schema_version, 6);
   assert.equal(state.revision, 0);
   assert.equal(state.applications.length, 1);
   assert.equal(state.applications[0].id, "app_existing");
   assert.equal(state.applications[0].notes, "Keep this note");
-  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5]]));
+  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5], [5, 6]]));
   assert.equal(state.contacts.length, 0);
   assert.equal(state.interviews.length, 0);
   assert.equal(data.profile.email, "ada@example.com");
@@ -107,7 +107,7 @@ test("state migration is idempotent and does not increment the mutation revision
 
   assert.equal(first.revision, 0);
   assert.equal(second.revision, 0);
-  assert.equal(second.migration_history.length, 3);
+  assert.equal(second.migration_history.length, 4);
   assert.deepEqual(data.applyos_state, storedAfterFirstRead);
 });
 
@@ -238,11 +238,100 @@ test("marking applied creates editable 7 and 14 day follow-ups", async () => {
   assert.equal((await ApplyOS.getState()).applications[0].follow_up_date.slice(0, 10), "2026-07-23");
 });
 
+test("schema v6 migrates application, contact, and interview next actions exactly once", async () => {
+  const { ApplyOS, data } = await runtime({
+    applyos_state: {
+      schema_version: 5, revision: 2, migration_history: [],
+      applications: [{ id: "app_v5", company: "Acme", role: "Engineer", url: "https://example.com/v5", source: "test", description: "", status: "applied", priority: "high", deadline: null, applied_at: "2026-07-01T00:00:00.000Z", follow_up_date: "2026-07-08T00:00:00.000Z", resume_version_id: null, notes: "", match_score: 0, created_at: "2026-07-01T00:00:00.000Z", updated_at: "2026-07-01T00:00:00.000Z" }],
+      reminders: [{ id: "rem_v5", application_id: "app_v5", type: "follow_up", due_at: "2026-07-08T00:00:00.000Z", completed_at: null, created_at: "2026-07-01T00:00:00.000Z" }],
+      contacts: [{ id: "contact_v5", name: "Riley", title: "Recruiter", company: "Acme", email: "riley@example.com", linkedin_url: "", relationship: "recruiter", application_ids: ["app_v5"], notes: "", last_contacted_at: null, next_action_at: "2026-07-09T00:00:00.000Z", created_at: "2026-07-01T00:00:00.000Z", updated_at: "2026-07-01T00:00:00.000Z" }],
+      interviews: [{ id: "interview_v5", application_id: "app_v5", type: "technical", format: "video", scheduled_at: "2026-07-10T00:00:00.000Z", location: "", meeting_url: "", interviewer_contact_ids: ["contact_v5"], company_research: "", preparation_notes: "", question_notes: "", next_action: "Send thank-you", next_action_at: "2026-07-11T00:00:00.000Z", completed_at: null, created_at: "2026-07-01T00:00:00.000Z", updated_at: "2026-07-01T00:00:00.000Z" }],
+      answer_memory: [], learned_answers: [], resume_versions: [], settings: { final_follow_up_enabled: true, notification_enabled: true }, migrated_at: "2026-07-01T00:00:00.000Z"
+    }
+  });
+  const first = await ApplyOS.ensureState();
+  assert.equal(first.schema_version, 6);
+  assert.equal(first.reminders.filter((item) => item.kind === "application_follow_up").length, 1);
+  assert.equal(first.reminders.filter((item) => item.kind === "contact_follow_up").length, 1);
+  assert.equal(first.reminders.filter((item) => item.kind === "interview_thank_you").length, 1);
+  assert.equal(JSON.stringify(first.settings.follow_up_offsets_days), JSON.stringify([7, 14]));
+  const serialized = JSON.stringify(data.applyos_state);
+  await ApplyOS.ensureState();
+  assert.equal(JSON.stringify(data.applyos_state), serialized);
+});
+
+test("unified action lifecycle groups, snoozes, reschedules, and completes without changing unrelated application status", async () => {
+  const { ApplyOS } = await runtime();
+  const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/action-job", source: "test", description: "" });
+  const contact = await ApplyOS.upsertContact({ name: "Riley Recruiter", email: "riley@example.com", application_ids: [application.id] });
+  const action = await ApplyOS.upsertAction({ kind: "contact_follow_up", title: "Ask Riley about timing", due_at: "2026-07-01T09:00:00.000Z", priority: "high", channel: "email", contact_id: contact.id, application_id: application.id, source: "user" });
+  assert.equal((await ApplyOS.listActions({ at: "2026-07-02T12:00:00.000Z" })).find((item) => item.id === action.id).group, "overdue");
+  await ApplyOS.snoozeAction(action.id, "2026-07-05T09:00:00.000Z");
+  assert.equal((await ApplyOS.getState()).reminders.find((item) => item.id === action.id).snoozed_until, "2026-07-05T09:00:00.000Z");
+  await ApplyOS.rescheduleAction(action.id, "2026-07-06T09:00:00.000Z");
+  assert.equal((await ApplyOS.getState()).reminders.find((item) => item.id === action.id).snoozed_until, null);
+  await ApplyOS.completeAction(action.id);
+  const state = await ApplyOS.getState();
+  assert.equal(state.reminders.find((item) => item.id === action.id).status, "done");
+  assert.equal(state.applications[0].status, "saved");
+});
+
+test("logging contact activity atomically completes one action and creates the next", async () => {
+  const { ApplyOS } = await runtime();
+  const contact = await ApplyOS.upsertContact({ name: "Taylor", email: "taylor@example.com" });
+  const action = await ApplyOS.upsertAction({ kind: "contact_follow_up", title: "Email Taylor", due_at: "2026-07-02T09:00:00.000Z", priority: "medium", channel: "email", contact_id: contact.id, source: "user" });
+  await ApplyOS.logContactActivity({ contact_id: contact.id, action_id: action.id, type: "email", direction: "outbound", occurred_at: "2026-07-02T10:00:00.000Z", subject: "Checking in", summary: "Sent a reviewed note", outcome: "Awaiting reply" }, { complete_action_id: action.id, next_action: { title: "Check for reply", due_at: "2026-07-09T10:00:00.000Z", channel: "email" } });
+  const state = await ApplyOS.getState();
+  assert.equal(state.contact_activities.length, 1);
+  assert.equal(state.reminders.find((item) => item.id === action.id).status, "done");
+  assert.equal(state.reminders.filter((item) => item.contact_id === contact.id && item.status === "open").length, 1);
+  assert.equal(state.contacts[0].last_contacted_at, "2026-07-02T10:00:00.000Z");
+});
+
+test("contact merge preserves applications, actions, activities, tags, and interview links", async () => {
+  const { ApplyOS } = await runtime();
+  const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/merge", source: "test", description: "" });
+  const source = await ApplyOS.upsertContact({ name: "Taylor A", email: "same@example.com", tags: ["warm"], application_ids: [application.id] });
+  const target = await ApplyOS.upsertContact({ name: "Taylor", email: "same@example.com", tags: ["recruiter"] });
+  const action = await ApplyOS.upsertAction({ kind: "contact_follow_up", title: "Follow up", due_at: "2026-08-01T10:00:00.000Z", contact_id: source.id, channel: "email" });
+  await ApplyOS.logContactActivity({ contact_id: source.id, type: "note", direction: "none", occurred_at: "2026-07-01T10:00:00.000Z", summary: "Met at event" });
+  await ApplyOS.mergeContacts(source.id, target.id);
+  const state = await ApplyOS.getState();
+  assert.equal(state.contacts.length, 1);
+  assert.deepEqual([...state.contacts[0].tags].sort(), ["recruiter", "warm"]);
+  assert.equal(state.reminders.find((item) => item.id === action.id).contact_id, target.id);
+  assert.equal(state.contact_activities[0].contact_id, target.id);
+});
+
 test("answer memory uses similar question phrasing", async () => {
   const { ApplyOS } = await runtime();
   await ApplyOS.syncAnswerMemory([{ question: "Why do you want this role?", answer: "It matches my platform background." }]);
   const answer = await ApplyOS.findRememberedAnswer("Why do you want this role");
   assert.equal(answer.answer, "It matches my platform background.");
+});
+
+test("application completions become reusable profile-scoped answer memory", async () => {
+  const { ApplyOS } = await runtime();
+  const remembered = await ApplyOS.rememberApplicationAnswer({
+    question: "What kind of systems do you enjoy building?",
+    answer: "I enjoy building reliable distributed systems.",
+    profile_id: "default",
+    scope: "global"
+  });
+  assert.equal(remembered.source, "application");
+  assert.equal(remembered.memory_group, "custom:default");
+  const recalled = await ApplyOS.findRememberedAnswer("What kind of software systems do you enjoy building?");
+  assert.equal(recalled.answer, "I enjoy building reliable distributed systems.");
+
+  const scoped = await ApplyOS.rememberApplicationAnswer({
+    question: "Why do you want to work here?",
+    answer: "The company mission matches my experience.",
+    profile_id: "default",
+    scope: "company",
+    company_domain: "jobs.example.com"
+  });
+  assert.equal(scoped.company_domain, "jobs.example.com");
+  assert.equal(await ApplyOS.findRememberedAnswer("Why do you want to work here?", { companyDomain: "other.example.com" }), null);
 });
 
 test("Offlyn-derived classifier recognizes ATS fields and keeps sensitive answers manual", async () => {
@@ -270,7 +359,7 @@ test("stores corrections and reuses the best site-aware learned answer", async (
   });
   assert.equal(learned.answer, "4");
   const state = await ApplyOS.getState();
-  assert.equal(state.schema_version, 5);
+  assert.equal(state.schema_version, 6);
   assert.equal(state.learned_answers.length, 1);
   const match = ApplyOS.OfflynCore.bestLearnedAnswer("How many years have you handled large datasets", state.learned_answers, {
     site: "example.myworkdayjobs.com",

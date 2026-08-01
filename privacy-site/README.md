@@ -10,7 +10,8 @@ A dependency-free static website ready for Vercel.
 4. Leave the build command and output directory empty.
 5. Deploy.
 
-The policy is available at both `/` and `/privacy`.
+The Privacy Policy is available at both `/` and `/privacy`. The User Agreement
+is available at `/terms`.
 
 Before publishing the Chrome Web Store listing, confirm that the operator,
 contact details, service providers, Supabase region, retention statements, and

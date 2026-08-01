@@ -32,7 +32,12 @@ let detailReturnFocus = null;
 let selectedContactId = null;
 let contactReturnFocus = null;
 let selectedInterviewId = null;
+let selectedActionId = null;
+let actionReturnFocus = null;
+let snoozeActionId = null;
+let snoozeReturnFocus = null;
 let currentView = "board";
+let currentContactView = "cards";
 let currentSection = "applications";
 let profile = {};
 let aiConfig = {};
@@ -67,6 +72,11 @@ function escapeHTML(value) {
   const span = document.createElement("span");
   span.textContent = String(value ?? "");
   return span.innerHTML;
+}
+
+function setText(selector, value) {
+  const node = $(selector);
+  if (node) node.textContent = String(value ?? "");
 }
 
 function dateLabel(value) {
@@ -188,11 +198,11 @@ function renderList(items) {
 
 function renderUpcoming() {
   const now = Date.now();
-  const reminders = state.reminders.filter((item) => !item.completed_at).map((item) => ({ ...item, application: state.applications.find((app) => app.id === item.application_id), kind: "follow-up", at: item.due_at }));
+  const reminders = state.reminders.filter((item) => item.status === "open" && item.application_id).map((item) => ({ ...item, application: state.applications.find((app) => app.id === item.application_id), agendaKind: "follow-up", at: item.snoozed_until || item.due_at }));
   const deadlines = state.applications.filter((item) => item.deadline && new Date(item.deadline).getTime() >= now - 86400000).map((item) => ({ application: item, kind: "deadline", at: item.deadline }));
   const interviews = state.interviews.filter((item) => !item.completed_at && item.scheduled_at && new Date(item.scheduled_at).getTime() >= now - 86400000).map((item) => ({ ...item, application: state.applications.find((app) => app.id === item.application_id), kind: "interview", at: item.scheduled_at }));
   const items = [...reminders, ...deadlines, ...interviews].filter((item) => item.application).sort((a, b) => new Date(a.at) - new Date(b.at)).slice(0, 8);
-  elements.upcoming.innerHTML = items.length ? items.map((item) => `<div class="upcoming-card ${item.kind === "deadline" ? "deadline" : ""}"><button class="upcoming-open" data-id="${item.application.id}" type="button"><strong>${escapeHTML(item.application.role)}</strong><span>${item.kind === "deadline" ? "Deadline" : item.kind === "interview" ? "Interview" : "Follow-up"} · ${escapeHTML(dateLabel(item.at))}</span></button>${item.kind === "follow-up" ? `<button class="upcoming-done" data-reminder-id="${item.id}" type="button">Done</button>` : ""}</div>`).join("") : `<span class="upcoming-card"><strong>Nothing urgent</strong><span>Your next actions will appear here.</span></span>`;
+  elements.upcoming.innerHTML = items.length ? items.map((item) => `<div class="upcoming-card ${item.kind === "deadline" ? "deadline" : ""}"><button class="upcoming-open" data-id="${item.application.id}" type="button"><strong>${escapeHTML(item.application.role)}</strong><span>${item.kind === "deadline" ? "Deadline" : item.kind === "interview" ? "Interview" : "Follow-up"} · ${escapeHTML(dateLabel(item.at))}</span></button>${item.agendaKind === "follow-up" ? `<button class="upcoming-done" data-reminder-id="${item.id}" type="button">Done</button>` : ""}</div>`).join("") : `<span class="upcoming-card"><strong>Nothing urgent</strong><span>Your next actions will appear here.</span></span>`;
   elements.upcoming.querySelectorAll(".upcoming-open").forEach((button) => button.addEventListener("click", () => openDetail(button.dataset.id)));
   elements.upcoming.querySelectorAll(".upcoming-done").forEach((button) => button.addEventListener("click", async () => {
     await ApplyOS.completeReminder(button.dataset.reminderId);
@@ -201,18 +211,135 @@ function renderUpcoming() {
   }));
 }
 
+function actionContext(action) {
+  const application = state.applications.find((item) => item.id === action.application_id);
+  const contact = state.contacts.find((item) => item.id === action.contact_id);
+  return [contact?.name, application ? `${application.role} · ${application.company}` : ""].filter(Boolean).join(" / ") || "Personal action";
+}
+
+function actionRowHTML(action) {
+  const effective = action.snoozed_until || action.due_at;
+  return `<article class="action-row ${action.group === "overdue" ? "is-overdue" : ""} ${action.group === "done" ? "is-done" : ""}" data-action-id="${action.id}"><i class="action-row-priority ${action.priority}"></i><button class="action-row-main" type="button" data-open-action="${action.id}"><strong>${escapeHTML(action.title)}</strong><span>${escapeHTML(titleCase(action.kind))} · ${escapeHTML(actionContext(action))}</span></button><time class="action-row-time" datetime="${escapeHTML(effective)}">${escapeHTML(dateTimeLabel(effective))}${action.snoozed_until ? " · snoozed" : ""}</time><div class="action-row-controls">${action.status === "open" ? `<button class="done" data-action-done="${action.id}" type="button">Done</button><button data-action-snooze="${action.id}" type="button">Snooze</button><button data-action-skip="${action.id}" type="button">Skip</button>` : `<button data-open-action="${action.id}" type="button">View</button>`}</div></article>`;
+}
+
+function actionItems() {
+  const now = new Date(); const start = new Date(now); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 1);
+  const search = $("#action-search")?.value.trim().toLowerCase() || "";
+  const kind = $("#action-kind-filter")?.value || ""; const priority = $("#action-priority-filter")?.value || "";
+  return state.reminders.map((item) => {
+    const effective_due_at = item.snoozed_until || item.due_at; const due = new Date(effective_due_at).getTime();
+    const group = item.status !== "open" ? "done" : due < start.getTime() ? "overdue" : due < end.getTime() ? "today" : "upcoming";
+    return { ...item, effective_due_at, group };
+  }).filter((item) => (!kind || item.kind === kind) && (!priority || item.priority === priority)
+    && (!search || `${item.title} ${item.notes} ${actionContext(item)} ${item.kind}`.toLowerCase().includes(search)))
+    .sort((a, b) => new Date(a.effective_due_at) - new Date(b.effective_due_at));
+}
+
+function snoozeDays() {
+  return Number($("#snooze-days").value);
+}
+
+function updateSnoozeDialog() {
+  const days = snoozeDays();
+  const valid = Number.isInteger(days) && days >= 1 && days <= 30;
+  $("#snooze-submit").disabled = !valid;
+  setText("#snooze-error", valid ? "" : "Choose a whole number from 1 to 30 days.");
+  for (const button of document.querySelectorAll("[data-snooze-preset]")) button.setAttribute("aria-pressed", String(valid && Number(button.dataset.snoozePreset) === days));
+  if (!valid) { setText("#snooze-preview", "Your action will stay exactly where it is until the delay is valid."); return; }
+  const returnsAt = new Date(Date.now() + days * 86400000);
+  const label = new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).format(returnsAt);
+  setText("#snooze-preview", `Back on your action desk ${label}.`);
+}
+
+function openSnoozeDialog(actionId, trigger) {
+  const action = state.reminders.find((item) => item.id === actionId);
+  if (!action) return;
+  snoozeActionId = actionId;
+  snoozeReturnFocus = trigger;
+  $("#snooze-days").value = "1";
+  setText("#snooze-copy", `${action.title} · ${actionContext(action)}`);
+  setText("#snooze-error", "");
+  updateSnoozeDialog();
+  $("#snooze-dialog").returnValue = "";
+  $("#snooze-dialog").showModal();
+  requestAnimationFrame(() => document.querySelector('[data-snooze-preset="1"]')?.focus());
+}
+
+function closeSnoozeDialog(value = "cancel") {
+  const dialog = $("#snooze-dialog");
+  if (dialog.open) dialog.close(value);
+}
+
+for (const button of document.querySelectorAll("[data-snooze-preset]")) button.addEventListener("click", () => {
+  $("#snooze-days").value = button.dataset.snoozePreset;
+  updateSnoozeDialog();
+});
+$("#snooze-days").addEventListener("input", updateSnoozeDialog);
+$("#snooze-close").addEventListener("click", () => closeSnoozeDialog());
+$("#snooze-cancel").addEventListener("click", () => closeSnoozeDialog());
+$("#snooze-dialog").addEventListener("close", () => {
+  if ($("#snooze-dialog").returnValue !== "saved" && snoozeReturnFocus?.isConnected) snoozeReturnFocus.focus();
+  snoozeActionId = null;
+  snoozeReturnFocus = null;
+});
+$("#snooze-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const days = snoozeDays();
+  if (!snoozeActionId || !Number.isInteger(days) || days < 1 || days > 30) { updateSnoozeDialog(); $("#snooze-days").focus(); return; }
+  const button = $("#snooze-submit");
+  button.disabled = true;
+  button.textContent = "Snoozing…";
+  try {
+    await ApplyOS.snoozeAction(snoozeActionId, new Date(Date.now() + days * 86400000).toISOString());
+    closeSnoozeDialog("saved");
+    await load();
+    toast(`Snoozed ${days} day${days === 1 ? "" : "s"}`);
+  } catch (error) {
+    setText("#snooze-error", error.message || "Scout could not snooze this action.");
+  } finally {
+    button.textContent = "Snooze action";
+    if ($("#snooze-dialog").open) button.disabled = false;
+  }
+});
+
+function bindActionRows() {
+  $("#action-groups").querySelectorAll("[data-open-action]").forEach((button) => button.addEventListener("click", () => openAction(button.dataset.openAction)));
+  $("#action-groups").querySelectorAll("[data-action-done]").forEach((button) => button.addEventListener("click", async () => { await ApplyOS.completeAction(button.dataset.actionDone); await load(); toast("Action completed"); }));
+  $("#action-groups").querySelectorAll("[data-action-skip]").forEach((button) => button.addEventListener("click", async () => { await ApplyOS.skipAction(button.dataset.actionSkip); await load(); toast("Action skipped"); }));
+  $("#action-groups").querySelectorAll("[data-action-snooze]").forEach((button) => button.addEventListener("click", () => openSnoozeDialog(button.dataset.actionSnooze, button)));
+}
+
+function renderActions() {
+  const items = actionItems();
+  for (const group of ["overdue", "today", "upcoming"]) $(`#action-${group}-count`).textContent = items.filter((item) => item.group === group).length;
+  const labels = { overdue: "Overdue", today: "Today", upcoming: "Upcoming", done: "Done / skipped" };
+  $("#action-groups").innerHTML = Object.entries(labels).map(([group, label]) => {
+    const rows = items.filter((item) => item.group === group);
+    return `<section class="action-group"><div class="action-group-heading"><h2>${label}</h2><span>${rows.length} ${rows.length === 1 ? "ITEM" : "ITEMS"}</span></div><div class="action-stack">${rows.length ? rows.map(actionRowHTML).join("") : `<div class="action-empty">No ${label.toLowerCase()} actions.</div>`}</div></section>`;
+  }).join("");
+  bindActionRows();
+}
+
 function contactCardHTML(contact) {
   const applications = contact.application_ids.map((id) => state.applications.find((item) => item.id === id)).filter(Boolean);
   const initials = contact.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
-  return `<article class="contact-card" data-contact-id="${contact.id}" tabindex="0"><div class="contact-card-top"><span class="contact-monogram">${escapeHTML(initials)}</span><span class="relationship-chip">${escapeHTML(titleCase(contact.relationship))}</span></div><h3>${escapeHTML(contact.name)}</h3><p>${escapeHTML([contact.title, contact.company].filter(Boolean).join(" · ") || "Add title and company")}</p><footer><span>${applications.length ? `${applications.length} linked role${applications.length === 1 ? "" : "s"}` : "General network"}</span><span>${contact.next_action_at ? `Next ${dateLabel(contact.next_action_at)}` : "No next action"}</span></footer></article>`;
+  const overdue = contact.next_action_at && new Date(contact.next_action_at).getTime() < Date.now();
+  return `<article class="contact-card ${overdue ? "is-overdue" : ""}" data-contact-id="${contact.id}" tabindex="0"><div class="contact-card-top"><span class="contact-monogram">${escapeHTML(initials)}</span><span class="relationship-chip">${escapeHTML(titleCase(contact.relationship))}</span></div><h3>${escapeHTML(contact.name)}</h3><p>${escapeHTML([contact.title, contact.company].filter(Boolean).join(" · ") || "Add title and company")}</p><div class="tag-line">${(contact.tags || []).slice(0, 4).map((tag) => `<i>${escapeHTML(tag)}</i>`).join("")}</div><footer><span>${applications.length ? `${applications.length} linked role${applications.length === 1 ? "" : "s"}` : "General network"}</span><span>${contact.next_action_at ? `${overdue ? "Overdue" : "Next"} ${dateLabel(contact.next_action_at)}` : "No next action"}</span></footer></article>`;
 }
 
 function renderContacts() {
   const query = $("#contact-search").value.trim().toLowerCase();
-  const contacts = state.contacts.filter((contact) => [contact.name, contact.title, contact.company, contact.email, contact.notes].join(" ").toLowerCase().includes(query));
+  const relationship = $("#contact-relationship-filter")?.value || ""; const actionFilter = $("#contact-action-filter")?.value || ""; const sort = $("#contact-sort")?.value || "next";
+  const start = new Date(); start.setHours(0, 0, 0, 0); const end = new Date(start); end.setDate(end.getDate() + 1);
+  const contacts = state.contacts.filter((contact) => [contact.name, contact.title, contact.company, contact.email, contact.phone, contact.notes, ...(contact.tags || [])].join(" ").toLowerCase().includes(query))
+    .filter((contact) => !relationship || contact.relationship === relationship).filter((contact) => {
+      const due = contact.next_action_at ? new Date(contact.next_action_at).getTime() : null;
+      return !actionFilter || (actionFilter === "none" ? !due : actionFilter === "overdue" ? due < start.getTime() : actionFilter === "today" ? due >= start.getTime() && due < end.getTime() : true);
+    }).sort((a, b) => sort === "name" ? a.name.localeCompare(b.name) : sort === "recent" ? new Date(b.last_contacted_at || 0) - new Date(a.last_contacted_at || 0) : new Date(a.next_action_at || "9999-12-31") - new Date(b.next_action_at || "9999-12-31"));
   $("#contact-count").textContent = `${contacts.length} contact${contacts.length === 1 ? "" : "s"}`;
   $("#contacts-empty").classList.toggle("hidden", state.contacts.length > 0);
   $("#contacts-list").classList.toggle("hidden", state.contacts.length === 0);
+  $("#contacts-list").classList.toggle("list-mode", currentContactView === "list");
   $("#contacts-list").innerHTML = contacts.map(contactCardHTML).join("");
   $("#contacts-list").querySelectorAll(".contact-card").forEach((card) => {
     card.addEventListener("click", () => openContact(card.dataset.contactId));
@@ -224,7 +351,7 @@ function render() {
   if (!state) return;
   const items = filteredApplications();
   const active = state.applications.filter((item) => !["rejected", "closed"].includes(item.status)).length;
-  const due = state.reminders.filter((item) => !item.completed_at && new Date(item.due_at) <= new Date()).length;
+  const due = state.reminders.filter((item) => item.status === "open" && new Date(item.snoozed_until || item.due_at) <= new Date()).length;
   $("#metric-total").textContent = active;
   $("#metric-due").textContent = due;
   $("#metric-interviews").textContent = state.applications.filter((item) => item.status === "interview").length;
@@ -232,7 +359,7 @@ function render() {
   elements.empty.classList.toggle("hidden", state.applications.length > 0);
   elements.board.classList.toggle("hidden", currentView !== "board" || !state.applications.length);
   elements.list.classList.toggle("hidden", currentView !== "list" || !state.applications.length);
-  renderBoard(items); renderList(items); renderUpcoming(); renderContacts();
+  renderBoard(items); renderList(items); renderUpcoming(); renderActions(); renderContacts();
 }
 
 async function load() {
@@ -293,6 +420,51 @@ function renderInterviews(application) {
   $("#interview-list").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => openInterviewEditor(button.dataset.interviewId)));
 }
 
+function renderContactTimeline(contactId) {
+  const activities = (state.contact_activities || []).filter((item) => item.contact_id === contactId)
+    .sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at));
+  $("#contact-timeline").innerHTML = activities.length ? activities.map((item) => {
+    const application = state.applications.find((entry) => entry.id === item.application_id);
+    return `<article class="timeline-entry"><strong>${escapeHTML(item.subject || titleCase(item.type))}</strong><span>${escapeHTML(titleCase(item.direction))} ${escapeHTML(titleCase(item.type))} · ${escapeHTML(dateTimeLabel(item.occurred_at))}${application ? ` · ${escapeHTML(application.company)}` : ""}</span>${item.summary ? `<p>${escapeHTML(item.summary)}</p>` : ""}${item.outcome ? `<p><strong>Outcome:</strong> ${escapeHTML(item.outcome)}</p>` : ""}</article>`;
+  }).join("") : `<div class="action-empty">No interactions logged yet. Scout never infers them from your inbox.</div>`;
+  const actions = state.reminders.filter((item) => item.contact_id === contactId && item.status === "open").sort((a, b) => new Date(a.snoozed_until || a.due_at) - new Date(b.snoozed_until || b.due_at));
+  $("#activity-action").innerHTML = `<option value="">None</option>` + actions.map((item) => `<option value="${item.id}">${escapeHTML(item.title)} · ${escapeHTML(dateLabel(item.snoozed_until || item.due_at))}</option>`).join("");
+}
+
+function openActivityForm(prefill = {}) {
+  if (!selectedContactId) return;
+  $("#activity-form").classList.remove("hidden");
+  $("#activity-type").value = prefill.type || "email";
+  $("#activity-direction").value = prefill.direction || "outbound";
+  $("#activity-when").value = toDateTimeInput(prefill.occurred_at || new Date().toISOString());
+  $("#activity-subject").value = prefill.subject || "";
+  $("#activity-summary").value = prefill.summary || "";
+  $("#activity-outcome").value = prefill.outcome || "";
+  $("#activity-action").value = prefill.action_id || "";
+  $("#activity-complete-action").checked = Boolean(prefill.action_id);
+  $("#activity-next-title").value = ""; $("#activity-next-date").value = "";
+  $("#activity-summary").focus();
+}
+
+function openAction(id = null, context = {}) {
+  const action = state.reminders.find((item) => item.id === id) || null;
+  const active = document.activeElement; actionReturnFocus = active instanceof HTMLElement ? active : null; selectedActionId = action?.id || null;
+  $("#action-id").value = action?.id || ""; $("#action-title").value = action?.title || ""; $("#action-due").value = toDateTimeInput(action?.snoozed_until || action?.due_at || new Date(Date.now() + 86400000).toISOString());
+  $("#action-priority").value = action?.priority || "medium"; $("#action-kind").value = action?.kind || (context.contact_id ? "contact_follow_up" : context.application_id ? "application_follow_up" : "custom");
+  $("#action-channel").value = action?.channel || "email"; $("#action-notes").value = action?.notes || "";
+  $("#action-application").innerHTML = `<option value="">None</option>` + applicationOptions(action?.application_id || context.application_id || "");
+  $("#action-contact").innerHTML = `<option value="">None</option>` + state.contacts.map((item) => `<option value="${item.id}">${escapeHTML(item.name)}${item.company ? ` · ${escapeHTML(item.company)}` : ""}</option>`).join("");
+  $("#action-application").value = action?.application_id || context.application_id || ""; $("#action-contact").value = action?.contact_id || context.contact_id || "";
+  $("#action-done").classList.toggle("hidden", !action || action.status !== "open"); $("#action-delete").classList.toggle("hidden", !action || action.status !== "open");
+  openDrawer($("#action-detail")); $("#action-title").focus();
+}
+
+function closeAction() {
+  if (!$("#action-detail").classList.contains("open")) return;
+  closeDrawer($("#action-detail"), actionReturnFocus || $("#action-search")); selectedActionId = null; actionReturnFocus = null;
+  if (!elements.detail.classList.contains("open") && !$("#contact-detail").classList.contains("open")) elements.scrim.classList.add("hidden");
+}
+
 function openContact(id = null, applicationId = "") {
   const contact = state.contacts.find((item) => item.id === id) || null;
   const active = document.activeElement;
@@ -304,15 +476,27 @@ function openContact(id = null, applicationId = "") {
   $("#contact-company").value = contact?.company || state.applications.find((item) => item.id === applicationId)?.company || "";
   $("#contact-relationship").value = contact?.relationship || "recruiter";
   $("#contact-email").value = contact?.email || "";
+  $("#contact-phone").value = contact?.phone || "";
   $("#contact-linkedin").value = contact?.linkedin_url || "";
+  $("#contact-channel").value = contact?.preferred_channel || (contact?.email ? "email" : contact?.linkedin_url ? "linkedin" : "other");
+  $("#contact-tags").value = (contact?.tags || []).join(", ");
   $("#contact-application").innerHTML = applicationOptions(contact?.application_ids?.length ? contact.application_ids : [applicationId].filter(Boolean));
   $("#contact-last").value = ApplyOS.toDateInput(contact?.last_contacted_at);
   $("#contact-next").value = ApplyOS.toDateInput(contact?.next_action_at);
   $("#contact-notes").value = contact?.notes || "";
   $("#delete-contact").classList.toggle("hidden", !contact);
+  $("#merge-contact").classList.add("hidden"); $("#merge-contact").dataset.targetId = "";
+  if (contact) ApplyOS.findDuplicateContacts(contact, contact.id).then((matches) => {
+    const duplicate = matches.find((item) => item.exact) || matches.find((item) => item.reason === "name");
+    if (!duplicate || selectedContactId !== contact.id) return;
+    $("#merge-contact").classList.remove("hidden"); $("#merge-contact").dataset.targetId = duplicate.contact.id; $("#merge-contact").textContent = `Merge with ${duplicate.contact.name}`;
+  });
   $("#open-contact-linkedin").classList.toggle("hidden", !contact?.linkedin_url);
   $("#open-contact-linkedin").href = contact?.linkedin_url || "#";
   $("#contact-message").value = contact ? `Hello ${contact.name.split(/\s+/)[0]},\n\nIt was great connecting with you. I wanted to stay in touch regarding opportunities at ${contact.company || "your company"}.\n\nBest,\n${profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(" ") || ""}` : "";
+  $("#log-interaction").disabled = !contact;
+  $("#activity-form").classList.add("hidden");
+  renderContactTimeline(contact?.id || "");
   updateContactComposeLinks();
   openDrawer($("#contact-detail"));
   $("#contact-name").focus();
@@ -386,12 +570,67 @@ function closeDetail() {
 }
 
 function showDashboardSection(section, focusSearch = false) {
-  currentSection = section === "contacts" ? "contacts" : "applications";
+  currentSection = ["contacts", "actions"].includes(section) ? section : "applications";
   document.querySelectorAll("[data-section]").forEach((item) => item.classList.toggle("active", item.dataset.section === currentSection));
   globalThis.ScoutHeader?.setActiveNavigation(currentSection);
   document.querySelectorAll(".application-only").forEach((item) => item.classList.toggle("hidden", currentSection !== "applications"));
+  $("#actions-workspace").classList.toggle("hidden", currentSection !== "actions");
   $("#contacts-workspace").classList.toggle("hidden", currentSection !== "contacts");
   if (focusSearch && currentSection === "contacts") $("#contact-search").focus();
+  if (focusSearch && currentSection === "actions") $("#action-search").focus();
+}
+
+function parseContactsCSV(text) {
+  const rows = []; let row = []; let field = ""; let quoted = false;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index];
+    if (quoted && char === '"' && text[index + 1] === '"') { field += '"'; index += 1; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === "," && !quoted) { row.push(field); field = ""; }
+    else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && text[index + 1] === "\n") index += 1;
+      row.push(field); if (row.some((value) => value.trim())) rows.push(row); row = []; field = "";
+    } else field += char;
+  }
+  row.push(field); if (row.some((value) => value.trim())) rows.push(row);
+  if (quoted) throw new Error("The CSV contains an unclosed quoted field.");
+  if (rows.length < 2) throw new Error("The CSV needs a header and at least one contact.");
+  const aliases = { name: ["name", "full name", "contact"], email: ["email", "email address"], company: ["company", "organization"], title: ["title", "role", "job title"], phone: ["phone", "phone number"], linkedin_url: ["linkedin", "linkedin url", "profile url"], relationship: ["relationship", "type"], tags: ["tags", "labels"] };
+  const headers = rows[0].map((value) => value.trim().toLowerCase());
+  const indexes = Object.fromEntries(Object.entries(aliases).map(([key, names]) => [key, headers.findIndex((header) => names.includes(header))]));
+  if (indexes.name < 0) throw new Error("Map a column named Name or Full name before importing.");
+  if (rows.length - 1 > 500) throw new Error("Import at most 500 contacts at a time.");
+  return rows.slice(1).map((values, index) => ({
+    row: index + 2,
+    name: values[indexes.name]?.trim() || "",
+    email: indexes.email >= 0 ? values[indexes.email]?.trim() || "" : "",
+    company: indexes.company >= 0 ? values[indexes.company]?.trim() || "" : "",
+    title: indexes.title >= 0 ? values[indexes.title]?.trim() || "" : "",
+    phone: indexes.phone >= 0 ? values[indexes.phone]?.trim() || "" : "",
+    linkedin_url: indexes.linkedin_url >= 0 ? values[indexes.linkedin_url]?.trim() || "" : "",
+    relationship: indexes.relationship >= 0 && ApplyOS.CONTACT_RELATIONSHIPS.includes(values[indexes.relationship]?.trim().toLowerCase().replace(/\s+/g, "_")) ? values[indexes.relationship].trim().toLowerCase().replace(/\s+/g, "_") : "other",
+    tags: indexes.tags >= 0 ? values[indexes.tags].split(/[;|]/).map((tag) => tag.trim()).filter(Boolean) : []
+  }));
+}
+
+async function importContactsFile(file) {
+  if (!file) return;
+  if (file.size > 2 * 1024 * 1024) throw new Error("Choose a CSV smaller than 2 MB.");
+  const rows = parseContactsCSV(await file.text()); const invalid = rows.filter((item) => !item.name);
+  if (invalid.length) throw new Error(`Rows ${invalid.slice(0, 5).map((item) => item.row).join(", ")} need a name.`);
+  if (!await ScoutDialog.confirm({ eyebrow: "CONTACT IMPORT", title: `Import ${rows.length} contact${rows.length === 1 ? "" : "s"}?`, message: "Scout will check exact email and LinkedIn matches before anything is merged.", confirmLabel: "Review & import", cancelLabel: "Cancel import" })) return;
+  let created = 0; let merged = 0; let skipped = 0;
+  for (const row of rows) {
+    const { row: _rowNumber, ...contactInput } = row;
+    const duplicates = await ApplyOS.findDuplicateContacts(row);
+    const exact = duplicates.find((item) => item.exact);
+    if (exact) {
+      if (!await ScoutDialog.confirm({ eyebrow: "DUPLICATE FOUND", title: "Merge this contact?", message: `${row.name} matches ${exact.contact.name} by ${exact.reason}.`, consequences: ["Linked roles, notes, tags, and relationship history will be combined."], confirmLabel: "Merge contact", cancelLabel: "Skip this row" })) { skipped += 1; continue; }
+      const imported = await ApplyOS.upsertContact({ ...contactInput, id: undefined });
+      await ApplyOS.mergeContacts(imported.id, exact.contact.id); merged += 1;
+    } else { await ApplyOS.upsertContact(contactInput); created += 1; }
+  }
+  await load(); toast(`Import complete · ${created} new · ${merged} merged · ${skipped} skipped`);
 }
 
 async function startDashboardTour() {
@@ -464,6 +703,8 @@ async function initialize() {
     $("#detail-status").insertAdjacentHTML("beforeend", `<option value="${status}">${label}</option>`);
   });
   ApplyOS.CONTACT_RELATIONSHIPS.forEach((relationship) => $("#contact-relationship").insertAdjacentHTML("beforeend", `<option value="${relationship}">${titleCase(relationship)}</option>`));
+  ApplyOS.CONTACT_RELATIONSHIPS.forEach((relationship) => $("#contact-relationship-filter").insertAdjacentHTML("beforeend", `<option value="${relationship}">${titleCase(relationship)}</option>`));
+  ApplyOS.ACTION_KINDS.forEach((kind) => $("#action-kind-filter").insertAdjacentHTML("beforeend", `<option value="${kind}">${titleCase(kind)}</option>`));
   ApplyOS.INTERVIEW_TYPES.forEach((type) => $("#interview-type").insertAdjacentHTML("beforeend", `<option value="${type}">${titleCase(type)}</option>`));
   ApplyOS.INTERVIEW_FORMATS.forEach((format) => $("#interview-format").insertAdjacentHTML("beforeend", `<option value="${format}">${titleCase(format)}</option>`));
   // Contextual coach marks are strictly read-only. Normal dashboard visits
@@ -471,6 +712,7 @@ async function initialize() {
   if (!isTour) await ApplyOS.refreshApplicationMatches(profile);
   await load();
   if (!query.has("tour")) showDashboardSection(query.get("section") || "applications");
+  if (query.get("action")) openAction(query.get("action"));
   await startDashboardTour();
 }
 
@@ -482,19 +724,26 @@ document.querySelectorAll("[data-section]").forEach((button) => button.addEventL
   event.preventDefault();
   showDashboardSection(button.dataset.section, true);
   const url = new URL(location.href);
-  if (button.dataset.section === "contacts") url.searchParams.set("section", "contacts");
+  if (["contacts", "actions"].includes(button.dataset.section)) url.searchParams.set("section", button.dataset.section);
   else url.searchParams.delete("section");
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }));
 $("#contact-search").addEventListener("input", renderContacts);
+[$("#contact-relationship-filter"), $("#contact-action-filter"), $("#contact-sort")].forEach((control) => control.addEventListener("change", renderContacts));
+[$("#action-search"), $("#action-kind-filter"), $("#action-priority-filter")].forEach((control) => control.addEventListener(control.tagName === "INPUT" ? "input" : "change", renderActions));
+$("#add-action").addEventListener("click", () => openAction());
 $("#add-contact").addEventListener("click", () => openContact());
 $("#contacts-empty-add").addEventListener("click", () => openContact());
+$("#import-contacts").addEventListener("click", () => $("#contacts-csv").click());
+$("#contact-view-toggle").addEventListener("click", () => { currentContactView = currentContactView === "cards" ? "list" : "cards"; $("#contact-view-toggle").textContent = currentContactView === "cards" ? "List view" : "Card view"; renderContacts(); });
+$("#contacts-csv").addEventListener("change", async () => { try { await importContactsFile($("#contacts-csv").files?.[0]); } catch (error) { toast(error.message); } finally { $("#contacts-csv").value = ""; } });
 $("#add-linked-contact").addEventListener("click", () => { const applicationId = selectedId; closeDetail(); openContact(null, applicationId); });
 $("#mock").addEventListener("click", async () => { await ApplyOS.seedMockData(); await load(); toast("Sample applications added"); });
 $("#close-detail").addEventListener("click", closeDetail);
 $("#close-contact").addEventListener("click", closeContact);
-elements.scrim.addEventListener("click", () => { closeContact(); closeDetail(); });
-document.addEventListener("keydown", (event) => { if (event.key === "Escape") { if ($("#contact-detail").classList.contains("open")) closeContact(); else closeDetail(); } });
+$("#close-action").addEventListener("click", closeAction);
+elements.scrim.addEventListener("click", () => { closeAction(); closeContact(); closeDetail(); });
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") { if ($("#action-detail").classList.contains("open")) closeAction(); else if ($("#contact-detail").classList.contains("open")) closeContact(); else closeDetail(); } });
 $("#detail-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const application = state.applications.find((item) => item.id === selectedId);
@@ -507,7 +756,7 @@ $("#detail-form").addEventListener("submit", async (event) => {
 $("#detail-applied").addEventListener("click", async () => { await ApplyOS.markApplicationApplied(selectedId); await load(); openDetail(selectedId); toast("Applied · follow-ups scheduled for 7 and 14 days"); });
 $("#delete-application").addEventListener("click", async () => {
   const application = state.applications.find((item) => item.id === selectedId);
-  if (!application || !confirm(`Delete ${application.role} at ${application.company}? Its reminders and interview workspaces will also be deleted.`)) return;
+  if (!application || !await ScoutDialog.confirm({ eyebrow: "DELETE APPLICATION", title: `Remove ${application.role}?`, message: `${application.company} will be removed from your Scout pipeline.`, consequences: ["Linked reminders will be deleted.", "Interview workspaces for this application will be deleted."], tone: "danger", confirmLabel: "Delete application", cancelLabel: "Keep application" })) return;
   const id = selectedId;
   closeDetail();
   await ApplyOS.deleteApplication(id);
@@ -516,7 +765,8 @@ $("#delete-application").addEventListener("click", async () => {
 });
 $("#generate-draft").addEventListener("click", () => {
   const application = state.applications.find((item) => item.id === selectedId); if (!application) return;
-  const draft = ApplyOS.generateFollowUpDraft(application, profile, $("#draft-type").value); $("#draft-subject").value = draft.subject; $("#draft-body").value = draft.body; updateDraftComposeLinks(); $("#draft").classList.remove("hidden");
+  const contact = state.contacts.find((item) => item.id === $("#draft-contact").value) || {};
+  const draft = ApplyOS.generateFollowUpDraft(application, profile, $("#draft-type").value, contact); $("#draft-subject").value = draft.subject; $("#draft-body").value = draft.body; updateDraftComposeLinks(); $("#draft").classList.remove("hidden");
 });
 $("#copy-draft").addEventListener("click", async () => { await navigator.clipboard.writeText(`Subject: ${$("#draft-subject").value}\n\n${$("#draft-body").value}`); toast("Draft copied for manual review"); });
 [$("#draft-subject"), $("#draft-body"), $("#draft-contact")].forEach((control) => control.addEventListener(control.tagName === "SELECT" ? "change" : "input", updateDraftComposeLinks));
@@ -525,19 +775,75 @@ $("#contact-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const applicationIds = Array.from($("#contact-application").selectedOptions, (option) => option.value).filter(Boolean);
   const previous = state.contacts.find((item) => item.id === selectedContactId);
-  await ApplyOS.upsertContact({
+  const saved = await ApplyOS.upsertContact({
     id: selectedContactId || undefined,
     name: $("#contact-name").value.trim(), title: $("#contact-title").value.trim(), company: $("#contact-company").value.trim(),
-    email: $("#contact-email").value.trim(), linkedin_url: $("#contact-linkedin").value.trim(), relationship: $("#contact-relationship").value,
+    email: $("#contact-email").value.trim(), phone: $("#contact-phone").value.trim(), linkedin_url: $("#contact-linkedin").value.trim(), relationship: $("#contact-relationship").value,
+    preferred_channel: $("#contact-channel").value, tags: $("#contact-tags").value.split(",").map((item) => item.trim()).filter(Boolean),
     application_ids: applicationIds, notes: $("#contact-notes").value.trim(),
-    last_contacted_at: $("#contact-last").value ? new Date(`${$("#contact-last").value}T12:00:00`).toISOString() : null,
-    next_action_at: $("#contact-next").value ? new Date(`${$("#contact-next").value}T12:00:00`).toISOString() : null,
+    last_contacted_at: previous?.last_contacted_at || null,
     created_at: previous?.created_at
   });
+  const nextDate = $("#contact-next").value ? new Date(`${$("#contact-next").value}T12:00:00`).toISOString() : null;
+  const existingAction = state.reminders.find((item) => item.contact_id === saved.id && item.kind === "contact_follow_up" && item.status === "open");
+  if (nextDate) await ApplyOS.upsertAction({ ...(existingAction || {}), kind: "contact_follow_up", title: existingAction?.title || `Follow up with ${saved.name}`, due_at: nextDate, priority: existingAction?.priority || "medium", channel: saved.preferred_channel, contact_id: saved.id, application_id: applicationIds[0] || null, source: existingAction?.source || "user" });
+  else if (existingAction) await ApplyOS.cancelAction(existingAction.id);
   await load(); closeContact(); toast("Contact saved");
 });
-$("#delete-contact").addEventListener("click", async () => { if (!selectedContactId || !confirm("Delete this contact from Scout?")) return; await ApplyOS.deleteContact(selectedContactId); await load(); closeContact(); toast("Contact deleted"); });
+$("#delete-contact").addEventListener("click", async () => {
+  if (!selectedContactId) return;
+  const contact = state.contacts.find((item) => item.id === selectedContactId);
+  if (!await ScoutDialog.confirm({ eyebrow: "DELETE CONTACT", title: `Remove ${contact?.name || "this contact"}?`, message: "This person will be removed from your relationship workspace.", consequences: ["Their linked relationship history and contact actions will be removed."], tone: "danger", confirmLabel: "Delete contact", cancelLabel: "Keep contact" })) return;
+  await ApplyOS.deleteContact(selectedContactId); await load(); closeContact(); toast("Contact deleted");
+});
+$("#merge-contact").addEventListener("click", async () => {
+  const targetId = $("#merge-contact").dataset.targetId; const source = state.contacts.find((item) => item.id === selectedContactId); const target = state.contacts.find((item) => item.id === targetId);
+  if (!source || !target || !await ScoutDialog.confirm({ eyebrow: "MERGE CONTACTS", title: `Merge ${source.name} into ${target.name}?`, message: "Scout will keep the destination contact and combine the useful context from both records.", consequences: ["Linked applications, actions, interviews, notes, tags, and history will be preserved."], confirmLabel: "Merge contacts", cancelLabel: "Keep separate" })) return;
+  await ApplyOS.mergeContacts(source.id, target.id); await load(); closeContact(); openContact(target.id); toast("Contacts merged");
+});
 [$("#contact-subject"), $("#contact-message"), $("#contact-email")].forEach((control) => control.addEventListener("input", updateContactComposeLinks));
+$("#log-interaction").addEventListener("click", () => openActivityForm());
+$("#cancel-activity").addEventListener("click", () => $("#activity-form").classList.add("hidden"));
+$("#activity-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const actionId = $("#activity-action").value;
+  const contact = state.contacts.find((item) => item.id === selectedContactId); if (!contact) return;
+  await ApplyOS.logContactActivity({
+    contact_id: contact.id,
+    application_id: actionId ? state.reminders.find((item) => item.id === actionId)?.application_id || null : contact.application_ids[0] || null,
+    action_id: actionId || null,
+    type: $("#activity-type").value,
+    direction: $("#activity-direction").value,
+    occurred_at: toISOFromInput($("#activity-when").value),
+    subject: $("#activity-subject").value.trim(),
+    summary: $("#activity-summary").value.trim(),
+    outcome: $("#activity-outcome").value.trim()
+  }, {
+    complete_action_id: $("#activity-complete-action").checked ? actionId : "",
+    next_action: $("#activity-next-title").value.trim() && $("#activity-next-date").value ? {
+      title: $("#activity-next-title").value.trim(), due_at: toISOFromInput($("#activity-next-date").value), priority: "medium", channel: contact.preferred_channel || "email", application_id: contact.application_ids[0] || null
+    } : null
+  });
+  await load(); selectedContactId = contact.id; renderContactTimeline(contact.id); $("#activity-form").classList.add("hidden"); toast("Interaction logged");
+});
+document.querySelectorAll("[data-log-compose]").forEach((link) => link.addEventListener("click", () => {
+  window.setTimeout(() => openActivityForm({ type: link.dataset.logCompose, direction: "outbound", subject: $("#contact-subject").value, summary: "Reviewed message opened in compose. Confirm only after sending." }), 150);
+}));
+
+$("#action-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const kind = $("#action-kind").value; const applicationId = $("#action-application").value || null; const contactId = $("#action-contact").value || null;
+  if (kind.startsWith("application_") && !applicationId) return toast("Choose an application for this action");
+  if (kind === "contact_follow_up" && !contactId) return toast("Choose a contact for this action");
+  const existing = state.reminders.find((item) => item.id === selectedActionId);
+  await ApplyOS.upsertAction({ ...(existing || {}), id: selectedActionId || undefined, kind, title: $("#action-title").value.trim(), due_at: toISOFromInput($("#action-due").value), snoozed_until: null, priority: $("#action-priority").value, channel: $("#action-channel").value, application_id: applicationId, contact_id: contactId, interview_id: existing?.interview_id || null, notes: $("#action-notes").value.trim(), source: existing?.source || "user" });
+  await load(); closeAction(); toast("Action saved");
+});
+$("#action-done").addEventListener("click", async () => { if (!selectedActionId) return; await ApplyOS.completeAction(selectedActionId); await load(); closeAction(); toast("Action completed"); });
+$("#action-delete").addEventListener("click", async () => {
+  if (!selectedActionId || !await ScoutDialog.confirm({ eyebrow: "CANCEL ACTION", title: "Cancel this action?", message: "It will move out of your open action list and remain visible under Done / skipped.", tone: "danger", confirmLabel: "Cancel action", cancelLabel: "Keep action" })) return;
+  await ApplyOS.cancelAction(selectedActionId); await load(); closeAction(); toast("Action cancelled");
+});
 
 $("#add-interview").addEventListener("click", () => openInterviewEditor());
 $("#cancel-interview").addEventListener("click", () => { selectedInterviewId = null; $("#interview-form").classList.add("hidden"); $("#thank-you").classList.add("hidden"); });
@@ -552,7 +858,10 @@ $("#interview-form").addEventListener("submit", async (event) => {
   });
   await load(); openDetail(selectedId); toast("Interview workspace saved");
 });
-$("#delete-interview").addEventListener("click", async () => { if (!selectedInterviewId || !confirm("Delete this interview workspace?")) return; const applicationId = selectedId; await ApplyOS.deleteInterview(selectedInterviewId); await load(); openDetail(applicationId); toast("Interview deleted"); });
+$("#delete-interview").addEventListener("click", async () => {
+  if (!selectedInterviewId || !await ScoutDialog.confirm({ eyebrow: "DELETE INTERVIEW", title: "Delete this interview workspace?", message: "The application will stay in your pipeline.", consequences: ["Preparation, research, question notes, and linked interview actions will be removed."], tone: "danger", confirmLabel: "Delete interview", cancelLabel: "Keep interview" })) return;
+  const applicationId = selectedId; await ApplyOS.deleteInterview(selectedInterviewId); await load(); openDetail(applicationId); toast("Interview deleted");
+});
 $("#generate-thank-you").addEventListener("click", () => {
   const application = state.applications.find((item) => item.id === selectedId); if (!application) return;
   const interview = state.interviews.find((item) => item.id === selectedInterviewId) || { type: $("#interview-type").value, question_notes: $("#interview-questions").value };

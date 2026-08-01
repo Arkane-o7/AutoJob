@@ -130,6 +130,7 @@
   const OfflynCore = globalThis.ApplyOS?.OfflynCore;
   const shadowRoots = new Set();
   const recentFills = new WeakMap();
+  const manualLearningCandidates = new WeakMap();
   const correctionTimers = new WeakMap();
   const assistFieldLedger = new Map();
   let assistObserver = null;
@@ -881,8 +882,93 @@
     if (element instanceof HTMLInputElement && ["checkbox", "radio"].includes(element.type)) return element.checked ? element.value || "Yes" : "No";
     if (element.getAttribute?.("role") === "checkbox" || element.getAttribute?.("role") === "radio") return element.getAttribute("aria-checked") === "true" ? element.getAttribute("data-value") || element.innerText || "Yes" : "No";
     if (element.isContentEditable) return String(element.innerText || element.textContent || "").trim();
+    if (element instanceof HTMLSelectElement) return String(element.selectedOptions?.[0]?.textContent || element.value || "").trim();
+    const customValue = ATSCompat?.customValue?.(element);
+    if (customValue) return String(customValue).trim();
     if ("value" in element) return String(element.value || "").trim();
     return "";
+  }
+
+  function manualLearningQuestion(element) {
+    const directLabel = element.labels ? Array.from(element.labels, (label) => label.innerText).find((value) => String(value || "").trim()) : "";
+    const labelledBy = String(element.getAttribute("aria-labelledby") || "").split(/\s+/)
+      .filter(Boolean)
+      .map((id) => rootQuery(element, `#${window.CSS?.escape ? CSS.escape(id) : id}`)?.innerText || "")
+      .find((value) => String(value || "").trim());
+    return String(inferredQuestionText(element) || directLabel || labelledBy || element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.name || "")
+      .replace(/\s+/g, " ")
+      .replace(/\s*\*\s*$/, "")
+      .trim()
+      .slice(0, 500);
+  }
+
+  function trackManualLearningCandidate(element) {
+    if (!OfflynCore || !visible(element)) return;
+    const type = String(element.type || element.getAttribute("role") || element.tagName || "text").toLowerCase();
+    if (["hidden", "password", "file", "submit", "button", "reset", "image", "search"].includes(type)) return;
+    const context = descriptor(element);
+    const question = manualLearningQuestion(element);
+    if (!context || !question || isBlockedField(element, context) || SENSITIVE_CONTEXT.test(context) || CONSENT_CONTEXT.test(context)) return;
+    const classification = OfflynCore.classifyField(context, type, element.name || element.id || "");
+    if (!classification.shouldAutofill) return;
+    const companyOnly = classification.promptType === "long_form_company"
+      || ["previouslyWorkedForCompany", "priorCompanyDetails", "knowsEmployeeAtCompany", "employeeConnectionDetails"].includes(classification.canonicalField);
+    manualLearningCandidates.set(element, {
+      question,
+      canonicalField: classification.canonicalField || null,
+      fieldType: type,
+      promptType: classification.promptType || "free_text_short",
+      site: location.hostname,
+      scope: companyOnly ? "company" : "global",
+      companyDomain: companyOnly ? currentCompanyDomain() : "",
+      pageKey: currentAssistPageKey(),
+      fingerprint: OfflynCore.fieldFingerprint({
+        label: context,
+        type,
+        name: element.name || element.id || "",
+        site: location.hostname,
+        canonicalField: classification.canonicalField || null
+      }),
+      lastAnswer: ""
+    });
+  }
+
+  function queueManualAnswerLearning(element, metadata) {
+    if (!metadata || Date.now() > assistUntil || metadata.pageKey !== currentAssistPageKey()) return;
+    window.clearTimeout(correctionTimers.get(element));
+    const timer = window.setTimeout(async () => {
+      const answer = elementValue(element).slice(0, 5000);
+      if (!answer || normalize(answer) === normalize(metadata.lastAnswer)) return;
+      const options = element instanceof HTMLSelectElement
+        ? Array.from(element.options, (option) => option.textContent || option.value).filter(Boolean)
+        : [];
+      const validation = OfflynCore.validateFieldData(metadata.question, answer, options);
+      if (!validation.isValid) return;
+      metadata.lastAnswer = answer;
+      const response = await chrome.runtime.sendMessage({
+        type: "APPLYOS_LEARN_APPLICATION_ANSWER",
+        answer: {
+          fingerprint: metadata.fingerprint,
+          question: metadata.question,
+          answer,
+          canonical_field: metadata.canonicalField,
+          field_type: metadata.fieldType,
+          prompt_type: metadata.promptType,
+          site: metadata.site,
+          scope: metadata.scope,
+          company_domain: metadata.companyDomain
+        }
+      }).catch(() => null);
+      if (response?.ok) {
+        showPageNotification("Scout learned this answer for similar questions. You can edit or forget it in Profile & Settings.", {
+          key: "learned-application-answer",
+          duration: 5000
+        });
+      } else if (response?.error) {
+        console.warn("Scout answer learning skipped:", response.error);
+      }
+    }, 250);
+    correctionTimers.set(element, timer);
   }
 
   function trackFilledElement(element, answer) {
@@ -908,8 +994,14 @@
   function queueCorrectionLearning(event) {
     if (!event.isTrusted) return;
     const element = event.target;
+    if (!(element instanceof Element)) return;
     const metadata = recentFills.get(element);
-    if (!metadata) return;
+    if (!metadata) {
+      if (["change", "blur"].includes(event.type)) {
+        queueManualAnswerLearning(element, manualLearningCandidates.get(element));
+      }
+      return;
+    }
     window.clearTimeout(correctionTimers.get(element));
     const timer = window.setTimeout(() => {
       const answer = elementValue(element);
@@ -934,6 +1026,7 @@
 
   document.addEventListener("input", queueCorrectionLearning, true);
   document.addEventListener("change", queueCorrectionLearning, true);
+  document.addEventListener("blur", queueCorrectionLearning, true);
 
   async function fillPage(profile, { quiet = false } = {}) {
     if (fillInProgress) return { scanned: 0, filled: 0, attached: 0, resumeFields: 0, resumeStatus: "not-found", skipped: 0, unmatchedRequired: 0, missingProfileFields: [], fields: [], site: detectSite() };
@@ -1003,6 +1096,7 @@
             const missingKey = missingProfileKey(element, flatProfile);
             if (missingKey) report.missingProfileFields.push(profileFieldLabel(missingKey));
           }
+          trackManualLearningCandidate(element);
           settleAssistField(element, "manual");
           continue;
         }
@@ -1017,6 +1111,7 @@
           settleAssistField(element, "filled");
         } else {
           report.skipped += 1;
+          trackManualLearningCandidate(element);
           settleAssistField(element, "failed");
         }
       }
@@ -1407,7 +1502,11 @@
   }
 
   const AUTO_PROMPT_PREFIX = "scout:page-prompt:";
+  const AUTO_PROMPT_OBSERVE_MS = 15000;
   let autoPromptTimer = null;
+  let autoPromptObserver = null;
+  let autoPromptStopTimer = null;
+  let autoPromptCheckInProgress = false;
 
   function autoPromptKey() {
     return `${AUTO_PROMPT_PREFIX}${globalThis.ApplyOS.canonicalizeUrl(location.href)}`;
@@ -1433,14 +1532,25 @@
   }
 
   async function showPagePromptIfEligible() {
-    if (window !== window.top || document.hidden || document.querySelector(".scout-page-prompt, .applyos-review-overlay, .applyos-submit-prompt")) return;
+    if (window !== window.top || document.hidden || document.querySelector(".scout-page-prompt, .applyos-review-overlay, .applyos-submit-prompt")) return false;
     const key = autoPromptKey();
-    if (sessionStorage.getItem(key)) return;
-    const response = await chrome.runtime.sendMessage({ type: "APPLYOS_CLOUD_STATUS" }).catch(() => null);
-    const status = response?.ok ? response.status : null;
-    if (!status?.configured || (!status.workspaceReady && !status.offlineAuthorized)) return;
+    if (sessionStorage.getItem(key)) {
+      stopPagePromptDetection();
+      return true;
+    }
     const detected = detectedPageAction();
-    if (!detected) return;
+    if (!detected) return false;
+    if (autoPromptCheckInProgress) return false;
+    autoPromptCheckInProgress = true;
+    let response;
+    try {
+      response = await chrome.runtime.sendMessage({ type: "APPLYOS_CLOUD_STATUS" }).catch(() => null);
+    } finally {
+      autoPromptCheckInProgress = false;
+    }
+    if (key !== autoPromptKey() || document.hidden || document.querySelector(".scout-page-prompt, .applyos-review-overlay, .applyos-submit-prompt")) return false;
+    const status = response?.ok ? response.status : null;
+    if (!status?.configured || (!status.workspaceReady && !status.offlineAuthorized)) return false;
 
     const prompt = document.createElement("section");
     prompt.className = "scout-page-prompt";
@@ -1463,6 +1573,7 @@
     actions.append(primary, dismiss);
     prompt.append(eyebrow, title, detail, actions);
     notificationStack().append(prompt);
+    stopPagePromptDetection();
 
     dismiss.addEventListener("click", () => {
       sessionStorage.setItem(key, "dismissed");
@@ -1484,11 +1595,40 @@
       // second callback toast here would duplicate the same notification.
       if (detected.action !== "autofill") showPageNotification("Saved to Scout. Open the extension to review the job details.");
     });
+    return true;
   }
 
   function schedulePagePrompt(delay = 900) {
     window.clearTimeout(autoPromptTimer);
     autoPromptTimer = window.setTimeout(() => showPagePromptIfEligible().catch(() => {}), delay);
+  }
+
+  function stopPagePromptDetection() {
+    window.clearTimeout(autoPromptTimer);
+    window.clearTimeout(autoPromptStopTimer);
+    autoPromptTimer = null;
+    autoPromptStopTimer = null;
+    autoPromptObserver?.disconnect();
+    autoPromptObserver = null;
+  }
+
+  function startPagePromptDetection(delay = 900) {
+    if (window !== window.top) return;
+    if (document.querySelector(".scout-page-prompt") || sessionStorage.getItem(autoPromptKey())) {
+      stopPagePromptDetection();
+      return;
+    }
+    stopPagePromptDetection();
+    autoPromptObserver = new MutationObserver(() => schedulePagePrompt(450));
+    autoPromptObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["hidden", "aria-hidden"]
+    });
+    autoPromptStopTimer = window.setTimeout(stopPagePromptDetection, AUTO_PROMPT_OBSERVE_MS);
+    schedulePagePrompt(delay);
   }
 
   let submissionSession = null;
@@ -1604,7 +1744,7 @@
       if (location.href === observedUrl) return;
       observedUrl = location.href;
       queueConfirmationCheck(100);
-      schedulePagePrompt(700);
+      startPagePromptDetection(700);
     }, 750);
   }
 
@@ -1614,7 +1754,13 @@
     fillFromStorage().catch((error) => console.warn("Scout autofill failed", error));
   });
 
-  window.addEventListener("pagehide", stopAssistMode);
+  window.addEventListener("pagehide", () => {
+    stopAssistMode();
+    stopPagePromptDetection();
+  });
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) startPagePromptDetection(250);
+  });
   window.addEventListener("popstate", () => { if (assistPageKey && currentAssistPageKey() !== assistPageKey) stopAssistMode(); });
   window.addEventListener("hashchange", () => { if (assistPageKey && currentAssistPageKey() !== assistPageKey) stopAssistMode(); });
   window.setInterval(() => {
@@ -1645,5 +1791,5 @@
   });
 
   initializeSubmissionDetection();
-  schedulePagePrompt();
+  startPagePromptDetection();
 })();

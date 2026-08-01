@@ -8,8 +8,12 @@ const buildMode = (process.env.SCOUT_BUILD_MODE || process.env.APPLYOS_BUILD_MOD
 const projectUrl = String(process.env.SCOUT_SUPABASE_URL || process.env.APPLYOS_SUPABASE_URL || "").trim().replace(/\/+$/, "");
 const publishableKey = String(process.env.SCOUT_SUPABASE_PUBLISHABLE_KEY || process.env.APPLYOS_SUPABASE_PUBLISHABLE_KEY || "").trim();
 const validProjectUrl = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i.test(projectUrl) || /^http:\/\/(?:127\.0\.0\.1|localhost):\d+$/i.test(projectUrl);
+const requestedCloudOverride = Boolean(projectUrl || publishableKey);
 if (buildMode === "production" && (!validProjectUrl || !publishableKey.startsWith("sb_publishable_"))) {
   throw new Error("Production build requires SCOUT_SUPABASE_URL and SCOUT_SUPABASE_PUBLISHABLE_KEY.");
+}
+if (buildMode === "development" && requestedCloudOverride && (!validProjectUrl || !publishableKey)) {
+  throw new Error("Development cloud overrides require both a valid Scout Supabase URL and publishable key.");
 }
 const files = [
   "manifest.json", "background.js", "capture.js", "content.js", "content.css",
@@ -25,6 +29,7 @@ for (const file of files) await cp(resolve(root, file), resolve(out, file));
 await cp(resolve(root, "assets"), resolve(out, "assets"), { recursive: true });
 await cp(resolve(root, "shared"), resolve(out, "shared"), { recursive: true });
 await cp(resolve(root, "licenses"), resolve(out, "licenses"), { recursive: true });
+await cp(resolve(root, "privacy-site"), resolve(out, "privacy-site"), { recursive: true });
 const manifest = JSON.parse(await readFile(resolve(out, "manifest.json"), "utf8"));
 const cloudDefaults = {
   projectUrl: validProjectUrl ? projectUrl : "",
@@ -37,7 +42,11 @@ const cloudDefaults = {
   buildMode,
   allowRuntimeConfig: buildMode === "development"
 };
-await writeFile(resolve(out, "shared/cloud-config.js"), `(function(root){"use strict";const ApplyOS=root.ApplyOS=root.ApplyOS||{};ApplyOS.CLOUD_DEFAULTS=Object.freeze(${JSON.stringify(cloudDefaults)});})(globalThis);\n`);
+// An env-free development build keeps the checked-in staging configuration
+// copied above. Only explicit overrides and production builds replace it.
+if (buildMode === "production" || requestedCloudOverride) {
+  await writeFile(resolve(out, "shared/cloud-config.js"), `(function(root){"use strict";const ApplyOS=root.ApplyOS=root.ApplyOS||{};ApplyOS.CLOUD_DEFAULTS=Object.freeze(${JSON.stringify(cloudDefaults)});})(globalThis);\n`);
+}
 if (validProjectUrl) {
   const originPattern = `${new URL(projectUrl).origin}/*`;
   manifest.host_permissions = [...new Set([...(manifest.host_permissions || []), originPattern])];

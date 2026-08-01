@@ -1,7 +1,7 @@
 # Scout Privacy Policy — launch draft
 
 **Effective date:** July 18, 2026  
-**Last updated:** July 19, 2026
+**Last updated:** August 1, 2026
 
 > **Before publishing:** replace every bracketed placeholder, have the final
 > policy reviewed for the countries where Scout will be offered, and host it at
@@ -37,6 +37,10 @@ Scout processes jobs you save and your related activity, including company,
 role, source website, job URL, job description, extracted skills, match results,
 application status, deadlines, notes, reminders, follow-ups, drafts, recruiter or
 networking contacts, interviews, preparation notes, and next actions.
+This includes private action schedules, completion state, and relationship
+activity that you explicitly log. Optional operating-system notifications
+contain only a generic due count. Contact CSV files are parsed locally and the
+source file is not uploaded.
 
 ### Job-page and form information
 
