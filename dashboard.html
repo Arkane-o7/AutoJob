@@ -7,6 +7,7 @@
     <link rel="icon" href="assets/icons/scout-32.png">
     <link rel="stylesheet" href="dashboard.css">
     <link rel="stylesheet" href="shared/header.css">
+    <link rel="stylesheet" href="shared/dialog.css">
     <link rel="stylesheet" href="shared/tour.css">
   </head>
   <body data-scout-page="dashboard">
@@ -14,6 +15,7 @@
       <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
       <nav class="scout-header__nav" aria-label="Primary navigation">
         <a href="dashboard.html" data-scout-nav="applications" data-section="applications">Applications</a>
+        <a href="dashboard.html?section=actions" data-scout-nav="actions" data-section="actions">Today</a>
         <a href="dashboard.html?section=contacts" data-scout-nav="contacts" data-section="contacts" data-tour-target="contacts-tab">Contacts</a>
       </nav>
       <div class="scout-header__actions">
@@ -52,9 +54,26 @@
         <div id="list" class="list hidden"></div>
       </section>
 
+      <section id="actions-workspace" class="actions-workspace hidden">
+        <div class="actions-hero">
+          <div><p class="eyebrow">ACTION DESK</p><h1>Do the next thing.<br><em>Nothing gets lost.</em></h1></div>
+          <div class="action-scoreboard"><article><strong id="action-overdue-count">0</strong><span>OVERDUE</span></article><article><strong id="action-today-count">0</strong><span>TODAY</span></article><article><strong id="action-upcoming-count">0</strong><span>UPCOMING</span></article></div>
+        </div>
+        <div class="actions-toolbar">
+          <label class="search"><span>⌕</span><input id="action-search" type="search" placeholder="Search actions, people, or roles…"></label>
+          <select id="action-kind-filter" aria-label="Filter actions by type"><option value="">All action types</option></select>
+          <select id="action-priority-filter" aria-label="Filter actions by priority"><option value="">All priorities</option><option value="high">High priority</option><option value="medium">Medium priority</option><option value="low">Low priority</option></select>
+          <select id="action-channel-filter" aria-label="Filter actions by channel"><option value="">All channels</option></select>
+          <select id="action-application-filter" aria-label="Filter actions by application"><option value="">All applications</option></select>
+          <select id="action-contact-filter" aria-label="Filter actions by contact"><option value="">All contacts</option></select>
+          <button id="add-action" class="primary" type="button">+ New action</button>
+        </div>
+        <div id="action-groups" class="action-groups"></div>
+      </section>
+
       <section id="contacts-workspace" class="contacts-workspace hidden" data-tour-target="contacts-workspace">
         <div class="contacts-intro"><div><p class="eyebrow">RELATIONSHIP MAP</p><h1>Know the people<br><em>behind every role.</em></h1></div><button id="add-contact" class="primary" type="button">Add contact</button></div>
-        <div class="contacts-toolbar"><label class="search"><span>⌕</span><input id="contact-search" type="search" placeholder="Search name, company, role, notes…"></label><span id="contact-count">0 contacts</span></div>
+        <div class="contacts-toolbar"><label class="search"><span>⌕</span><input id="contact-search" type="search" placeholder="Search name, company, role, notes…"></label><select id="contact-relationship-filter" aria-label="Filter by relationship"><option value="">All relationships</option></select><select id="contact-action-filter" aria-label="Filter by next action"><option value="">Any next action</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="none">No next action</option></select><select id="contact-sort" aria-label="Sort contacts"><option value="next">Next action</option><option value="recent">Last contacted</option><option value="name">Name</option></select><button id="contact-view-toggle" class="outline" type="button">List view</button><button id="import-contacts" class="outline" type="button">Import CSV</button><input id="contacts-csv" class="hidden" type="file" accept=".csv,text/csv"><span id="contact-count">0 contacts</span></div>
         <div id="contacts-empty" class="empty"><span>+</span><h2>Build your network deliberately.</h2><p>Add recruiters, interviewers, referrals, and people you meet during the search.</p><button id="contacts-empty-add" class="primary" type="button">Add first contact</button></div>
         <div id="contacts-list" class="contacts-list hidden"></div>
       </section>
@@ -86,7 +105,7 @@
         <label><span>Recipient</span><select id="draft-contact"><option value="">Hiring team / no address</option></select></label>
         <select id="draft-type" aria-label="Draft type"><option value="follow_up">First follow-up</option><option value="final_follow_up">Final follow-up</option></select>
         <button id="generate-draft" class="dark-button" type="button">Generate draft</button>
-        <div id="draft" class="draft hidden"><label><span>Subject</span><input id="draft-subject"></label><label><span>Message</span><textarea id="draft-body"></textarea></label><div class="compose-actions"><a id="compose-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="compose-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="compose-mailto" class="outline link-button">Email app ↗</a><button id="copy-draft" class="outline" type="button">Copy</button></div><small>These buttons only open a reviewed draft. Scout never sends it.</small></div>
+        <div id="draft" class="draft hidden"><label><span>Subject</span><input id="draft-subject"></label><label><span>Message</span><textarea id="draft-body"></textarea></label><div class="compose-actions"><a id="compose-gmail" class="outline link-button" target="_blank" rel="noreferrer" data-log-compose="email" data-compose-context="application">Gmail ↗</a><a id="compose-outlook" class="outline link-button" target="_blank" rel="noreferrer" data-log-compose="email" data-compose-context="application">Outlook ↗</a><a id="compose-mailto" class="outline link-button" data-log-compose="email" data-compose-context="application">Email app ↗</a><button id="copy-draft" class="outline" type="button">Copy</button></div><small>These buttons only open a reviewed draft. Scout never sends it.</small></div>
       </section>
       <section class="interview-panel">
         <div class="panel-heading"><div><p class="eyebrow">INTERVIEW WORKSPACE</p><h2>Prepare, meet, follow through.</h2></div><button id="add-interview" class="outline" type="button">Add interview</button></div>
@@ -97,10 +116,10 @@
           <label><span>Company research</span><textarea id="interview-research" placeholder="Product, news, team context…"></textarea></label>
           <label><span>Preparation notes</span><textarea id="interview-prep" placeholder="Stories, questions to ask, topics to review…"></textarea></label>
           <label><span>Question notes</span><textarea id="interview-questions" placeholder="Questions discussed and your notes…"></textarea></label>
-          <div class="detail-grid"><label><span>Next action</span><input id="interview-next-action" placeholder="Send thank-you note"></label><label><span>Next action date</span><input id="interview-next-date" type="date"></label></div>
+          <fieldset class="interview-action-review"><legend>Actions to create</legend><label class="interview-action-toggle"><input id="interview-create-prep" type="checkbox" checked><span><strong>Create preparation action</strong><small>Visible in Today before the interview.</small></span></label><label class="interview-action-due"><span>Preparation due</span><input id="interview-prep-date" type="datetime-local"></label><label class="interview-action-toggle"><input id="interview-create-thanks" type="checkbox" checked><span><strong>Create thank-you action</strong><small>Nothing is sent automatically.</small></span></label><div class="detail-grid"><label><span>Thank-you action</span><input id="interview-next-action" placeholder="Send thank-you note"></label><label><span>Thank-you due</span><input id="interview-next-date" type="datetime-local"></label></div></fieldset>
           <div class="detail-actions"><button class="primary" type="submit">Save interview</button><button id="cancel-interview" class="outline" type="button">Cancel</button><button id="delete-interview" class="outline danger hidden" type="button">Delete</button><button id="generate-thank-you" class="outline" type="button">Thank-you draft</button></div>
         </form>
-        <div id="thank-you" class="draft hidden"><label><span>Subject</span><input id="thank-you-subject"></label><label><span>Message</span><textarea id="thank-you-body"></textarea></label><div class="compose-actions"><a id="thank-you-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="thank-you-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="thank-you-mailto" class="outline link-button">Email app ↗</a><button id="copy-thank-you" class="outline" type="button">Copy</button></div><small>Review every line before sending.</small></div>
+        <div id="thank-you" class="draft hidden"><label><span>Subject</span><input id="thank-you-subject"></label><label><span>Message</span><textarea id="thank-you-body"></textarea></label><div class="compose-actions"><a id="thank-you-gmail" class="outline link-button" target="_blank" rel="noreferrer" data-log-compose="email" data-compose-context="interview">Gmail ↗</a><a id="thank-you-outlook" class="outline link-button" target="_blank" rel="noreferrer" data-log-compose="email" data-compose-context="interview">Outlook ↗</a><a id="thank-you-mailto" class="outline link-button" data-log-compose="email" data-compose-context="interview">Email app ↗</a><button id="copy-thank-you" class="outline" type="button">Copy</button></div><small>Review every line before sending.</small></div>
       </section>
       <section class="ai-studio">
         <div class="studio-head"><div><p class="eyebrow">SMART DRAFT STUDIO</p><h2>Tailor with evidence.</h2></div><span id="studio-status">SMART READY</span></div>
@@ -116,16 +135,51 @@
         <input id="contact-id" type="hidden">
         <label class="hero-field"><span>NAME</span><input id="contact-name" required placeholder="Recruiter or contact name"></label>
         <label class="hero-field company-field"><span>TITLE / COMPANY</span><input id="contact-title" placeholder="Recruiter, Engineering Manager…"></label>
-        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Applications (optional)</span><select id="contact-application" multiple size="4" aria-describedby="contact-application-help"></select><small id="contact-application-help">Choose every application this person is connected to. Leave all unselected for general networking.</small></label><label><span>Last contacted</span><input id="contact-last" type="date"></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
+        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>Phone</span><input id="contact-phone" type="tel"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Preferred channel</span><select id="contact-channel"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Phone</option><option value="meeting">Meeting</option><option value="other">Other</option></select></label><label><span>Tags</span><input id="contact-tags" placeholder="referral, fintech, warm lead"></label><label><span>Applications (optional)</span><select id="contact-application" multiple size="4" aria-describedby="contact-application-help"></select><small id="contact-application-help">Choose every application this person is connected to. Leave all unselected for general networking.</small></label><label><span>Last contacted</span><input id="contact-last" type="date" disabled></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
         <label><span>Notes</span><textarea id="contact-notes" placeholder="How you met, context, promises, next conversation…"></textarea></label>
-        <div class="detail-actions"><button class="primary" type="submit">Save contact</button><button id="delete-contact" class="outline danger hidden" type="button">Delete</button><a id="open-contact-linkedin" class="outline link-button hidden" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>
+        <div class="detail-actions"><button class="primary" type="submit">Save contact</button><button id="merge-contact" class="outline hidden" type="button">Merge duplicate</button><button id="delete-contact" class="outline danger hidden" type="button">Delete</button><a id="open-contact-linkedin" class="outline link-button hidden" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>
       </form>
-      <section class="contact-compose"><p class="eyebrow">MANUAL MESSAGE</p><h2>Compose without auto-sending.</h2><label><span>Subject</span><input id="contact-subject" value="Great connecting"></label><label><span>Message</span><textarea id="contact-message" placeholder="Write or paste a reviewed message…"></textarea></label><div class="compose-actions"><a id="contact-gmail" class="outline link-button" target="_blank" rel="noreferrer">Gmail ↗</a><a id="contact-outlook" class="outline link-button" target="_blank" rel="noreferrer">Outlook ↗</a><a id="contact-mailto" class="outline link-button">Email app ↗</a></div><small>Scout opens a draft only. You review and send it yourself.</small></section>
+      <section class="relationship-timeline"><div class="panel-heading"><div><p class="eyebrow">RELATIONSHIP HISTORY</p><h2>Every touchpoint, in context.</h2></div><button id="log-interaction" class="outline" type="button">Log interaction</button></div><div id="contact-timeline" class="timeline"></div><form id="activity-form" class="activity-form hidden"><div class="detail-grid"><label><span>Type</span><select id="activity-type"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Phone</option><option value="meeting">Meeting</option><option value="note">Note</option></select></label><label><span>Direction</span><select id="activity-direction"><option value="outbound">Outbound</option><option value="inbound">Inbound</option><option value="none">Note / none</option></select></label><label><span>When</span><input id="activity-when" type="datetime-local" required></label><label><span>Linked action</span><select id="activity-action"><option value="">None</option></select></label></div><label><span>Subject</span><input id="activity-subject"></label><label><span>Summary</span><textarea id="activity-summary" required placeholder="What happened?"></textarea></label><label><span>Outcome</span><input id="activity-outcome" placeholder="Replied, intro made, awaiting response…"></label><label class="activity-check"><input id="activity-complete-action" type="checkbox"> Complete the linked action</label><div class="detail-grid"><label><span>Next action</span><input id="activity-next-title" placeholder="Follow up again"></label><label><span>Due</span><input id="activity-next-date" type="datetime-local"></label></div><div class="detail-actions"><button class="primary" type="submit">Save activity</button><button id="cancel-activity" class="outline" type="button">Cancel</button></div></form></section>
+      <section class="contact-compose"><p class="eyebrow">MANUAL MESSAGE</p><h2>Compose without auto-sending.</h2><label><span>Subject</span><input id="contact-subject" value="Great connecting"></label><label><span>Message</span><textarea id="contact-message" placeholder="Write or paste a reviewed message…"></textarea></label><div class="compose-actions"><a id="contact-gmail" class="outline link-button" target="_blank" rel="noreferrer" data-log-compose="email" data-compose-context="contact">Gmail ↗</a><a id="contact-outlook" class="outline link-button" target="_blank" rel="noreferrer" data-log-compose="email" data-compose-context="contact">Outlook ↗</a><a id="contact-mailto" class="outline link-button" data-log-compose="email" data-compose-context="contact">Email app ↗</a></div><small>Opening a draft records nothing. Log it only after you actually send it.</small></section>
     </aside>
+    <aside id="action-detail" class="detail action-detail" role="dialog" aria-modal="false" aria-label="Action details" data-state="closed" inert>
+      <button id="close-action" class="close" type="button" aria-label="Close action">×</button><p class="eyebrow">NEXT ACTION</p>
+      <form id="action-form"><input id="action-id" type="hidden"><label class="hero-field"><span>WHAT NEEDS DOING</span><input id="action-title" required placeholder="Follow up with recruiter"></label><div class="detail-grid"><label><span>Due</span><input id="action-due" type="datetime-local" required></label><label><span>Priority</span><select id="action-priority"><option value="low">Low</option><option value="medium">Medium</option><option value="high">High</option></select></label><label><span>Type</span><select id="action-kind"><option value="custom">Custom</option><option value="application_follow_up">Application follow-up</option><option value="application_final_follow_up">Final application follow-up</option><option value="contact_follow_up">Contact follow-up</option><option value="interview_prep">Interview prep</option><option value="interview_thank_you">Interview thank-you</option></select></label><label><span>Channel</span><select id="action-channel"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Phone</option><option value="meeting">Meeting</option><option value="other">Other</option></select></label><label><span>Application</span><select id="action-application"><option value="">None</option></select></label><label><span>Contact</span><select id="action-contact"><option value="">None</option></select></label></div><label><span>Notes</span><textarea id="action-notes"></textarea></label><div class="detail-actions"><button class="primary" type="submit">Save action</button><button id="action-done" class="outline" type="button">Done</button><button id="action-delete" class="outline danger" type="button">Cancel action</button></div></form>
+    </aside>
+    <dialog id="contact-import-dialog" class="contact-import-dialog" aria-labelledby="contact-import-title">
+      <form id="contact-import-form">
+        <header class="import-dialog-header"><div><p class="eyebrow">CONTACT IMPORT</p><h2 id="contact-import-title">Review every row before importing.</h2><p id="contact-import-file"></p></div><button id="contact-import-close" type="button" aria-label="Close import">×</button></header>
+        <section class="import-mapping"><div><h3>1. Map columns</h3><p>Scout guessed from the header. Confirm or change each mapping.</p></div><div id="contact-import-mapping" class="import-mapping-grid"></div></section>
+        <section class="import-preview"><div class="import-preview-heading"><div><h3>2. Review decisions</h3><p>Invalid rows stay skipped. Name-only matches require an explicit choice.</p></div><strong id="contact-import-summary"></strong></div><div class="import-table-wrap"><table><thead><tr><th>Row</th><th>Contact</th><th>Company / title</th><th>Validation</th><th>Decision</th></tr></thead><tbody id="contact-import-rows"></tbody></table></div></section>
+        <p id="contact-import-error" class="snooze-error" role="alert"></p>
+        <footer class="import-dialog-actions"><button id="contact-import-cancel" class="outline" type="button">Cancel</button><button id="contact-import-submit" class="primary" type="submit">Import contacts</button></footer>
+      </form>
+    </dialog>
+    <dialog id="snooze-dialog" class="snooze-dialog" aria-labelledby="snooze-title" aria-describedby="snooze-copy snooze-preview">
+      <form id="snooze-form">
+        <header class="snooze-dialog__header">
+          <div><p class="eyebrow">RESCHEDULE ACTION</p><h2 id="snooze-title">Bring it back later.</h2></div>
+          <button id="snooze-close" class="snooze-dialog__close" type="button" aria-label="Close snooze dialog">×</button>
+        </header>
+        <p id="snooze-copy" class="snooze-dialog__copy"></p>
+        <fieldset class="snooze-presets">
+          <legend>Quick pick</legend>
+          <button type="button" data-snooze-preset="1">Tomorrow</button>
+          <button type="button" data-snooze-preset="3">3 days</button>
+          <button type="button" data-snooze-preset="7">1 week</button>
+          <button type="button" data-snooze-preset="14">2 weeks</button>
+        </fieldset>
+        <label class="snooze-custom" for="snooze-days"><span>Custom delay</span><span class="snooze-custom__control"><input id="snooze-days" type="number" min="1" max="30" step="1" value="1" inputmode="numeric" required><b>days</b></span></label>
+        <p id="snooze-preview" class="snooze-preview" aria-live="polite"></p>
+        <p id="snooze-error" class="snooze-error" role="alert"></p>
+        <footer class="snooze-dialog__actions"><button id="snooze-cancel" class="outline" type="button">Keep it here</button><button id="snooze-submit" class="primary" type="submit">Snooze action</button></footer>
+      </form>
+    </dialog>
     <div id="scrim" class="scrim hidden"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <script src="shared/constants.js"></script>
+    <script src="shared/contact-import.js"></script>
     <script src="shared/matching.js"></script>
     <script src="shared/followup.js"></script>
     <script src="shared/profiles.js"></script>
@@ -133,6 +187,7 @@
     <script src="shared/graph.js"></script>
     <script src="shared/storage.js"></script>
     <script src="shared/header.js"></script>
+    <script src="shared/dialog.js"></script>
     <script src="shared/tour.js"></script>
     <script src="dashboard.js"></script>
   </body>
