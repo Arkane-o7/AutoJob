@@ -48,8 +48,8 @@ recruiter permissions. It must not be marketed as identity verification.
 | [005](005-first-login-showcase.md) | 4 | Build a resumable first-login feature showcase and tutorial | P1 | M | 003, 004 | TODO |
 | [006](006-private-support-reporting.md) | 5 | Replace public GitHub reports with a private support-report pipeline | P0 | M | 002, 003 | TODO |
 | [007](007-ai-billing-readme-todo.md) | 6 | Add the future AI, entitlements, usage, and payments TODO to README | P2 | S | 001 | DONE (this PR) |
-| [008](008-action-driven-relationship-workspace.md) | Product hardening | Turn follow-ups and contacts into an action-driven relationship workspace | P1 | L | Current schema-v5/cloud baseline | IN PROGRESS (automated gates green; manual Chrome acceptance pending) |
-| [008.1](008-1-correctness-and-release-verification.md) | Release hardening | Correct lifecycle, Today, imports, and verification gaps | P0 | M | 008 | IN PROGRESS (automated gates green; manual Chrome acceptance pending) |
+| [008](008-action-driven-relationship-workspace.md) | Product hardening | Turn follow-ups and contacts into an action-driven relationship workspace | P1 | L | Current schema-v5/cloud baseline | DONE (2026-08-02; automated and installed-extension acceptance passed) |
+| [008.1](008-1-correctness-and-release-verification.md) | Release hardening | Correct lifecycle, Today, imports, and verification gaps | P0 | M | 008 | DONE (2026-08-02; 49/49 pgTAP, 83/83 unit, 10/10 ATS, 11/11 extension scenarios) |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `REJECTED`.
 

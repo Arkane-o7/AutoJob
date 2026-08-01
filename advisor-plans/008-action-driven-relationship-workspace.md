@@ -32,7 +32,8 @@
 - **Depends on**: none; the current schema-v5/cloud-sync baseline must remain green
 - **Category**: direction / migration / tests
 - **Planned at**: commit `a9713b3` plus the maintainer's in-progress worktree, 2026-07-31
-- **Status**: IN PROGRESS — automated release gates are green at `d0596c1`; manual Chrome acceptance is pending
+- **Status**: DONE — automated and installed-extension acceptance passed on 2026-08-02
+- **Pre-documentation verified heads**: `d0596c1` (implementation and tests), `60bfa81` (plan handoff)
 
 ## Why this matters
 
@@ -686,25 +687,30 @@ Model new storage tests after `tests/applyos.test.mjs:227-350`, cloud tests afte
 
 ## Done criteria
 
-- [ ] Schema v6 is explicit, idempotent, and preserves all existing reminder,
+- [x] Schema v6 is explicit, idempotent, and preserves all existing reminder,
       contact, and interview data.
-- [ ] One action lifecycle powers application, contact, and interview work.
-- [ ] Today shows all due work and supports Done, Snooze, Reschedule, Skip, and
+- [x] One action lifecycle powers application, contact, and interview work.
+- [x] Today shows all due work and supports Done, Snooze, Reschedule, Skip, and
       context navigation.
-- [ ] Contacts have a persistent activity timeline, next action, filters,
+- [x] Contacts have a persistent activity timeline, next action, filters,
       duplicate merge, and reviewed CSV import.
-- [ ] Compose handoffs never create activity without explicit confirmation and
+- [x] Compose handoffs never create activity without explicit confirmation and
       never send a message.
-- [ ] Desktop notifications are optional, generic, deduplicated, and deep-link
+- [x] Desktop notifications are optional, generic, deduplicated, and deep-link
       to Today.
-- [ ] Contact activity is synced as an owner-only private record and covered by
+- [x] Contact activity is synced as an owner-only private record and covered by
       RLS, conflict, tombstone, export, and deletion tests.
-- [ ] Backup/restore and summaries include the new records.
-- [ ] Product, permission, and privacy documentation match behavior.
-- [ ] `npm run verify` exits 0.
-- [ ] `npm run db:test` and `npm run db:lint` exit 0.
-- [ ] `git status --short` lists no file outside Scope.
-- [ ] `advisor-plans/README.md` marks Plan 008 DONE only after all gates pass.
+- [x] Backup/restore and summaries include the new records.
+- [x] Product, permission, and privacy documentation match behavior.
+- [x] `npm run verify` exits 0: 83/83 unit tests, 10/10 ATS fixtures, and
+      11/11 extension regression scenarios.
+- [x] `npm run db:test` passes 49/49 pgTAP assertions and `npm run db:lint`
+      reports 0 warnings.
+- [x] All five installed-extension acceptance flows passed on 2026-08-02,
+      including reload persistence; temporary `ACCEPTANCE 008` records were
+      cleaned up.
+- [x] `git status --short` lists no file outside Scope.
+- [x] `advisor-plans/README.md` marks Plan 008 DONE only after all gates pass.
 
 ## STOP conditions
 

@@ -6,8 +6,8 @@
 - **Effort**: M
 - **Risk**: HIGH
 - **Depends on**: Plan 008 implementation draft
-- **Status**: IN PROGRESS — automated release gates are green; manual Chrome acceptance is pending
-- **Verified implementation commit**: `d0596c1`
+- **Status**: DONE — automated and installed-extension acceptance passed on 2026-08-02
+- **Pre-documentation verified heads**: `d0596c1` (implementation and tests), `60bfa81` (plan handoff)
 
 ## Goal
 
@@ -51,16 +51,13 @@ ownership behavior.
 - [x] `npm run verify`
 - [x] `git status --short` reviewed (hardening files only; no release archive changes)
 
-Do not mark this plan or Plan 008 DONE until every automated and manual gate
-passes.
-
 ## Verification status — 2026-08-02
 
-The clean implementation at `d0596c1` passed 30-script lint/reference checks,
-TypeScript checking, 83/83 unit tests, 10/10 ATS browser fixtures, 11/11
-extension regression scenarios, 3 database test files containing 49/49 pgTAP
-assertions, database reset, database lint with zero warnings, build, `verify`,
-and `git diff --check`.
+The pre-documentation implementation and plan-handoff heads (`d0596c1` and
+`60bfa81`) passed 30-script lint/reference checks, TypeScript checking, 83/83
+unit tests, 10/10 ATS browser fixtures, 11/11 extension regression scenarios,
+3 database test files containing 49/49 pgTAP assertions, database reset,
+database lint with zero warnings, build, `verify`, and `git diff --check`.
 
 The clean branch is `codex/scout-action-workspace-clean`, created from current
 `main`. The mixed branch remains preserved at
@@ -69,10 +66,25 @@ generated output is part of the clean diff. Plan references use the
 repository-relative path
 `advisor-plans/008-1-correctness-and-release-verification.md`.
 
-## Remaining blockers
+## Installed-extension acceptance — 2026-08-02
 
-- Manually complete the five Chrome acceptance flows against the installed
-  extension and real extension storage. Browser automation cannot navigate to
-  a `chrome-extension://` page unless the user first opens a Scout tab that can
-  be claimed.
-- Keep this plan and Plan 008 IN PROGRESS until those five flows pass.
+All five flows passed against the installed Scout extension and its persisted
+workspace:
+
+- Skipping the final due application follow-up reconciled the application from
+  `follow_up_due` to `applied`, and the corrected status survived reload.
+- Deleting an application preserved its completed action in history, removed
+  invalid open actions, and retained the historical record after reload.
+- Disabling interview preparation and thank-you options cancelled only each
+  corresponding open system-generated action; completed, skipped, and
+  unrelated actions remained intact.
+- Reviewed CSV import exposed mapping and preview, reported invalid rows,
+  detected exact and name-only duplicate candidates, supported per-row
+  Create/Merge/Skip decisions and final confirmation, parsed quoted commas,
+  and persisted the approved batch after reload.
+- Logging a relationship interaction updated the timeline and derived
+  last-contact date; its dated next action appeared in Today, and all four
+  states survived extension reload.
+
+Temporary `ACCEPTANCE 008` records were cleaned up after verification. There
+are no remaining Plan 008.1 release blockers.
