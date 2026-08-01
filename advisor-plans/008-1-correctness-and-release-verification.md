@@ -8,6 +8,7 @@
 - **Depends on**: Plan 008 implementation draft
 - **Status**: DONE — automated and installed-extension acceptance passed on 2026-08-02
 - **Pre-documentation verified heads**: `d0596c1` (implementation and tests), `60bfa81` (plan handoff)
+- **Verification completion commit**: `98ec88102c37ff83e9cf4440d35fad0d08250317`
 
 ## Goal
 
@@ -88,3 +89,7 @@ workspace:
 
 Temporary `ACCEPTANCE 008` records were cleaned up after verification. There
 are no remaining Plan 008.1 release blockers.
+
+The branch contains one later documentation-only commit that records the
+verification completion SHA above; it does not change the verified product or
+test behavior.

@@ -34,6 +34,7 @@
 - **Planned at**: commit `a9713b3` plus the maintainer's in-progress worktree, 2026-07-31
 - **Status**: DONE — automated and installed-extension acceptance passed on 2026-08-02
 - **Pre-documentation verified heads**: `d0596c1` (implementation and tests), `60bfa81` (plan handoff)
+- **Verification completion commit**: `98ec88102c37ff83e9cf4440d35fad0d08250317`
 
 ## Why this matters
 
