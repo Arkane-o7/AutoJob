@@ -1,6 +1,6 @@
 # Scout
 
-Scout is a private, review-first Chrome extension that combines job capture, application tracking, resume matching, answer memory, follow-up reminders, and the existing autofill engine. It never submits an application or sends a message.
+Scout is a private, review-first Chrome extension that combines job capture, application tracking, resume matching, answer memory, a unified action inbox, relationship history, and the existing autofill engine. It never submits an application or sends a message.
 
 Scout retains its interface and legacy-profile compatibility while incorporating licensed implementation work adapted from [Offlyn Apply](https://github.com/offlyn-ai/offlyn-apply) and [Job App Filler](https://github.com/berellevy/job_app_filler). See `THIRD_PARTY_NOTICES.md` and `licenses/` for attribution and license terms.
 
@@ -49,9 +49,9 @@ The new modules are:
 - `shared/offlyn-core.js`: MIT-attributed ATS recognition, semantic field classification, type/value safeguards, and correction matching adapted to the Scout profile schema.
 - `shared/ats-compat.js`: a registry-based compatibility layer for ATS field context, custom dropdown options, and resume dropzones. Greenhouse legacy/React patterns are BSD-attributed adaptations from Job App Filler; the remaining adapters use Scout heuristics.
 - `shared/profiles.js`: multi-profile index, active-profile switching, legacy `profile` mirroring, completeness checks, and resume-text normalization.
-- `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, reminders, contacts, interviews, scoped answer memory, immutable resume versions, and settings. Schema v5 records its revision and migration history while preserving legacy data.
+- `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, actions, contact activity, interviews, scoped answer memory, immutable resume versions, and settings. Schema v6 records its revision and migration history while preserving legacy reminder data.
 - `shared/matching.js`: deterministic, local skill/keyword matching with matched skills, gaps, keywords, experience hints, and answer prompts.
-- `shared/followup.js`: editable 7-day and optional 14-day reminders, interview thank-you drafts, and review-only Gmail, Outlook, and local-email-app compose links.
+- `shared/followup.js`: configurable follow-up sequences, action scheduling helpers, interview thank-you drafts, and review-only Gmail, Outlook, and local-email-app compose links.
 - `shared/ai.js`: zero-setup Smart Draft fallbacks for cover letters, resume focus plans, and keyword gaps, plus optional localhost-only Ollama enhancement.
 - `shared/graph.js`: answer/correction knowledge graph with reusable-answer retrieval and lightweight reinforcement weights.
 - `shared/agent.js`: local-AI planning with an allowlist of fill/select/check/skip actions and hard blocks for submission, consent, sensitive fields, CAPTCHAs, and assessments.
@@ -81,7 +81,7 @@ Sign in with email, Google, or LinkedIn before setup. Application, contact, inte
 
 ### 1. Save a job
 
-Open a LinkedIn, Workday, Greenhouse, Lever, Ashby, Wellfound, or company job page. Open Scout, review the editable company and role plus the extraction-confidence note, then click **Save to Scout**.
+Open a LinkedIn, Workday, Greenhouse, Lever, Ashby, Wellfound, or company job page. When Scout confidently detects a job or application form, it shows an in-page prompt. Choose **Save & autofill** to fill confident empty fields, **Save job** when no application form is visible, or **Not now** to dismiss the prompt for that page session. You can still open Scout to review the editable company and role plus the extraction-confidence note before clicking **Save to Scout**.
 
 For a deterministic fixture, run:
 
@@ -140,9 +140,13 @@ client architecture.
 
 Choose **Dashboard** from the popup. Switch between Board and List, search, filter by status/source/priority, drag cards between columns, or open a record to edit its status, dates, priority, and notes. An empty dashboard includes a **Load sample data** button.
 
-### 5. See or edit a reminder
+### 5. Work from Today
 
-Applied records show the next follow-up in the popup and dashboard. Due reminders move an `applied` record to `follow_up_due` and appear in Next Actions and the extension badge. Edit **Next follow-up** in the application detail drawer to reschedule it, or choose **Done** in Next Actions to complete it.
+Applied records create follow-up actions from the offsets configured in Profile & Settings. **Today** combines application follow-ups, contact follow-ups, interview preparation, and custom actions into Overdue, Today, Upcoming, and Done groups. Complete, snooze, reschedule, or skip an action there. The toolbar badge remains available; generic desktop reminders are optional and requested only when you enable them.
+
+### 6. Keep relationship history
+
+Contacts can be filtered and tagged, linked to applications, imported from a reviewed local CSV, and merged when exact email or LinkedIn duplicates are found. Log email, LinkedIn, phone, meeting, and note activity manually. A confirmed log can complete the current action and schedule the next one atomically. Opening a compose link records nothing and Scout never reads a mailbox or assumes that a draft was sent.
 
 ### 6. Generate a follow-up draft
 
@@ -166,7 +170,7 @@ Open **Profile & Settings → Encrypted backup**. Choose a password of at least 
 
 ## Answer memory
 
-Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized authoritatively into answer memory and the local knowledge graph, so deleting an answer forgets it. Employer-history and relationship answers can be restricted to one company domain. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
+Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized authoritatively into answer memory and the local knowledge graph, so deleting an answer forgets it. After an explicit autofill pass, safe fields Scout left blank can be learned when the user completes and leaves the field; those answers appear in Profile & Settings as editable custom answers. Password, identity/demographic, consent, payment, verification, file-upload, and other blocked fields are never learned. Employer-history, company-specific long-form, and relationship answers are restricted to one company domain. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
 
 ## Future AI and billing (TODO — not implemented)
 

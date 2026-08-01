@@ -12,6 +12,14 @@ split into a database-foundation plan and a sync/recruiter-boundary plan because
 combining schema, authorization, migration, offline sync, and conflict handling
 into one implementation task would be too risky.
 
+Plan 008 was added on 2026-07-31 against the Scout v0.11.1 workspace. It is a
+post-foundation product-hardening plan that turns the follow-up, contact, and
+interview demos into one usable daily relationship workflow.
+
+Plan 008.1 was added on 2026-08-01 after merge-readiness review. It is the
+correctness and verification tranche required before Plan 008 can be marked
+done or Plan 009 can begin.
+
 These files are planning artifacts, not automatic repository instructions. An
 executor must act on a plan only after the maintainer explicitly selects it.
 
@@ -40,6 +48,8 @@ recruiter permissions. It must not be marketed as identity verification.
 | [005](005-first-login-showcase.md) | 4 | Build a resumable first-login feature showcase and tutorial | P1 | M | 003, 004 | TODO |
 | [006](006-private-support-reporting.md) | 5 | Replace public GitHub reports with a private support-report pipeline | P0 | M | 002, 003 | TODO |
 | [007](007-ai-billing-readme-todo.md) | 6 | Add the future AI, entitlements, usage, and payments TODO to README | P2 | S | 001 | DONE (this PR) |
+| [008](008-action-driven-relationship-workspace.md) | Product hardening | Turn follow-ups and contacts into an action-driven relationship workspace | P1 | L | Current schema-v5/cloud baseline | IN PROGRESS (automated gates green; manual Chrome acceptance pending) |
+| [008.1](008-1-correctness-and-release-verification.md) | Release hardening | Correct lifecycle, Today, imports, and verification gaps | P0 | M | 008 | IN PROGRESS (automated gates green; manual Chrome acceptance pending) |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `REJECTED`.
 
@@ -72,6 +82,10 @@ change.
 7. **Requirement 6 — future AI/payments TODO**
    `Implement advisor-plans/007-ai-billing-readme-todo.md as documentation only.
    Do not add billing, payment, model, permission, or database code.`
+8. **Product hardening — action-driven relationship workspace**
+   `Implement advisor-plans/008-action-driven-relationship-workspace.md in its
+   ordered tranches. Preserve review-before-send behavior and do not start from
+   the maintainer's current dirty worktree.`
 
 Every executor must start from a dedicated `codex/<plan>-<slug>` branch, run the
 Plan 000 baseline first, and stop if the live code has drifted from its plan.
@@ -135,6 +149,9 @@ reduce scope, not skip RLS, migration, deletion, or privacy tests.
   separate Edge Function and table.
 - 007 is intentionally documentation-only; do not add billing SDKs or payment
   tables as part of this launch work.
+- 008 depends on the current schema-v5 authoritative-sync baseline. Reconcile
+  its pre-dispatch gate after the maintainer's current uncommitted feature work
+  is preserved.
 
 ## Baseline verification
 

@@ -5,6 +5,10 @@
     {
       "source": "/privacy",
       "destination": "/"
+    },
+    {
+      "source": "/terms",
+      "destination": "/terms.html"
     }
   ],
   "headers": [
