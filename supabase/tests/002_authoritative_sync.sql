@@ -1,5 +1,5 @@
 begin;
-select extensions.plan(20);
+select extensions.plan(21);
 
 select extensions.has_table('public','legacy_workspace_claims','reviewed legacy claims are tracked');
 select extensions.is((select relrowsecurity from pg_class where oid='public.legacy_workspace_claims'::regclass),true,'legacy claims enforce RLS');
@@ -15,6 +15,7 @@ select extensions.has_function('public','claim_legacy_workspace',array['uuid','t
 select extensions.has_function('public','register_workspace_device',array['text','text'],'friendly device registration RPC exists');
 select extensions.has_function('public','workspace_record_provenance',array['text','text','bigint'],'conflict provenance RPC exists');
 select extensions.ok(has_function_privilege('authenticated','public.apply_workspace_mutation(uuid,text,text,text,bigint,text,jsonb)','execute'),'authenticated users can invoke mutation RPC');
+select extensions.ok(position('contact_activity' in pg_get_functiondef('public.apply_workspace_mutation(uuid,text,text,text,bigint,text,jsonb)'::regprocedure)) > 0,'mutation RPC accepts private contact activity records');
 select extensions.ok(has_function_privilege('authenticated','public.register_workspace_device(text,text)','execute'),'authenticated users can register their device label');
 select extensions.ok(has_function_privilege('authenticated','public.workspace_record_provenance(text,text,bigint)','execute'),'authenticated users can inspect their conflict provenance');
 select extensions.ok(not has_table_privilege('authenticated','public.applications','insert'),'clients cannot bypass application mutation validation');

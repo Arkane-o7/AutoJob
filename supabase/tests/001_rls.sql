@@ -1,5 +1,5 @@
 begin;
-select extensions.plan(12);
+select extensions.plan(13);
 
 select extensions.has_table('public', 'workspace_snapshots', 'workspace snapshots exist');
 select extensions.has_table('public', 'candidate_publications', 'candidate publication exists');
@@ -9,6 +9,7 @@ select extensions.is((select relrowsecurity from pg_class where oid='public.appl
 select extensions.is((select relrowsecurity from pg_class where oid='public.contacts'::regclass), true, 'contacts enforce RLS');
 select extensions.is((select relrowsecurity from pg_class where oid='public.interviews'::regclass), true, 'interviews enforce RLS');
 select extensions.is((select relrowsecurity from pg_class where oid='public.private_records'::regclass), true, 'answer/reminder records enforce RLS');
+select extensions.ok((select pg_get_constraintdef(oid) like '%contact_activity%' from pg_constraint where conname='private_records_record_type_check'), 'contact activity uses the owner-only private record boundary');
 select extensions.is((select relrowsecurity from pg_class where oid='public.candidate_publications'::regclass), true, 'publications enforce RLS');
 select extensions.ok((select column_default like '%private%' from information_schema.columns where table_schema='public' and table_name='candidate_publications' and column_name='visibility'), 'candidate publication defaults to private');
 select extensions.is((select relrowsecurity from pg_class where oid='public.support_reports'::regclass), true, 'support reports enforce RLS');

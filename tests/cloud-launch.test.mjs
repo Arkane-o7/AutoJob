@@ -126,6 +126,11 @@ test("launch migration protects private workspace tables and separates recruiter
   assert.match(conflictMetadata, /register_workspace_device/);
   assert.match(conflictMetadata, /workspace_record_provenance/);
   assert.match(conflictMetadata, /auth\.uid\(\)/);
+  const relationshipRecords = await readFile(resolve("supabase/migrations/202608010001_contact_activity_records.sql"), "utf8");
+  assert.match(relationshipRecords, /contact_activity/);
+  assert.match(relationshipRecords, /private_records_record_type_check/);
+  assert.match(relationshipRecords, /workspace_changes_entity_type_check/);
+  assert.match(relationshipRecords, /revoke all on function public\.apply_workspace_mutation/);
 });
 
 test("private support endpoint re-redacts client text and fails closed when limits cannot be checked", async () => {
@@ -137,17 +142,23 @@ test("private support endpoint re-redacts client text and fails closed when limi
 });
 
 test("account, contextual tutorial, and contact surfaces preserve current product boundaries", async () => {
-  const [account, onboarding, dashboard, dashboardRuntime, popup, popupRuntime, options] = await Promise.all([readFile(resolve("account.html"), "utf8"), readFile(resolve("onboarding.html"), "utf8"), readFile(resolve("dashboard.html"), "utf8"), readFile(resolve("dashboard.js"), "utf8"), readFile(resolve("popup.html"), "utf8"), readFile(resolve("popup.js"), "utf8"), readFile(resolve("options.html"), "utf8")]);
+  const [account, accountRuntime, onboarding, dashboard, dashboardRuntime, popup, popupRuntime, options, optionsRuntime, dialogRuntime] = await Promise.all([readFile(resolve("account.html"), "utf8"), readFile(resolve("account.js"), "utf8"), readFile(resolve("onboarding.html"), "utf8"), readFile(resolve("dashboard.html"), "utf8"), readFile(resolve("dashboard.js"), "utf8"), readFile(resolve("popup.html"), "utf8"), readFile(resolve("popup.js"), "utf8"), readFile(resolve("options.html"), "utf8"), readFile(resolve("options.js"), "utf8"), readFile(resolve("shared/dialog.js"), "utf8")]);
   assert.match(account, /Continue with Google/);
   assert.match(account, /Continue with LinkedIn/);
   assert.match(account, /or use email/);
   assert.match(account, /I agree to create my private Scout workspace/);
+  assert.match(account, /securely stores personal data you choose to provide/i);
+  assert.match(account, /privacy-site\/terms\.html/);
+  assert.match(account, /privacy-site\/index\.html/);
+  assert.match(account, /<details class="consent-details">/);
+  assert.doesNotMatch(account, /store my account identity, profile, resumes, applications, contacts, interviews, and saved answers/i);
   assert.doesNotMatch(account, /Candidate publication|future recruiter search|publish-consent/i);
   assert.match(account, /No recruiter-facing profile in this release/);
   assert.match(account, /Review a sync conflict/);
   assert.match(account, /id="conflict-local-time"/);
   assert.match(account, /id="conflict-server-device"/);
   assert.doesNotMatch(account, /id="conflict-(?:local|server)"[^>]*textarea|<textarea[^>]*id="conflict-(?:local|server)"/);
+  assert.match(accountRuntime, /status\?\.configured === true[\s\S]*status\?\.workspaceReady === true/);
   assert.match(onboarding, /TWO-MINUTE START/);
   assert.equal((onboarding.match(/data-panel=/g) || []).length, 2);
   assert.match(dashboard, /data-tour-target="pipeline"/);
@@ -163,6 +174,16 @@ test("account, contextual tutorial, and contact surfaces preserve current produc
   assert.match(popup, /data-tour-target="autofill"/);
   assert.match(dashboard, /id="contact-application" multiple/);
   assert.match(dashboardRuntime, /selectedOptions/);
+  assert.match(dashboard, /id="snooze-dialog"/);
+  assert.match(dashboard, /data-snooze-preset="7"/);
+  assert.doesNotMatch(dashboardRuntime, /prompt\("Snooze for how many days/);
+  for (const html of [account, dashboard, options]) {
+    assert.match(html, /shared\/dialog\.css/);
+    assert.match(html, /shared\/dialog\.js/);
+  }
+  for (const runtime of [accountRuntime, dashboardRuntime, optionsRuntime]) assert.doesNotMatch(runtime, /(^|[^.\w])(?:window\.)?(?:alert|confirm|prompt)\s*\(/m);
+  assert.match(dialogRuntime, /root\.ScoutDialog = Object\.freeze/);
+  assert.match(accountRuntime, /confirmationText: "DELETE MY SCOUT ACCOUNT"/);
 });
 
 test("full-page Scout surfaces share one header contract", async () => {
@@ -172,6 +193,7 @@ test("full-page Scout surfaces share one header contract", async () => {
     assert.match(html, /assets\/brand\/scout-wordmark\.png/);
     assert.match(html, /assets\/brand\/scout-mark\.png/);
     assert.match(html, /data-scout-nav="applications"/);
+    assert.match(html, /data-scout-nav="actions"/);
     assert.match(html, /data-scout-nav="contacts"/);
     assert.match(html, /data-scout-nav="account"/);
     assert.match(html, /data-scout-nav="profile"/);
