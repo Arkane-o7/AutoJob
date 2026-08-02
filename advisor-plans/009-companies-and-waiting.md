@@ -7,7 +7,7 @@
 - **Risk**: MEDIUM
 - **Depends on**: Plans 008 and 008.1
 - **Planned at**: `f9f16bc`, 2026-08-02
-- **Status**: IN PROGRESS
+- **Status**: DONE
 
 ## Outcome
 
@@ -54,8 +54,14 @@ integration or automation:
 
 Current implementation verification (2026-08-02): 88/88 unit tests, 10/10 ATS
 fixtures plus the packaged extension CRM lifecycle, 63/63 pgTAP assertions,
-zero database lint warnings, and a passing aggregate `npm run verify`. The plan
-remains **IN PROGRESS** while the draft pull request is reviewed.
+zero database lint warnings, and a passing aggregate `npm run verify`.
+
+Installed-extension smoke verification also passed on 2026-08-02: a temporary
+company was created and linked to one application and one contact; an
+application-linked Waiting item and both company links survived reload; the
+Waiting item converted into a follow-up; deleting the company preserved the
+application and contact while detaching only `company_id`; and all temporary
+smoke-test records were removed. Plan 009 is **DONE**.
 
 ## Deliberately out of scope
 
