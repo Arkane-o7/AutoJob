@@ -12,7 +12,6 @@ const saveStatus = document.querySelector("#save-status");
 let savedResume = null;
 let pendingResume = null;
 let profilesIndex = null;
-let pendingRestore = null;
 document.body.inert = true;
 
 function accountGateUrl(reason) {
@@ -40,57 +39,6 @@ async function requireWorkspaceAccess() {
     globalThis.ScoutHeader?.setStatus("Offline · cached", "offline");
   }
   return status;
-}
-
-function setBackupStatus(message, tone = "") {
-  const status = document.querySelector("#backup-status");
-  status.textContent = message;
-  status.className = tone;
-}
-
-function setCalendarOperation(message = "", tone = "") {
-  const element = document.querySelector("#calendar-operation-status");
-  element.textContent = message;
-  element.className = `calendar-operation-status${tone ? ` ${tone}` : ""}`;
-}
-
-async function sendCalendarMessage(type, details = {}) {
-  try { return await chrome.runtime.sendMessage({ type, ...details }); }
-  catch (error) { return { ok: false, error: error.message }; }
-}
-
-async function refreshCalendarStatus(existingState = null) {
-  const [response, state] = await Promise.all([
-    sendCalendarMessage("APPLYOS_CALENDAR_STATUS"),
-    existingState ? Promise.resolve(existingState) : ApplyOS.getState()
-  ]);
-  const connected = response?.ok && response.status?.connected === true;
-  const badge = document.querySelector("#calendar-connection-state");
-  badge.textContent = connected ? "CONNECTED" : "DISCONNECTED";
-  badge.classList.toggle("connected", connected);
-  document.querySelector("#calendar-connection-label").textContent = connected ? "Google Calendar connected" : "Google Calendar disconnected";
-  document.querySelector("#calendar-connection-detail").textContent = connected ? "Scout will use the primary calendar only." : "Connect only when you want Scout to manage calendar events.";
-  document.querySelector("#calendar-connect").classList.toggle("hidden", connected);
-  document.querySelector("#calendar-disconnect").classList.toggle("hidden", !connected);
-  document.querySelector("#calendar-sync-all").disabled = !connected;
-  const autoSync = document.querySelector("#calendar-auto-sync");
-  autoSync.checked = state.settings.calendar_auto_sync === true;
-  autoSync.disabled = !connected;
-  return connected;
-}
-
-function downloadTextFile(contents, filename) {
-  const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
-  const anchor = document.createElement("a");
-  anchor.href = url; anchor.download = filename; anchor.style.display = "none";
-  document.body.append(anchor); anchor.click(); anchor.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-
-function backupSummaryText(summary) {
-  const created = new Date(summary.created_at);
-  const date = Number.isNaN(created.getTime()) ? summary.created_at : created.toLocaleString();
-  return `${summary.profiles} profiles · ${summary.applications} applications · ${summary.contacts} contacts · ${summary.actions || 0} open actions · ${summary.activities || 0} interactions · ${summary.interviews} interviews · ${summary.answers} remembered answers · Created ${date} with Scout ${summary.extension_version}`;
 }
 
 function createAnswerRow(answer = {}) {
@@ -319,11 +267,9 @@ async function initialize() {
   document.querySelector("#ai-model").value = config.chatModel;
   document.querySelector("#embedding-model").value = config.embeddingModel;
   if (config.enabled) { document.querySelector("#ai-result").textContent = `Connected · Ollama ${config.version || "ready"}`; document.querySelector("#ai-result").className = "success"; }
-  document.querySelector("#undo-restore").classList.toggle("hidden", !(await ApplyOS.hasRestoreCheckpoint()));
   document.querySelector("#enable-notifications").checked = state.settings.notification_enabled !== false;
   document.querySelector("#follow-up-offsets").value = (state.settings.follow_up_offsets_days || [7, 14]).join(", ");
   document.querySelector("#notification-digest-time").value = state.settings.notification_digest_time || "09:00";
-  await refreshCalendarStatus(state);
   const desktopGranted = await chrome.permissions?.contains?.({ permissions: ["notifications"] }).catch(() => false);
   document.querySelector("#desktop-notification-status").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Enabled" : desktopGranted ? "Permission granted · turn on" : "Not enabled";
   document.querySelector("#enable-desktop-notifications").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Disable desktop reminders" : "Enable desktop reminders";
@@ -371,8 +317,8 @@ addAnswerButton.addEventListener("click", () => {
   markUnsaved();
 });
 
-form.addEventListener("input", (event) => { if (!event.target.closest("#backup, #calendar")) markUnsaved(); });
-form.addEventListener("change", (event) => { if (!event.target.closest("#backup, #calendar")) markUnsaved(); });
+form.addEventListener("input", markUnsaved);
+form.addEventListener("change", markUnsaved);
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -402,8 +348,7 @@ form.addEventListener("submit", async (event) => {
       final_follow_up_enabled: document.querySelector("#follow-up-offsets").value.split(",").map(Number).includes(14),
       notification_enabled: document.querySelector("#enable-notifications").checked,
       follow_up_offsets_days: document.querySelector("#follow-up-offsets").value.split(",").map((item) => Number(item.trim())).filter((value) => Number.isInteger(value) && value >= 1 && value <= 60),
-      notification_digest_time: document.querySelector("#notification-digest-time").value || "09:00",
-      calendar_auto_sync: document.querySelector("#calendar-auto-sync").checked
+      notification_digest_time: document.querySelector("#notification-digest-time").value || "09:00"
     });
     await ApplyOS.syncAnswerMemory(data.customAnswers, {
       authoritative: true,
@@ -438,49 +383,6 @@ form.addEventListener("submit", async (event) => {
 initialize().catch((error) => {
   document.body.inert = false;
   saveStatus.textContent = `Could not load profile — ${error.message}`;
-});
-
-document.querySelector("#calendar-connect").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  setCalendarOperation("Opening Google authorization…");
-  const response = await sendCalendarMessage("APPLYOS_CALENDAR_CONNECT");
-  button.disabled = false;
-  if (!response?.ok) {
-    const cancelled = response?.status?.reason === "cancelled";
-    setCalendarOperation(cancelled ? "Connection cancelled. Scout reminders were not changed." : response?.error || "Google Calendar could not be connected.", cancelled ? "" : "error");
-    await refreshCalendarStatus();
-    return;
-  }
-  setCalendarOperation(response.status?.already_authorized ? "Google Calendar was already authorized." : "Google Calendar connected. Existing reminders remain unsynced until you choose Sync all.", "success");
-  await refreshCalendarStatus();
-});
-
-document.querySelector("#calendar-auto-sync").addEventListener("change", async (event) => {
-  await ApplyOS.updateSettings({ calendar_auto_sync: event.target.checked });
-  setCalendarOperation(event.target.checked ? "New open reminders will sync automatically." : "Automatic synchronization is off.", "success");
-});
-
-document.querySelector("#calendar-sync-all").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  setCalendarOperation("Synchronizing open reminders…");
-  const response = await sendCalendarMessage("APPLYOS_CALENDAR_SYNC_ALL");
-  button.disabled = false;
-  const result = response?.result;
-  if (!response?.ok) setCalendarOperation(response?.error || "Some reminders could not be synchronized.", "error");
-  else setCalendarOperation(`${result.synced} open reminder${result.synced === 1 ? "" : "s"} synchronized.`, "success");
-});
-
-document.querySelector("#calendar-disconnect").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  setCalendarOperation("Disconnecting Google Calendar…");
-  const response = await sendCalendarMessage("APPLYOS_CALENDAR_DISCONNECT");
-  button.disabled = false;
-  if (!response?.ok) setCalendarOperation(response?.error || "Google Calendar could not be disconnected.", "error");
-  else setCalendarOperation("Disconnected. Existing Google events were left in place.", "success");
-  await refreshCalendarStatus();
 });
 
 document.querySelector("#enable-desktop-notifications").addEventListener("click", async () => {
@@ -531,61 +433,4 @@ document.querySelector("#test-ai").addEventListener("click", async (event) => {
     if (status.success) document.querySelector("#ai-model").value = status.config.chatModel;
   } catch (error) { result.className = "error"; result.textContent = error.message; }
   button.disabled = false;
-});
-
-document.querySelector("#export-backup").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  const password = document.querySelector("#backup-password").value;
-  const confirmation = document.querySelector("#backup-confirm").value;
-  if (password !== confirmation) { setBackupStatus("Backup passwords do not match.", "error"); return; }
-  button.disabled = true; setBackupStatus("Encrypting locally…");
-  try {
-    const result = await ApplyOS.exportEncryptedBackup(password, chrome.runtime.getManifest().version);
-    const date = new Date().toISOString().slice(0, 10);
-    downloadTextFile(result.serialized, `scout-backup-${date}.scout`);
-    setBackupStatus(`Encrypted backup downloaded · ${backupSummaryText(result.summary)}`, "success");
-    document.querySelector("#backup-password").value = ""; document.querySelector("#backup-confirm").value = "";
-  } catch (error) { setBackupStatus(error.message, "error"); }
-  finally { button.disabled = false; }
-});
-
-document.querySelector("#preview-backup").addEventListener("click", async (event) => {
-  const button = event.currentTarget;
-  const file = document.querySelector("#backup-file").files?.[0];
-  if (!file) { setBackupStatus("Choose an encrypted Scout backup first.", "error"); return; }
-  if (file.size > 64 * 1024 * 1024) { setBackupStatus("This backup is larger than the 64 MB restore limit.", "error"); return; }
-  button.disabled = true; pendingRestore = null; setBackupStatus("Decrypting locally…");
-  try {
-    pendingRestore = await ApplyOS.decryptBackup(await file.text(), document.querySelector("#restore-password").value);
-    const summary = ApplyOS.backupSummary(pendingRestore);
-    document.querySelector("#backup-summary-title").textContent = `Scout ${summary.extension_version} backup`;
-    document.querySelector("#backup-summary").textContent = backupSummaryText(summary);
-    document.querySelector("#restore-confirmation").value = "";
-    document.querySelector("#restore-backup").disabled = true;
-    document.querySelector("#backup-preview").classList.remove("hidden");
-    setBackupStatus("Backup decrypted. Review the counts before restoring.", "success");
-  } catch (error) { document.querySelector("#backup-preview").classList.add("hidden"); setBackupStatus(error.message, "error"); }
-  finally { button.disabled = false; }
-});
-
-document.querySelector("#restore-confirmation").addEventListener("input", (event) => {
-  document.querySelector("#restore-backup").disabled = !pendingRestore || event.target.value !== "RESTORE";
-});
-
-document.querySelector("#restore-backup").addEventListener("click", async (event) => {
-  if (!pendingRestore || document.querySelector("#restore-confirmation").value !== "RESTORE") return;
-  if (!await ScoutDialog.confirm({ eyebrow: "RESTORE CHECKPOINT", title: "Replace this browser’s Scout data?", message: "You already reviewed and unlocked this encrypted backup.", consequences: ["Current browser workspace data will be replaced.", "Scout will keep a one-step local undo checkpoint."], tone: "danger", confirmLabel: "Restore backup", cancelLabel: "Keep current data" })) return;
-  const button = event.currentTarget; button.disabled = true; setBackupStatus("Restoring and validating workspace data…");
-  try {
-    const summary = await ApplyOS.restoreBackup(pendingRestore);
-    setBackupStatus(`Restore complete · ${backupSummaryText(summary)} · Reloading…`, "success");
-    window.setTimeout(() => window.location.reload(), 700);
-  } catch (error) { setBackupStatus(`Restore failed and previous data was recovered: ${error.message}`, "error"); button.disabled = false; }
-});
-
-document.querySelector("#undo-restore").addEventListener("click", async (event) => {
-  if (!await ScoutDialog.confirm({ eyebrow: "UNDO RESTORE", title: "Return to the previous workspace?", message: "Scout will use the local checkpoint created before your last successful restore.", confirmLabel: "Undo restore", cancelLabel: "Keep restored data" })) return;
-  const button = event.currentTarget; button.disabled = true; setBackupStatus("Recovering the pre-restore checkpoint…");
-  try { await ApplyOS.undoLastRestore(); setBackupStatus("Previous workspace state recovered. Reloading…", "success"); window.setTimeout(() => window.location.reload(), 700); }
-  catch (error) { setBackupStatus(error.message, "error"); button.disabled = false; }
 });

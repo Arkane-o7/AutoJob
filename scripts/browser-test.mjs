@@ -587,6 +587,14 @@ async function main() {
     assert.equal(await accountProbe.locator("#google-sign-in").count(), 1, "Google is available as a supported sign-in method");
     assert.equal(await accountProbe.locator("#linkedin-sign-in").count(), 1, "LinkedIn is available as a supported sign-in method");
     assert.equal(await accountProbe.locator("#email-request-form").count(), 1, "email code login is available as a supported sign-in method");
+    assert.equal(await accountProbe.locator("#calendar").count(), 1, "Google Calendar belongs to Account & sync");
+    assert.equal(await accountProbe.locator("#backup").count(), 1, "encrypted recovery belongs to Account & sync");
+    assert.equal(await accountProbe.locator('.account-nav a[href="#calendar"]').count(), 1, "account navigation links directly to Calendar");
+    assert.equal(await accountProbe.locator('.account-nav a[href="#backup"]').count(), 1, "account navigation links directly to backup and recovery");
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await accountProbe.screenshot({ path: resolve(root, "output/playwright/account-sync.png"), fullPage: true });
+    }
     assert.match(await accountProbe.locator(".auth-consent").textContent(), /stores personal data you choose to provide/i, "account consent keeps the storage disclosure concise and clear");
     assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/terms.html"]').count(), 1, "account consent links the User Agreement");
     assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/index.html"]').count(), 1, "account consent links the Privacy Policy");
@@ -668,6 +676,7 @@ async function main() {
     await profileProbe.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
     await profileProbe.locator("#profile-form").waitFor({ state: "visible" });
     assert.equal(await profileProbe.getByText("Run setup again").count(), 0, "the full profile editor must not expose a competing setup editor");
+    assert.equal(await profileProbe.locator("#calendar, #backup").count(), 0, "profile settings stay focused on profile and answer data");
     await profileProbe.locator("button[type='submit']").click();
     await profileProbe.waitForFunction(() => document.querySelector("#save-status")?.textContent === "Saved just now");
     const savedProfileState = await worker.evaluate(async () => {
@@ -1056,19 +1065,19 @@ async function main() {
     assert.equal(await helper.locator("#action-contact-filter").count(), 1, "Today exposes a contact filter");
 
     const backupPassword = "fixture backup password";
-    const optionsPage = await context.newPage();
+    const accountToolsPage = await context.newPage();
     const optionsNativeDialogs = [];
-    optionsPage.on("dialog", async (dialog) => { optionsNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
-    await optionsPage.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
+    accountToolsPage.on("dialog", async (dialog) => { optionsNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
+    await accountToolsPage.goto(`chrome-extension://${extensionId}/account.html`, { waitUntil: "domcontentloaded" });
     const calendarActionIds = await worker.evaluate(async () => {
       const primary = await ApplyOS.upsertAction({ kind: "custom", title: "Calendar lifecycle reminder", due_at: "2026-08-20T09:00:00.000Z", priority: "high", channel: "other", notes: "Packaged extension calendar test", source: "user" });
       const exported = await ApplyOS.upsertAction({ kind: "custom", title: "Portable calendar reminder", due_at: "2026-08-21T10:00:00.000Z", priority: "medium", channel: "other", notes: "ICS download test", source: "user" });
       return { primary: primary.id, exported: exported.id };
     });
-    await optionsPage.locator("#calendar-connection-label").waitFor({ state: "visible" });
-    assert.match(await optionsPage.locator("#calendar-connection-label").textContent(), /disconnected/i, "calendar settings begin disconnected without interactive authorization");
-    await optionsPage.locator("#calendar-connect").click();
-    await optionsPage.waitForFunction(() => document.querySelector("#calendar-connection-state")?.textContent === "CONNECTED");
+    await accountToolsPage.locator("#calendar-connection-label").waitFor({ state: "visible" });
+    assert.match(await accountToolsPage.locator("#calendar-connection-label").textContent(), /disconnected/i, "calendar settings begin disconnected without interactive authorization");
+    await accountToolsPage.locator("#calendar-connect").click();
+    await accountToolsPage.waitForFunction(() => document.querySelector("#calendar-connection-state")?.textContent === "CONNECTED");
     const connectedCalendar = await worker.evaluate(() => ({ events: Object.keys(globalThis.__scoutCalendarMock.events).length, identityCalls: globalThis.__scoutCalendarMock.identityCalls }));
     assert.equal(connectedCalendar.events, 0, "connecting does not automatically export existing reminders");
     assert.equal(connectedCalendar.identityCalls.filter((call) => call.interactive).length, 1, "connect button starts the only interactive authorization request");
@@ -1139,32 +1148,36 @@ async function main() {
     assert.equal(persistedCalendarState.exported.status, "open", "manual ICS export never changes the Scout action");
     console.log("PASS mocked Google Calendar connect, sync, update, delete, reload, and ICS export lifecycle");
 
-    await optionsPage.locator("#new-profile").click();
-    const profileDialog = optionsPage.locator(".scout-system-dialog");
+    const profileControlsPage = await context.newPage();
+    profileControlsPage.on("dialog", async (dialog) => { optionsNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
+    await profileControlsPage.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
+    await profileControlsPage.locator("#new-profile").click();
+    const profileDialog = profileControlsPage.locator(".scout-system-dialog");
     await profileDialog.waitFor({ state: "visible" });
     assert.equal(await profileDialog.locator("[data-scout-dialog-field]").count(), 2, "profile creation uses one reviewed in-page form instead of sequential prompts");
     await profileDialog.locator(".scout-system-dialog__cancel").click();
     await profileDialog.waitFor({ state: "hidden" });
+    await profileControlsPage.close();
     assert.deepEqual(optionsNativeDialogs, [], "profile and backup controls never open native browser dialogs");
-    const encryptedBackup = await optionsPage.evaluate((password) => ApplyOS.exportEncryptedBackup(password, "browser-test"), backupPassword);
-    await optionsPage.locator("#backup-password").fill(backupPassword);
-    await optionsPage.locator("#backup-confirm").fill(backupPassword);
-    const downloadPromise = optionsPage.waitForEvent("download");
-    await optionsPage.locator("#export-backup").click();
+    const encryptedBackup = await accountToolsPage.evaluate((password) => ApplyOS.exportEncryptedBackup(password, "browser-test"), backupPassword);
+    await accountToolsPage.locator("#backup-password").fill(backupPassword);
+    await accountToolsPage.locator("#backup-confirm").fill(backupPassword);
+    const downloadPromise = accountToolsPage.waitForEvent("download");
+    await accountToolsPage.locator("#export-backup").click();
     const download = await downloadPromise;
     assert.match(download.suggestedFilename(), /^scout-backup-\d{4}-\d{2}-\d{2}\.scout$/, "encrypted export uses the Scout backup extension");
-    await optionsPage.locator("#backup-file").setInputFiles({ name: "fixture.applyos", mimeType: "application/json", buffer: Buffer.from(encryptedBackup.serialized) });
-    await optionsPage.locator("#restore-password").fill(backupPassword);
-    await optionsPage.locator("#preview-backup").click();
-    await optionsPage.locator("#backup-preview").waitFor({ state: "visible" });
-    const backupSummary = await optionsPage.locator("#backup-summary").textContent();
+    await accountToolsPage.locator("#backup-file").setInputFiles({ name: "fixture.applyos", mimeType: "application/json", buffer: Buffer.from(encryptedBackup.serialized) });
+    await accountToolsPage.locator("#restore-password").fill(backupPassword);
+    await accountToolsPage.locator("#preview-backup").click();
+    await accountToolsPage.locator("#backup-preview").waitFor({ state: "visible" });
+    const backupSummary = await accountToolsPage.locator("#backup-summary").textContent();
     assert.match(backupSummary, /applications/);
     assert.match(backupSummary, /contacts/);
     assert.match(backupSummary, /interviews/);
-    assert.equal(await optionsPage.locator("#restore-backup").isDisabled(), true, "restore stays locked before the typed confirmation");
-    await optionsPage.locator("#restore-confirmation").fill("RESTORE");
-    assert.equal(await optionsPage.locator("#restore-backup").isEnabled(), true, "reviewed backup can be explicitly unlocked for restore");
-    await optionsPage.close();
+    assert.equal(await accountToolsPage.locator("#restore-backup").isDisabled(), true, "restore stays locked before the typed confirmation");
+    await accountToolsPage.locator("#restore-confirmation").fill("RESTORE");
+    assert.equal(await accountToolsPage.locator("#restore-backup").isEnabled(), true, "reviewed backup can be explicitly unlocked for restore");
+    await accountToolsPage.close();
     assert.equal(dashboardMessages.some((message) => /aria-hidden|retained focus/i.test(message)), false, "drawer lifecycle must not hide a focused descendant");
     await helper.close();
     console.log("PASS reviewed submission, CRM, interview and encrypted backup lifecycle");

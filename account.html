@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Scout — Account</title>
+  <title>Scout — Account &amp; Sync</title>
   <link rel="icon" href="assets/icons/scout-32.png">
   <link rel="stylesheet" href="account.css">
   <link rel="stylesheet" href="shared/header.css">
@@ -64,10 +64,17 @@
         <span>Encrypted connection and user-scoped access</span>
         <span>No recruiter-facing profile in this release</span>
       </div>
+      <nav class="account-nav" aria-label="Account and sync sections">
+        <a href="#identity">Identity</a>
+        <a href="#sync-section">Workspace sync</a>
+        <a href="#calendar">Google Calendar</a>
+        <a href="#backup">Encrypted backup</a>
+        <a href="#account-controls">Account controls</a>
+      </nav>
     </aside>
 
     <div class="stack">
-      <section class="account-card hero-card" aria-labelledby="identity-title">
+      <section class="account-card hero-card" id="identity" aria-labelledby="identity-title">
         <div class="identity-heading">
           <p class="eyebrow">IDENTITY</p>
           <h2 id="identity-title">Checking your session…</h2>
@@ -148,7 +155,53 @@
         <p id="sync-detail" class="status-line" role="status" aria-live="polite">Checking workspace status…</p>
       </section>
 
-      <section class="account-card danger-zone workspace-control">
+      <section class="account-card workspace-control" id="calendar" aria-labelledby="calendar-title">
+        <div class="section-head">
+          <div><p class="eyebrow">OPTIONAL REMINDER DELIVERY</p><h2 id="calendar-title">Google Calendar</h2></div>
+          <i id="calendar-connection-state" class="connection-pill">CHECKING</i>
+        </div>
+        <p class="tool-section-copy">Put selected Scout actions on your Google account’s primary calendar. Connecting never exports existing reminders; use Sync all only when you want them there.</p>
+        <div class="calendar-settings">
+          <div class="calendar-status-row"><div><strong id="calendar-connection-label">Checking Google Calendar…</strong><span id="calendar-connection-detail">Reading your connection status.</span></div></div>
+          <label class="calendar-toggle"><input id="calendar-auto-sync" type="checkbox" disabled><span><strong>Auto-sync new reminders</strong><small>Only newly created open actions are added automatically. Existing actions require Sync all.</small></span></label>
+          <div class="calendar-actions"><button id="calendar-connect" type="button" disabled>Connect Google Calendar</button><button id="calendar-sync-all" class="outline" type="button" disabled>Sync all open reminders</button><button id="calendar-disconnect" class="outline danger hidden" type="button">Disconnect</button></div>
+          <p id="calendar-operation-status" class="calendar-operation-status" role="status" aria-live="polite"></p>
+        </div>
+        <div class="calendar-privacy"><strong>Before you connect</strong><p>Scout can create, update, and remove events on calendars you own. Event details are stored in your Google Calendar. Scout uses this access only for your primary calendar and queries only events carrying Scout’s private action identifiers; it does not import or browse unrelated events. Disconnecting stops future synchronization but leaves existing Google events in place.</p></div>
+      </section>
+
+      <section class="account-card workspace-control" id="backup" aria-labelledby="backup-title">
+        <div class="section-head">
+          <div><p class="eyebrow">PORTABILITY &amp; RECOVERY</p><h2 id="backup-title">Encrypted recovery backup</h2></div>
+          <span class="state-pill private">LOCAL</span>
+        </div>
+        <p class="tool-section-copy">Export your complete Scout workspace—including profiles, saved resume files, applications, contacts, interviews, and answer memory—as one password-encrypted file. The password is never stored or sent anywhere.</p>
+        <div class="backup-grid">
+          <article class="backup-card">
+            <p class="eyebrow">EXPORT</p><h3>Protect a copy</h3>
+            <label><span>Backup password</span><input id="backup-password" type="password" autocomplete="new-password" minlength="10" placeholder="At least 10 characters"></label>
+            <label><span>Confirm password</span><input id="backup-confirm" type="password" autocomplete="new-password" minlength="10"></label>
+            <button id="export-backup" type="button" disabled>Download encrypted backup <span>→</span></button>
+            <small>Keep the password safe. Scout cannot recover it.</small>
+          </article>
+          <article class="backup-card">
+            <p class="eyebrow">IMPORT</p><h3>Review before replacing</h3>
+            <label><span>Encrypted Scout backup</span><input id="backup-file" type="file" accept=".scout,.applyos,application/json"></label>
+            <label><span>Backup password</span><input id="restore-password" type="password" autocomplete="current-password"></label>
+            <button id="preview-backup" type="button" disabled>Decrypt &amp; preview <span>→</span></button>
+            <small>Nothing changes until you review the counts and confirm Restore.</small>
+          </article>
+        </div>
+        <div id="backup-preview" class="backup-preview hidden" aria-live="polite">
+          <div><p class="eyebrow">DECRYPTED PREVIEW</p><h3 id="backup-summary-title">Backup ready to review</h3><p id="backup-summary"></p></div>
+          <label><span>Type RESTORE to replace workspace data</span><input id="restore-confirmation" autocomplete="off" placeholder="RESTORE"></label>
+          <button id="restore-backup" type="button" disabled>Replace workspace data</button>
+        </div>
+        <div class="backup-status-row"><strong id="backup-status">Sign in to access workspace backups.</strong><button id="undo-restore" class="outline hidden" type="button">Undo last restore</button></div>
+        <div class="backup-safety"><strong>Encrypted and review-first</strong><span>Encryption uses AES-256-GCM with a password-derived key. Restore creates a one-step rollback checkpoint on this device and never uploads the backup file.</span></div>
+      </section>
+
+      <section class="account-card danger-zone workspace-control" id="account-controls">
         <p class="eyebrow">ACCOUNT CONTROL</p>
         <h2>Your data</h2>
         <p>Export a copy of your workspace or permanently delete your Scout account. Deletion includes cloud records, sessions, uploaded resume files, and this account’s cached workspace on this browser.</p>
@@ -162,6 +215,7 @@
   <script src="shared/followup.js"></script>
   <script src="shared/profiles.js"></script>
   <script src="shared/storage.js"></script>
+  <script src="shared/backup.js"></script>
   <script src="shared/header.js"></script>
   <script src="shared/dialog.js"></script>
   <script src="account.js"></script>

@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Scout — Profile & Settings</title>
+    <title>Scout — Profile & Answers</title>
     <link rel="icon" href="assets/icons/scout-32.png">
     <link rel="stylesheet" href="options.css">
     <link rel="stylesheet" href="shared/header.css">
@@ -47,8 +47,6 @@
           <a href="#resume">06 — Resume</a>
           <a href="#answers">07 — Custom answers</a>
           <a href="#local-ai">08 — Local AI</a>
-          <a href="#calendar">09 — Calendar</a>
-          <a href="#backup">10 — Encrypted backup</a>
         </nav>
       </aside>
 
@@ -188,48 +186,6 @@
           </details>
         </section>
 
-        <section id="calendar">
-          <div class="section-number">09</div>
-          <div class="section-heading"><p>OPTIONAL REMINDER DELIVERY</p><h2>Google Calendar</h2></div>
-          <p class="section-copy">Put selected Scout actions on your Google account’s primary calendar. Existing reminders are never exported when you connect; use Sync all only when you want them there.</p>
-          <div class="calendar-settings">
-            <div class="calendar-status-row"><div><strong id="calendar-connection-label">Google Calendar disconnected</strong><span id="calendar-connection-detail">Connect only when you want Scout to manage calendar events.</span></div><i id="calendar-connection-state">DISCONNECTED</i></div>
-            <label class="calendar-toggle"><input id="calendar-auto-sync" type="checkbox"><span><strong>Auto-sync new reminders</strong><small>Only newly created open actions are added automatically. Existing actions require Sync all.</small></span></label>
-            <div class="calendar-actions"><button id="calendar-connect" type="button">Connect Google Calendar</button><button id="calendar-sync-all" class="outline" type="button" disabled>Sync all open reminders</button><button id="calendar-disconnect" class="outline danger hidden" type="button">Disconnect</button></div>
-            <p id="calendar-operation-status" class="calendar-operation-status" role="status" aria-live="polite"></p>
-          </div>
-          <div class="calendar-privacy"><strong>Before you connect</strong><p>Scout can create, update, and remove events on calendars you own. Event details are stored in your Google Calendar. Scout uses this access only for your primary calendar and queries only events carrying Scout’s private action identifiers; it does not import or browse unrelated events. Disconnecting stops future synchronization but leaves existing Google events in place.</p></div>
-        </section>
-
-        <section id="backup">
-          <div class="section-number">10</div>
-          <div class="section-heading"><p>PORTABILITY & RECOVERY</p><h2>Encrypted recovery backup</h2></div>
-          <p class="section-copy">Export your complete Scout workspace—including profiles, saved resume files, applications, contacts, interviews, and answer memory—as one password-encrypted file. The password is never stored or sent anywhere.</p>
-          <div class="backup-grid">
-            <article class="backup-card">
-              <p class="kicker">EXPORT</p><h3>Protect a copy</h3>
-              <label><span>Backup password</span><input id="backup-password" type="password" autocomplete="new-password" minlength="10" placeholder="At least 10 characters"></label>
-              <label><span>Confirm password</span><input id="backup-confirm" type="password" autocomplete="new-password" minlength="10"></label>
-              <button id="export-backup" type="button">Download encrypted backup →</button>
-              <small>Keep the password safe. Scout cannot recover it.</small>
-            </article>
-            <article class="backup-card">
-              <p class="kicker">IMPORT</p><h3>Review before replacing</h3>
-              <label><span>Encrypted Scout backup</span><input id="backup-file" type="file" accept=".scout,.applyos,application/json"></label>
-              <label><span>Backup password</span><input id="restore-password" type="password" autocomplete="current-password"></label>
-              <button id="preview-backup" type="button">Decrypt & preview →</button>
-              <small>Nothing changes until you review the counts and confirm Restore.</small>
-            </article>
-          </div>
-          <div id="backup-preview" class="backup-preview hidden" aria-live="polite">
-            <div><p class="kicker">DECRYPTED PREVIEW</p><h3 id="backup-summary-title">Backup ready to review</h3><p id="backup-summary"></p></div>
-            <label><span>Type RESTORE to replace workspace data</span><input id="restore-confirmation" autocomplete="off" placeholder="RESTORE"></label>
-            <button id="restore-backup" type="button" disabled>Replace workspace data</button>
-          </div>
-          <div class="backup-status-row"><strong id="backup-status">No backup operation running.</strong><button id="undo-restore" class="hidden" type="button">Undo last restore</button></div>
-          <div class="safety-note"><strong>Encrypted and review-first</strong><span>Encryption uses AES-256-GCM with a password-derived key. Restore creates a one-step rollback checkpoint on this device and never uploads the backup file.</span></div>
-        </section>
-
         <div class="save-bar" data-tour-target="save-profile">
           <div><strong id="save-status">Unsaved changes</strong><span>Review autofilled forms before submitting.</span></div>
           <button type="submit">Save profile <span>→</span></button>
@@ -243,7 +199,6 @@
     <script src="shared/ai.js"></script>
     <script src="shared/graph.js"></script>
     <script src="shared/storage.js"></script>
-    <script src="shared/backup.js"></script>
     <script src="shared/resume-parser.js"></script>
     <script src="shared/header.js"></script>
     <script src="shared/dialog.js"></script>

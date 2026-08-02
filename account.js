@@ -6,6 +6,7 @@ const ui = {
   email: ""
 };
 let handoffScheduled = false;
+let pendingRestore = null;
 
 function maybeContinue(status) {
   // The dashboard requires a configured cloud build before it will open. Keep
@@ -68,6 +69,97 @@ async function send(type, extra = {}) {
   const response = await chrome.runtime.sendMessage({ type, ...extra });
   if (!response?.ok) throw new Error(response?.error || "Scout could not complete that request.");
   return response;
+}
+
+function workspaceToolsAvailable(status = ui.status) {
+  return status?.migrationRequired !== true
+    && status?.legacyWorkspaceAvailable !== true
+    && (status?.workspaceReady === true || status?.offlineAuthorized === true);
+}
+
+function setBackupStatus(message, tone = "") {
+  const status = $("#backup-status");
+  status.textContent = message;
+  status.className = tone;
+}
+
+function setCalendarOperation(message = "", tone = "") {
+  const element = $("#calendar-operation-status");
+  element.textContent = message;
+  element.className = `calendar-operation-status${tone ? ` ${tone}` : ""}`;
+}
+
+async function sendCalendarMessage(type, details = {}) {
+  try { return await chrome.runtime.sendMessage({ type, ...details }); }
+  catch (error) { return { ok: false, error: error.message }; }
+}
+
+async function refreshCalendarStatus(existingState = null) {
+  const [response, state] = await Promise.all([
+    sendCalendarMessage("APPLYOS_CALENDAR_STATUS"),
+    existingState ? Promise.resolve(existingState) : ApplyOS.getState()
+  ]);
+  const connected = response?.ok && response.status?.connected === true;
+  const badge = $("#calendar-connection-state");
+  badge.textContent = connected ? "CONNECTED" : "DISCONNECTED";
+  badge.classList.toggle("connected", connected);
+  text("#calendar-connection-label", connected ? "Google Calendar connected" : "Google Calendar disconnected");
+  text("#calendar-connection-detail", connected ? "Scout will use the primary calendar only." : "Connect only when you want Scout to manage calendar events.");
+  visible("#calendar-connect", !connected);
+  visible("#calendar-disconnect", connected);
+  $("#calendar-connect").disabled = false;
+  $("#calendar-disconnect").disabled = false;
+  $("#calendar-sync-all").disabled = !connected;
+  $("#calendar-auto-sync").checked = state.settings.calendar_auto_sync === true;
+  $("#calendar-auto-sync").disabled = !connected;
+  return connected;
+}
+
+function setWorkspaceToolsAvailability(status) {
+  const available = workspaceToolsAvailable(status);
+  for (const control of document.querySelectorAll("#backup input, #backup button")) control.toggleAttribute("disabled", !available);
+  $("#restore-backup").disabled = !available || !pendingRestore || $("#restore-confirmation").value !== "RESTORE";
+  $("#undo-restore").disabled = !available;
+  if (!available) {
+    for (const control of document.querySelectorAll("#calendar input, #calendar button")) control.toggleAttribute("disabled", true);
+    text("#calendar-connection-state", "SIGN IN");
+    $("#calendar-connection-state").classList.remove("connected");
+    text("#calendar-connection-label", "Workspace access required");
+    text("#calendar-connection-detail", "Sign in to manage Google Calendar delivery.");
+    setBackupStatus("Sign in to access workspace backups.");
+  }
+  return available;
+}
+
+async function refreshWorkspaceTools(status) {
+  if (!setWorkspaceToolsAvailability(status)) return;
+  try {
+    const state = await ApplyOS.getState();
+    await refreshCalendarStatus(state);
+    visible("#undo-restore", await ApplyOS.hasRestoreCheckpoint());
+    if (!$("#backup-status").className) setBackupStatus("No backup operation running.");
+  } catch (error) {
+    setCalendarOperation(`Calendar status unavailable: ${error.message}`, "error");
+    setBackupStatus(`Backup status unavailable: ${error.message}`, "error");
+  }
+}
+
+function downloadTextFile(contents, filename) {
+  const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function backupSummaryText(summary) {
+  const created = new Date(summary.created_at);
+  const date = Number.isNaN(created.getTime()) ? summary.created_at : created.toLocaleString();
+  return `${summary.profiles} profiles · ${summary.applications} applications · ${summary.contacts} contacts · ${summary.actions || 0} open actions · ${summary.activities || 0} interactions · ${summary.interviews} interviews · ${summary.answers} remembered answers · Created ${date} with Scout ${summary.extension_version}`;
 }
 
 function formatTime(value) {
@@ -188,6 +280,7 @@ function render(status) {
   }
 
   for (const element of [$("#download-cloud"), $("#delete-account")]) element.disabled = !signedIn;
+  setWorkspaceToolsAvailability(status);
 }
 
 function renderConflict(conflict = null) {
@@ -246,6 +339,7 @@ async function refresh() {
     const response = await send("APPLYOS_CLOUD_STATUS");
     ui.authState = response.status?.signedIn ? "signed-in" : "signed-out";
     render(response.status);
+    await refreshWorkspaceTools(response.status);
     maybeContinue(response.status);
     if (response.status?.signedIn) await loadConflict(response.status).catch((error) => setStatus("#conflict-status", error.message, "error"));
     else renderConflict(null);
@@ -422,6 +516,130 @@ $("#discard-legacy").addEventListener("click", async () => {
   } finally {
     setBusy(button, false);
     $("#import-legacy").disabled = false;
+  }
+});
+
+$("#calendar-connect").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  setCalendarOperation("Opening Google authorization…");
+  const response = await sendCalendarMessage("APPLYOS_CALENDAR_CONNECT");
+  button.disabled = false;
+  if (!response?.ok) {
+    const cancelled = response?.status?.reason === "cancelled";
+    setCalendarOperation(cancelled ? "Connection cancelled. Scout reminders were not changed." : response?.error || "Google Calendar could not be connected.", cancelled ? "" : "error");
+    await refreshCalendarStatus();
+    return;
+  }
+  setCalendarOperation(response.status?.already_authorized ? "Google Calendar was already authorized." : "Google Calendar connected. Existing reminders remain unsynced until you choose Sync all.", "success");
+  await refreshCalendarStatus();
+});
+
+$("#calendar-auto-sync").addEventListener("change", async (event) => {
+  await ApplyOS.updateSettings({ calendar_auto_sync: event.target.checked });
+  setCalendarOperation(event.target.checked ? "New open reminders will sync automatically." : "Automatic synchronization is off.", "success");
+});
+
+$("#calendar-sync-all").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  setCalendarOperation("Synchronizing open reminders…");
+  const response = await sendCalendarMessage("APPLYOS_CALENDAR_SYNC_ALL");
+  button.disabled = false;
+  const result = response?.result;
+  if (!response?.ok) setCalendarOperation(response?.error || "Some reminders could not be synchronized.", "error");
+  else setCalendarOperation(`${result.synced} open reminder${result.synced === 1 ? "" : "s"} synchronized.`, "success");
+});
+
+$("#calendar-disconnect").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  setCalendarOperation("Disconnecting Google Calendar…");
+  const response = await sendCalendarMessage("APPLYOS_CALENDAR_DISCONNECT");
+  button.disabled = false;
+  if (!response?.ok) setCalendarOperation(response?.error || "Google Calendar could not be disconnected.", "error");
+  else setCalendarOperation("Disconnected. Existing Google events were left in place.", "success");
+  await refreshCalendarStatus();
+});
+
+$("#export-backup").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const password = $("#backup-password").value;
+  const confirmation = $("#backup-confirm").value;
+  if (password !== confirmation) { setBackupStatus("Backup passwords do not match.", "error"); return; }
+  button.disabled = true;
+  setBackupStatus("Encrypting locally…");
+  try {
+    const result = await ApplyOS.exportEncryptedBackup(password, chrome.runtime.getManifest().version);
+    const date = new Date().toISOString().slice(0, 10);
+    downloadTextFile(result.serialized, `scout-backup-${date}.scout`);
+    setBackupStatus(`Encrypted backup downloaded · ${backupSummaryText(result.summary)}`, "success");
+    $("#backup-password").value = "";
+    $("#backup-confirm").value = "";
+  } catch (error) {
+    setBackupStatus(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#preview-backup").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const file = $("#backup-file").files?.[0];
+  if (!file) { setBackupStatus("Choose an encrypted Scout backup first.", "error"); return; }
+  if (file.size > 64 * 1024 * 1024) { setBackupStatus("This backup is larger than the 64 MB restore limit.", "error"); return; }
+  button.disabled = true;
+  pendingRestore = null;
+  setBackupStatus("Decrypting locally…");
+  try {
+    pendingRestore = await ApplyOS.decryptBackup(await file.text(), $("#restore-password").value);
+    const summary = ApplyOS.backupSummary(pendingRestore);
+    text("#backup-summary-title", `Scout ${summary.extension_version} backup`);
+    text("#backup-summary", backupSummaryText(summary));
+    $("#restore-confirmation").value = "";
+    $("#restore-backup").disabled = true;
+    visible("#backup-preview", true);
+    setBackupStatus("Backup decrypted. Review the counts before restoring.", "success");
+  } catch (error) {
+    visible("#backup-preview", false);
+    setBackupStatus(error.message, "error");
+  } finally {
+    button.disabled = false;
+  }
+});
+
+$("#restore-confirmation").addEventListener("input", (event) => {
+  $("#restore-backup").disabled = !pendingRestore || event.target.value !== "RESTORE";
+});
+
+$("#restore-backup").addEventListener("click", async (event) => {
+  if (!pendingRestore || $("#restore-confirmation").value !== "RESTORE") return;
+  if (!await ScoutDialog.confirm({ eyebrow: "RESTORE CHECKPOINT", title: "Replace this browser’s Scout data?", message: "You already reviewed and unlocked this encrypted backup.", consequences: ["Current browser workspace data will be replaced.", "Scout will keep a one-step local undo checkpoint."], tone: "danger", confirmLabel: "Restore backup", cancelLabel: "Keep current data" })) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  setBackupStatus("Restoring and validating workspace data…");
+  try {
+    const summary = await ApplyOS.restoreBackup(pendingRestore);
+    setBackupStatus(`Restore complete · ${backupSummaryText(summary)} · Reloading…`, "success");
+    window.setTimeout(() => window.location.reload(), 700);
+  } catch (error) {
+    setBackupStatus(`Restore failed and previous data was recovered: ${error.message}`, "error");
+    button.disabled = false;
+  }
+});
+
+$("#undo-restore").addEventListener("click", async (event) => {
+  if (!await ScoutDialog.confirm({ eyebrow: "UNDO RESTORE", title: "Return to the previous workspace?", message: "Scout will use the local checkpoint created before your last successful restore.", confirmLabel: "Undo restore", cancelLabel: "Keep restored data" })) return;
+  const button = event.currentTarget;
+  button.disabled = true;
+  setBackupStatus("Recovering the pre-restore checkpoint…");
+  try {
+    await ApplyOS.undoLastRestore();
+    setBackupStatus("Previous workspace state recovered. Reloading…", "success");
+    window.setTimeout(() => window.location.reload(), 700);
+  } catch (error) {
+    setBackupStatus(error.message, "error");
+    button.disabled = false;
   }
 });
 
