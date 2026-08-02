@@ -69,6 +69,15 @@ select { cursor: pointer; }
 .reminder-settings .setting-field small { grid-column:2; }
 .desktop-reminder-row { display:flex; align-items:center; gap:12px; }.desktop-reminder-row span { color:var(--muted); font:700 8px/1 "Courier New",monospace; text-transform:uppercase; }
 .reminder-settings small { color:var(--muted); font-size:9px; line-height:1.5; }
+.calendar-settings { display:grid; gap:18px; padding:22px; border:1px solid var(--ink); background:rgba(255,255,255,.18); box-shadow:5px 5px 0 rgba(23,24,20,.12); }
+.calendar-status-row { display:flex; align-items:center; justify-content:space-between; gap:20px; padding-bottom:17px; border-bottom:1px solid rgba(23,24,20,.25); }
+.calendar-status-row div { display:grid; gap:5px; }.calendar-status-row strong { font:500 20px/1.1 Georgia,serif; }.calendar-status-row span { color:var(--muted); font-size:10px; }
+.calendar-status-row i { padding:7px 9px; border:1px solid var(--ink); color:var(--muted); font:800 8px/1 "Courier New",monospace; font-style:normal; letter-spacing:.08em; }
+.calendar-status-row i.connected { background:var(--acid); color:var(--ink); }
+.calendar-toggle { display:flex; align-items:flex-start; gap:12px; }.calendar-toggle input { flex:0 0 auto; width:17px; min-height:17px; margin-top:2px; }.calendar-toggle span { display:grid; gap:4px; }.calendar-toggle strong { font-size:11px; }.calendar-toggle small { color:var(--muted); font-size:9px; line-height:1.45; }
+.calendar-actions { display:flex; flex-wrap:wrap; gap:9px; }.calendar-actions button { min-height:39px; padding:10px 13px; border:1px solid var(--ink); background:var(--acid); color:var(--ink); font-size:9px; font-weight:800; cursor:pointer; }.calendar-actions button.outline { background:transparent; }.calendar-actions button.danger { color:var(--danger); border-color:var(--danger); }.calendar-actions button:disabled { cursor:not-allowed; opacity:.45; }.calendar-actions button.hidden { display:none; }
+.calendar-operation-status { min-height:16px; margin:0; color:var(--muted); font:700 9px/1.4 "Courier New",monospace; }.calendar-operation-status.error { color:var(--danger); }.calendar-operation-status.success { color:#397618; }
+.calendar-privacy { margin-top:18px; padding:18px; border-left:4px solid var(--acid); background:rgba(23,24,20,.055); }.calendar-privacy strong { font:700 9px "Courier New",monospace; letter-spacing:.08em; text-transform:uppercase; }.calendar-privacy p { margin:8px 0 0; color:var(--muted); font-size:10px; line-height:1.6; }
 .answer-row { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.1fr) minmax(120px, .45fr) 34px; gap: 14px; align-items: end; margin-bottom: 18px; padding: 18px; border: 1px solid rgba(23,24,20,.25); background: rgba(255,255,255,.15); }
 .answer-row.learned-answer-row { border-left: 4px solid var(--acid); }
 .learned-answer-badge { display:inline-block; margin-left:7px; padding:3px 5px; color:var(--ink); background:var(--acid); font:800 7px/1 "Courier New",monospace; letter-spacing:.06em; text-transform:uppercase; }

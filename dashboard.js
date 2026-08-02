@@ -237,7 +237,10 @@ function actionRowHTML(action) {
     : action.status === "open"
       ? `<label class="action-inline-date"><span class="sr-only">New due date</span><input data-action-reschedule-date="${action.id}" type="datetime-local" value="${toDateTimeInput(effective)}"></label><button data-action-reschedule="${action.id}" type="button">Reschedule</button><button class="done" data-action-done="${action.id}" type="button">Done</button><button data-action-snooze="${action.id}" type="button">Snooze</button><button data-action-skip="${action.id}" type="button">Skip</button>`
       : `<button data-open-action="${action.id}" type="button">View</button>`;
-  return `<article class="action-row ${action.agenda ? "is-agenda" : ""} ${action.group === "overdue" ? "is-overdue" : ""} ${action.group === "done" ? "is-done" : ""}" data-action-id="${action.id}"><i class="action-row-priority ${action.priority}"></i><button class="action-row-main" type="button" ${mainTarget}><strong>${escapeHTML(action.title)}</strong><span>${escapeHTML(action.agenda ? "Agenda" : titleCase(action.kind))} · ${escapeHTML(actionContext(action))}</span></button><time class="action-row-time" datetime="${escapeHTML(effective)}">${escapeHTML(dateTimeLabel(effective))}${action.snoozed_until ? " · snoozed" : ""}</time><div class="action-row-controls">${controls}</div></article>`;
+  const calendar = action.google_calendar_event_id
+    ? `<i class="calendar-inline">Calendar</i>`
+    : action.calendar_sync_status === "error" ? `<i class="calendar-inline error">Sync error</i>` : "";
+  return `<article class="action-row ${action.agenda ? "is-agenda" : ""} ${action.group === "overdue" ? "is-overdue" : ""} ${action.group === "done" ? "is-done" : ""}" data-action-id="${action.id}"><i class="action-row-priority ${action.priority}"></i><button class="action-row-main" type="button" ${mainTarget}><strong>${escapeHTML(action.title)}</strong><span>${escapeHTML(action.agenda ? "Agenda" : titleCase(action.kind))} · ${escapeHTML(actionContext(action))}${calendar}</span></button><time class="action-row-time" datetime="${escapeHTML(effective)}">${escapeHTML(dateTimeLabel(effective))}${action.snoozed_until ? " · snoozed" : ""}</time><div class="action-row-controls">${controls}</div></article>`;
 }
 
 function actionItems() {
@@ -550,6 +553,53 @@ function openActivityForm(prefill = {}) {
   $("#activity-summary").focus();
 }
 
+function renderActionCalendar(action) {
+  const panel = $("#action-calendar");
+  const available = Boolean(action && action.status === "open");
+  panel.classList.toggle("hidden", !available);
+  if (!available) return;
+  const mapped = Boolean(action.google_calendar_event_id);
+  const status = action.calendar_sync_status || "not_synced";
+  const labels = {
+    syncing: "Synchronizing with Google Calendar…",
+    synced: "Added to Google Calendar",
+    error: "Google Calendar needs attention",
+    disconnected: "Google Calendar is disconnected",
+    not_synced: "Not added to Google Calendar"
+  };
+  $("#action-calendar-status").textContent = labels[status] || labels.not_synced;
+  $("#action-calendar-error").textContent = action.calendar_sync_error || "";
+  $("#action-calendar-sync").textContent = status === "error" ? "Retry Google Calendar" : mapped ? "Update Google Calendar" : "Add to Google Calendar";
+  $("#action-calendar-remove").classList.toggle("hidden", !mapped);
+}
+
+async function actionCalendarRequest(type, actionId) {
+  const buttons = [$("#action-calendar-sync"), $("#action-calendar-remove"), $("#action-calendar-download")];
+  buttons.forEach((button) => { button.disabled = true; });
+  let response;
+  try { response = await chrome.runtime.sendMessage({ type, actionId }); }
+  catch (error) { response = { ok: false, error: error.message }; }
+  await load();
+  const action = state.reminders.find((item) => item.id === actionId);
+  renderActionCalendar(action);
+  buttons.forEach((button) => { button.disabled = false; });
+  toast(response?.ok ? (type === "APPLYOS_CALENDAR_REMOVE_ACTION" ? "Removed from Google Calendar" : "Google Calendar updated") : response?.error || "Calendar sync failed; the Scout action was preserved");
+  return response;
+}
+
+function downloadActionCalendar(action) {
+  const contents = ApplyOS.calendarICS(action, state);
+  const url = URL.createObjectURL(new Blob([contents], { type: "text/calendar;charset=utf-8" }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = ApplyOS.calendarFilename(action);
+  anchor.style.display = "none";
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 function openAction(id = null, context = {}) {
   const action = state.reminders.find((item) => item.id === id) || null;
   const active = document.activeElement; actionReturnFocus = active instanceof HTMLElement ? active : null; selectedActionId = action?.id || null;
@@ -560,6 +610,7 @@ function openAction(id = null, context = {}) {
   $("#action-contact").innerHTML = `<option value="">None</option>` + state.contacts.map((item) => `<option value="${item.id}">${escapeHTML(item.name)}${item.company ? ` · ${escapeHTML(item.company)}` : ""}</option>`).join("");
   $("#action-application").value = action?.application_id || context.application_id || ""; $("#action-contact").value = action?.contact_id || context.contact_id || "";
   $("#action-done").classList.toggle("hidden", !action || action.status !== "open"); $("#action-delete").classList.toggle("hidden", !action || action.status !== "open");
+  renderActionCalendar(action);
   openDrawer($("#action-detail")); $("#action-title").focus();
 }
 
@@ -1135,6 +1186,18 @@ $("#action-done").addEventListener("click", async () => { if (!selectedActionId)
 $("#action-delete").addEventListener("click", async () => {
   if (!selectedActionId || !await ScoutDialog.confirm({ eyebrow: "CANCEL ACTION", title: "Cancel this action?", message: "It will move out of your open action list and remain visible under Done / skipped.", tone: "danger", confirmLabel: "Cancel action", cancelLabel: "Keep action" })) return;
   await ApplyOS.cancelAction(selectedActionId); await load(); closeAction(); toast("Action cancelled");
+});
+$("#action-calendar-sync").addEventListener("click", async () => {
+  if (selectedActionId) await actionCalendarRequest("APPLYOS_CALENDAR_SYNC_ACTION", selectedActionId);
+});
+$("#action-calendar-remove").addEventListener("click", async () => {
+  if (selectedActionId) await actionCalendarRequest("APPLYOS_CALENDAR_REMOVE_ACTION", selectedActionId);
+});
+$("#action-calendar-download").addEventListener("click", () => {
+  const action = state.reminders.find((item) => item.id === selectedActionId && item.status === "open");
+  if (!action) return;
+  try { downloadActionCalendar(action); toast("Calendar event downloaded"); }
+  catch (error) { toast(error.message); }
 });
 
 $("#add-interview").addEventListener("click", () => openInterviewEditor());

@@ -10,7 +10,7 @@ const scripts = [
   manifest.background?.service_worker,
   ...manifest.content_scripts.flatMap((entry) => entry.js || []),
   "popup.js", "options.js", "dashboard.js", "onboarding.js", "account.js",
-  "shared/constants.js", "shared/contact-import.js", "shared/matching.js", "shared/followup.js", "shared/action-notifications.js", "shared/storage.js", "shared/backup.js", "shared/resume-parser.js", "shared/cloud-config.js", "shared/cloud.js", "shared/header.js", "shared/dialog.js", "shared/tour.js"
+  "shared/constants.js", "shared/contact-import.js", "shared/matching.js", "shared/followup.js", "shared/action-notifications.js", "shared/storage.js", "shared/calendar.js", "shared/backup.js", "shared/resume-parser.js", "shared/cloud-config.js", "shared/cloud.js", "shared/header.js", "shared/dialog.js", "shared/tour.js"
 ].filter(Boolean);
 
 for (const file of new Set(scripts)) {

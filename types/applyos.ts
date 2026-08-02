@@ -16,6 +16,7 @@ export type InterviewType = "recruiter_screen" | "hiring_manager" | "technical" 
 export type InterviewFormat = "video" | "phone" | "onsite" | "other";
 export type ActionKind = "application_follow_up" | "application_final_follow_up" | "contact_follow_up" | "interview_prep" | "interview_thank_you" | "custom";
 export type ActionStatus = "open" | "done" | "skipped" | "cancelled";
+export type CalendarSyncStatus = "not_synced" | "syncing" | "synced" | "error" | "disconnected";
 export type ActionChannel = "email" | "linkedin" | "phone" | "meeting" | "other";
 export type ContactActivityType = "email" | "linkedin" | "phone" | "meeting" | "note";
 export type ContactActivityDirection = "outbound" | "inbound" | "none";
@@ -119,6 +120,11 @@ export interface ActionItem {
   source: "system" | "user";
   completed_at: string | null;
   last_notified_at: string | null;
+  google_calendar_event_id: string | null;
+  google_calendar_id: string | null;
+  calendar_sync_status: CalendarSyncStatus;
+  calendar_synced_at: string | null;
+  calendar_sync_error: string | null;
   context_snapshot: {
     company?: string;
     role?: string;
@@ -297,6 +303,7 @@ export interface ApplyOSState {
     follow_up_offsets_days: number[];
     desktop_notifications_enabled: boolean;
     notification_digest_time: string;
+    calendar_auto_sync: boolean;
     cloud_sync_enabled?: boolean;
     resume_sync_enabled?: boolean;
   };

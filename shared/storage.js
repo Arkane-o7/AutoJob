@@ -280,7 +280,22 @@
         return { ...item, company_id: company?.id || null };
       });
       return recordMigration(draft, 6, 7);
-    }
+    },
+    7: (state) => recordMigration({
+      ...state,
+      reminders: (Array.isArray(state.reminders) ? state.reminders : []).map((item) => ({
+        ...item,
+        google_calendar_event_id: null,
+        google_calendar_id: null,
+        calendar_sync_status: "not_synced",
+        calendar_synced_at: null,
+        calendar_sync_error: null
+      })),
+      settings: {
+        ...(isRecord(state.settings) ? state.settings : {}),
+        calendar_auto_sync: false
+      }
+    }, 7, 8)
   };
 
   function migrateState(input) {
@@ -355,6 +370,11 @@
       source: item.source === "user" ? "user" : "system",
       completed_at: completedAt,
       last_notified_at: safeNullableDate(item.last_notified_at),
+      google_calendar_event_id: safeNullableString(item.google_calendar_event_id),
+      google_calendar_id: safeNullableString(item.google_calendar_id),
+      calendar_sync_status: ApplyOS.CALENDAR_SYNC_STATUSES.includes(item.calendar_sync_status) ? item.calendar_sync_status : "not_synced",
+      calendar_synced_at: safeNullableDate(item.calendar_synced_at),
+      calendar_sync_error: safeNullableString(item.calendar_sync_error),
       context_snapshot: safeContextSnapshot(item.context_snapshot),
       created_at: safeDateString(item.created_at, now),
       updated_at: safeDateString(item.updated_at, safeDateString(item.created_at, now))
@@ -551,7 +571,8 @@
         notification_enabled: true,
         follow_up_offsets_days: [7, 14],
         desktop_notifications_enabled: false,
-        notification_digest_time: "09:00"
+        notification_digest_time: "09:00",
+        calendar_auto_sync: false
       },
       migrated_at: ApplyOS.nowISO()
     };
@@ -616,6 +637,7 @@
     if (!state.settings.follow_up_offsets_days.length) state.settings.follow_up_offsets_days = [7, 14];
     state.settings.desktop_notifications_enabled = state.settings.desktop_notifications_enabled === true;
     state.settings.notification_digest_time = /^([01]\d|2[0-3]):[0-5]\d$/.test(state.settings.notification_digest_time) ? state.settings.notification_digest_time : "09:00";
+    state.settings.calendar_auto_sync = state.settings.calendar_auto_sync === true;
     syncNextActionProjections(state);
     state.migrated_at = safeDateString(state.migrated_at, ApplyOS.nowISO());
     return state;

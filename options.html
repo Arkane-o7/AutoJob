@@ -47,7 +47,8 @@
           <a href="#resume">06 — Resume</a>
           <a href="#answers">07 — Custom answers</a>
           <a href="#local-ai">08 — Local AI</a>
-          <a href="#backup">09 — Encrypted backup</a>
+          <a href="#calendar">09 — Calendar</a>
+          <a href="#backup">10 — Encrypted backup</a>
         </nav>
       </aside>
 
@@ -187,8 +188,21 @@
           </details>
         </section>
 
-        <section id="backup">
+        <section id="calendar">
           <div class="section-number">09</div>
+          <div class="section-heading"><p>OPTIONAL REMINDER DELIVERY</p><h2>Google Calendar</h2></div>
+          <p class="section-copy">Put selected Scout actions on your Google account’s primary calendar. Existing reminders are never exported when you connect; use Sync all only when you want them there.</p>
+          <div class="calendar-settings">
+            <div class="calendar-status-row"><div><strong id="calendar-connection-label">Google Calendar disconnected</strong><span id="calendar-connection-detail">Connect only when you want Scout to manage calendar events.</span></div><i id="calendar-connection-state">DISCONNECTED</i></div>
+            <label class="calendar-toggle"><input id="calendar-auto-sync" type="checkbox"><span><strong>Auto-sync new reminders</strong><small>Only newly created open actions are added automatically. Existing actions require Sync all.</small></span></label>
+            <div class="calendar-actions"><button id="calendar-connect" type="button">Connect Google Calendar</button><button id="calendar-sync-all" class="outline" type="button" disabled>Sync all open reminders</button><button id="calendar-disconnect" class="outline danger hidden" type="button">Disconnect</button></div>
+            <p id="calendar-operation-status" class="calendar-operation-status" role="status" aria-live="polite"></p>
+          </div>
+          <div class="calendar-privacy"><strong>Before you connect</strong><p>Scout can create, update, and remove events on calendars you own. Event details are stored in your Google Calendar. Scout uses this access only for your primary calendar and queries only events carrying Scout’s private action identifiers; it does not import or browse unrelated events. Disconnecting stops future synchronization but leaves existing Google events in place.</p></div>
+        </section>
+
+        <section id="backup">
+          <div class="section-number">10</div>
           <div class="section-heading"><p>PORTABILITY & RECOVERY</p><h2>Encrypted recovery backup</h2></div>
           <p class="section-copy">Export your complete Scout workspace—including profiles, saved resume files, applications, contacts, interviews, and answer memory—as one password-encrypted file. The password is never stored or sent anywhere.</p>
           <div class="backup-grid">

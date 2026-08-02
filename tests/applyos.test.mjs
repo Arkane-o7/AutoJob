@@ -42,7 +42,7 @@ test("migrates legacy profile without removing it", async () => {
   assert.equal(state.resume_versions[0].name, "ada.pdf");
 });
 
-test("migrates a v2 state through v7 without losing applications or the legacy profile", async () => {
+test("migrates a v2 state through v8 without losing applications or the legacy profile", async () => {
   const profile = { firstName: "Ada", email: "ada@example.com" };
   const application = {
     id: "app_existing",
@@ -77,12 +77,12 @@ test("migrates a v2 state through v7 without losing applications or the legacy p
   });
 
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 7);
+  assert.equal(state.schema_version, 8);
   assert.equal(state.revision, 0);
   assert.equal(state.applications.length, 1);
   assert.equal(state.applications[0].id, "app_existing");
   assert.equal(state.applications[0].notes, "Keep this note");
-  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5], [5, 6], [6, 7]]));
+  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8]]));
   assert.equal(state.contacts.length, 0);
   assert.equal(state.interviews.length, 0);
   assert.equal(data.profile.email, "ada@example.com");
@@ -107,7 +107,7 @@ test("state migration is idempotent and does not increment the mutation revision
 
   assert.equal(first.revision, 0);
   assert.equal(second.revision, 0);
-  assert.equal(second.migration_history.length, 5);
+  assert.equal(second.migration_history.length, 6);
   assert.deepEqual(data.applyos_state, storedAfterFirstRead);
 });
 
@@ -250,7 +250,7 @@ test("schema v6 migrates application, contact, and interview next actions exactl
     }
   });
   const first = await ApplyOS.ensureState();
-  assert.equal(first.schema_version, 7);
+  assert.equal(first.schema_version, 8);
   assert.equal(first.reminders.filter((item) => item.kind === "application_follow_up").length, 1);
   assert.equal(first.reminders.filter((item) => item.kind === "contact_follow_up").length, 1);
   assert.equal(first.reminders.filter((item) => item.kind === "interview_thank_you").length, 1);
@@ -260,7 +260,7 @@ test("schema v6 migrates application, contact, and interview next actions exactl
   assert.equal(JSON.stringify(data.applyos_state), serialized);
 });
 
-test("schema v7 migrates only exact normalized company names and preserves display strings", async () => {
+test("schema v7 company migration survives the v8 calendar upgrade and preserves display strings", async () => {
   const { ApplyOS } = await runtime({
     applyos_state: {
       schema_version: 6,
@@ -276,7 +276,7 @@ test("schema v7 migrates only exact normalized company names and preserves displ
     }
   });
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 7);
+  assert.equal(state.schema_version, 8);
   assert.equal(state.companies.length, 2);
   assert.equal(state.applications[0].company, "  Acme   Corp  ");
   assert.equal(state.applications[0].company_id, state.applications[1].company_id);
@@ -615,7 +615,7 @@ test("stores corrections and reuses the best site-aware learned answer", async (
   });
   assert.equal(learned.answer, "4");
   const state = await ApplyOS.getState();
-  assert.equal(state.schema_version, 7);
+  assert.equal(state.schema_version, 8);
   assert.equal(state.learned_answers.length, 1);
   const match = ApplyOS.OfflynCore.bestLearnedAnswer("How many years have you handled large datasets", state.learned_answers, {
     site: "example.myworkdayjobs.com",

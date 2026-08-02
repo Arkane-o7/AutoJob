@@ -5,10 +5,14 @@
   "description": "A private, review-first job application CRM and autofill assistant.",
   "permissions": ["storage", "unlimitedStorage", "alarms", "webNavigation", "identity"],
   "optional_permissions": ["notifications"],
-  "host_permissions": ["https://hkmrpkxiaadhlwpieyve.supabase.co/*"],
+  "host_permissions": ["https://hkmrpkxiaadhlwpieyve.supabase.co/*", "https://www.googleapis.com/*", "https://oauth2.googleapis.com/*"],
   "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*", "http://localhost:54321/*", "http://127.0.0.1:54321/*"],
   "background": {
     "service_worker": "background.js"
+  },
+  "oauth2": {
+    "client_id": "000000000000-scout-development.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/calendar.events.owned"]
   },
   "icons": {
     "16": "assets/icons/scout-16.png",

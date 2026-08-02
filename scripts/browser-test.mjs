@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { access, mkdir, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, resolve } from "node:path";
@@ -107,6 +107,55 @@ async function installBrowserAccount(worker) {
     await ApplyOS.ensureGraph();
     await ApplyOS.persistActiveUserCache(userId);
   }, { fakeProfile: profile, userId: "11111111-1111-4111-8111-111111111111" });
+}
+
+async function installCalendarMock(worker) {
+  await worker.evaluate(() => {
+    globalThis.__scoutCalendarMock = { token: "", events: {}, calls: [], nextId: 1, identityCalls: [] };
+    const mock = globalThis.__scoutCalendarMock;
+    const response = (status, body = null) => ({ status, ok: status >= 200 && status < 300, async json() { return body; } });
+    const identity = {
+      async getAuthToken(details) {
+        mock.identityCalls.push({ interactive: details.interactive, scopes: details.scopes });
+        if (!mock.token && !details.interactive) throw new Error("OAuth2 not granted.");
+        if (!mock.token) mock.token = "mock-google-calendar-token";
+        return { token: mock.token };
+      },
+      async removeCachedAuthToken({ token }) { if (token === mock.token) mock.token = ""; }
+    };
+    const request = async (url, init = {}) => {
+      const parsed = new URL(url);
+      const method = init.method || "GET";
+      const body = init.body ? JSON.parse(init.body) : null;
+      mock.calls.push({ url, method, body });
+      if (parsed.hostname === "oauth2.googleapis.com") return response(200, {});
+      const eventMatch = parsed.pathname.match(/\/calendars\/primary\/events\/([^/]+)$/);
+      if (method === "GET") {
+        const property = parsed.searchParams.get("privateExtendedProperty") || "";
+        const actionId = property.split("=").slice(1).join("=");
+        return response(200, { items: Object.values(mock.events).filter((event) => event.extendedProperties?.private?.scout_action_id === actionId) });
+      }
+      if (method === "POST" && parsed.pathname.endsWith("/calendars/primary/events")) {
+        const event = { id: `mock-event-${mock.nextId++}`, ...body };
+        mock.events[event.id] = event;
+        return response(200, event);
+      }
+      if (method === "PATCH" && eventMatch) {
+        const id = decodeURIComponent(eventMatch[1]);
+        if (!mock.events[id]) return response(404, { error: { message: "Event not found" } });
+        mock.events[id] = { id, ...body };
+        return response(200, mock.events[id]);
+      }
+      if (method === "DELETE" && eventMatch) {
+        const id = decodeURIComponent(eventMatch[1]);
+        if (!mock.events[id]) return response(404, { error: { message: "Event not found" } });
+        delete mock.events[id];
+        return response(204);
+      }
+      return response(400, { error: { message: "Unexpected mocked Google request" } });
+    };
+    ApplyOS.configureCalendarSync({ identity, request });
+  });
 }
 
 async function sendFill(worker) {
@@ -282,6 +331,7 @@ async function main() {
     await waitForSignedOutInitialization(worker);
     await installBrowserAccount(worker);
     await waitForExtensionInitialization(worker);
+    await installCalendarMock(worker);
 
     const page = await context.newPage();
     await Promise.all(context.pages().filter((candidate) => candidate !== page).map((candidate) => candidate.close().catch(() => {})));
@@ -1010,6 +1060,85 @@ async function main() {
     const optionsNativeDialogs = [];
     optionsPage.on("dialog", async (dialog) => { optionsNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
     await optionsPage.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
+    const calendarActionIds = await worker.evaluate(async () => {
+      const primary = await ApplyOS.upsertAction({ kind: "custom", title: "Calendar lifecycle reminder", due_at: "2026-08-20T09:00:00.000Z", priority: "high", channel: "other", notes: "Packaged extension calendar test", source: "user" });
+      const exported = await ApplyOS.upsertAction({ kind: "custom", title: "Portable calendar reminder", due_at: "2026-08-21T10:00:00.000Z", priority: "medium", channel: "other", notes: "ICS download test", source: "user" });
+      return { primary: primary.id, exported: exported.id };
+    });
+    await optionsPage.locator("#calendar-connection-label").waitFor({ state: "visible" });
+    assert.match(await optionsPage.locator("#calendar-connection-label").textContent(), /disconnected/i, "calendar settings begin disconnected without interactive authorization");
+    await optionsPage.locator("#calendar-connect").click();
+    await optionsPage.waitForFunction(() => document.querySelector("#calendar-connection-state")?.textContent === "CONNECTED");
+    const connectedCalendar = await worker.evaluate(() => ({ events: Object.keys(globalThis.__scoutCalendarMock.events).length, identityCalls: globalThis.__scoutCalendarMock.identityCalls }));
+    assert.equal(connectedCalendar.events, 0, "connecting does not automatically export existing reminders");
+    assert.equal(connectedCalendar.identityCalls.filter((call) => call.interactive).length, 1, "connect button starts the only interactive authorization request");
+
+    await helper.reload({ waitUntil: "domcontentloaded" });
+    await helper.locator("[data-section='actions']").click();
+    let calendarRow = helper.locator(".action-row", { hasText: "Calendar lifecycle reminder" });
+    await calendarRow.locator(".action-row-main").click();
+    await helper.locator("#action-calendar-sync").click();
+    await helper.waitForFunction(() => document.querySelector("#action-calendar-status")?.textContent === "Added to Google Calendar");
+    const initiallySynced = await worker.evaluate(async (id) => {
+      const action = (await ApplyOS.getState()).reminders.find((item) => item.id === id);
+      return { action, event: globalThis.__scoutCalendarMock.events[action.google_calendar_event_id] };
+    }, calendarActionIds.primary);
+    assert.equal(initiallySynced.action.calendar_sync_status, "synced", "individual reminder stores its Google event mapping");
+    assert.equal(initiallySynced.event.summary, "[Scout] Calendar lifecycle reminder", "mocked Google API receives the standard Scout event");
+
+    await helper.reload({ waitUntil: "domcontentloaded" });
+    await helper.locator("[data-section='actions']").click();
+    calendarRow = helper.locator(".action-row", { hasText: "Calendar lifecycle reminder" });
+    assert.match(await calendarRow.locator(".calendar-inline").textContent(), /calendar/i, "calendar mapping remains visible after extension reload");
+    await calendarRow.locator(".action-row-main").click();
+    await helper.locator("#action-title").fill("Calendar lifecycle reminder updated");
+    await helper.locator("#action-due").fill("2026-08-20T14:45");
+    await helper.locator("#action-form button[type='submit']").click();
+    const updatedCalendar = await worker.evaluate(async (id) => {
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const action = (await ApplyOS.getState()).reminders.find((item) => item.id === id);
+        const event = globalThis.__scoutCalendarMock.events[action.google_calendar_event_id];
+        if (event?.summary === "[Scout] Calendar lifecycle reminder updated") return { action, event };
+        await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+      }
+      throw new Error("Calendar event update did not arrive");
+    }, calendarActionIds.primary);
+    assert.equal(updatedCalendar.event.summary, "[Scout] Calendar lifecycle reminder updated", "editing a synced action updates the Google event");
+
+    calendarRow = helper.locator(".action-row", { hasText: "Calendar lifecycle reminder updated" });
+    await calendarRow.locator("[data-action-done]").click();
+    const completedCalendar = await worker.evaluate(async (id) => {
+      const deadline = Date.now() + 5000;
+      while (Date.now() < deadline) {
+        const action = (await ApplyOS.getState()).reminders.find((item) => item.id === id);
+        if (action?.status === "done" && !action.google_calendar_event_id && Object.keys(globalThis.__scoutCalendarMock.events).length === 0) return action;
+        await new Promise((resolveWait) => setTimeout(resolveWait, 50));
+      }
+      throw new Error("Completed action did not remove its calendar event");
+    }, calendarActionIds.primary);
+    assert.equal(completedCalendar.status, "done", "calendar deletion preserves completed Scout history");
+
+    const exportRow = helper.locator(".action-row", { hasText: "Portable calendar reminder" });
+    await exportRow.locator(".action-row-main").click();
+    const icsDownloadPromise = helper.waitForEvent("download");
+    await helper.locator("#action-calendar-download").click();
+    const icsDownload = await icsDownloadPromise;
+    assert.equal(icsDownload.suggestedFilename(), "portable-calendar-reminder.ics", "manual calendar export uses an ICS file");
+    const icsContents = await readFile(await icsDownload.path(), "utf8");
+    assert.match(icsContents, /BEGIN:VCALENDAR[\s\S]*TRIGGER:-PT10M[\s\S]*END:VCALENDAR/, "downloaded ICS includes a ten-minute alarm");
+    await helper.reload({ waitUntil: "domcontentloaded" });
+    const persistedCalendarState = await worker.evaluate(async (ids) => {
+      const state = await ApplyOS.getState();
+      return {
+        completed: state.reminders.find((item) => item.id === ids.primary),
+        exported: state.reminders.find((item) => item.id === ids.exported)
+      };
+    }, calendarActionIds);
+    assert.equal(persistedCalendarState.completed.status, "done", "completed calendar lifecycle survives reload");
+    assert.equal(persistedCalendarState.exported.status, "open", "manual ICS export never changes the Scout action");
+    console.log("PASS mocked Google Calendar connect, sync, update, delete, reload, and ICS export lifecycle");
+
     await optionsPage.locator("#new-profile").click();
     const profileDialog = optionsPage.locator(".scout-system-dialog");
     await profileDialog.waitFor({ state: "visible" });

@@ -24,6 +24,11 @@ Plan 009 was started on 2026-08-02 after Plans 008 and 008.1 were completed. It
 adds first-class companies and a focused Waiting-for-reply workflow without
 mailbox integrations, enrichment, scoring, or automation.
 
+Plan 010 was started on 2026-08-02 after Plan 009 was completed. It adds a
+small, one-way Google Calendar reminder integration plus manual `.ics` export.
+Automated and packaged-extension verification pass; the installed-extension
+Google test-account smoke test remains its final release gate.
+
 These files are planning artifacts, not automatic repository instructions. An
 executor must act on a plan only after the maintainer explicitly selects it.
 
@@ -55,6 +60,7 @@ recruiter permissions. It must not be marketed as identity verification.
 | [008](008-action-driven-relationship-workspace.md) | Product hardening | Turn follow-ups and contacts into an action-driven relationship workspace | P1 | L | Current schema-v5/cloud baseline | DONE (2026-08-02; automated and installed-extension acceptance passed) |
 | [008.1](008-1-correctness-and-release-verification.md) | Release hardening | Correct lifecycle, Today, imports, and verification gaps | P0 | M | 008 | DONE (2026-08-02; 49/49 pgTAP, 83/83 unit, 10/10 ATS, 11/11 extension scenarios) |
 | [009](009-companies-and-waiting.md) | Product workflow | Add first-class companies and Waiting states | P1 | M | 008, 008.1 | DONE (2026-08-02; automated and installed-extension smoke verification passed) |
+| [010](010-calendar-sync.md) | Product workflow | Sync Scout reminders to Google Calendar and export `.ics` events | P1 | M | 009 | IN PROGRESS |
 
 Status values: `TODO` | `IN PROGRESS` | `DONE` | `BLOCKED` | `REJECTED`.
 

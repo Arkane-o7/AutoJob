@@ -21,6 +21,9 @@ assert.equal(config.allowRuntimeConfig, false, "production runtime configuration
 assert.match(config.projectUrl || "", /^https:\/\/[a-z0-9-]+\.supabase\.co$/i, "production project URL is missing or invalid");
 assert.match(config.publishableKey || "", /^sb_publishable_[A-Za-z0-9_-]+$/, "production publishable key is missing or invalid");
 assert.ok((manifest.host_permissions || []).includes(`${config.projectUrl}/*`), "manifest is missing the configured Supabase origin");
+assert.match(manifest.oauth2?.client_id || "", /^[a-z0-9-]+\.apps\.googleusercontent\.com$/i, "production Google Calendar OAuth client ID is missing or invalid");
+assert.notEqual(manifest.oauth2?.client_id, "000000000000-scout-development.apps.googleusercontent.com", "production build still uses the development Google OAuth placeholder");
+assert.deepEqual(manifest.oauth2?.scopes, ["https://www.googleapis.com/auth/calendar.events.owned"], "production build requests an unexpected Google Calendar scope");
 assert.doesNotMatch(account, /Supabase project URL|Publishable key|Save client configuration/i, "customer account UI exposes deployment controls");
 
 console.log(`Production Scout build is configured for ${new URL(config.projectUrl).host}.`);

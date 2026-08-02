@@ -48,6 +48,37 @@ function setBackupStatus(message, tone = "") {
   status.className = tone;
 }
 
+function setCalendarOperation(message = "", tone = "") {
+  const element = document.querySelector("#calendar-operation-status");
+  element.textContent = message;
+  element.className = `calendar-operation-status${tone ? ` ${tone}` : ""}`;
+}
+
+async function sendCalendarMessage(type, details = {}) {
+  try { return await chrome.runtime.sendMessage({ type, ...details }); }
+  catch (error) { return { ok: false, error: error.message }; }
+}
+
+async function refreshCalendarStatus(existingState = null) {
+  const [response, state] = await Promise.all([
+    sendCalendarMessage("APPLYOS_CALENDAR_STATUS"),
+    existingState ? Promise.resolve(existingState) : ApplyOS.getState()
+  ]);
+  const connected = response?.ok && response.status?.connected === true;
+  const badge = document.querySelector("#calendar-connection-state");
+  badge.textContent = connected ? "CONNECTED" : "DISCONNECTED";
+  badge.classList.toggle("connected", connected);
+  document.querySelector("#calendar-connection-label").textContent = connected ? "Google Calendar connected" : "Google Calendar disconnected";
+  document.querySelector("#calendar-connection-detail").textContent = connected ? "Scout will use the primary calendar only." : "Connect only when you want Scout to manage calendar events.";
+  document.querySelector("#calendar-connect").classList.toggle("hidden", connected);
+  document.querySelector("#calendar-disconnect").classList.toggle("hidden", !connected);
+  document.querySelector("#calendar-sync-all").disabled = !connected;
+  const autoSync = document.querySelector("#calendar-auto-sync");
+  autoSync.checked = state.settings.calendar_auto_sync === true;
+  autoSync.disabled = !connected;
+  return connected;
+}
+
 function downloadTextFile(contents, filename) {
   const url = URL.createObjectURL(new Blob([contents], { type: "application/json" }));
   const anchor = document.createElement("a");
@@ -292,6 +323,7 @@ async function initialize() {
   document.querySelector("#enable-notifications").checked = state.settings.notification_enabled !== false;
   document.querySelector("#follow-up-offsets").value = (state.settings.follow_up_offsets_days || [7, 14]).join(", ");
   document.querySelector("#notification-digest-time").value = state.settings.notification_digest_time || "09:00";
+  await refreshCalendarStatus(state);
   const desktopGranted = await chrome.permissions?.contains?.({ permissions: ["notifications"] }).catch(() => false);
   document.querySelector("#desktop-notification-status").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Enabled" : desktopGranted ? "Permission granted · turn on" : "Not enabled";
   document.querySelector("#enable-desktop-notifications").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Disable desktop reminders" : "Enable desktop reminders";
@@ -339,8 +371,8 @@ addAnswerButton.addEventListener("click", () => {
   markUnsaved();
 });
 
-form.addEventListener("input", (event) => { if (!event.target.closest("#backup")) markUnsaved(); });
-form.addEventListener("change", (event) => { if (!event.target.closest("#backup")) markUnsaved(); });
+form.addEventListener("input", (event) => { if (!event.target.closest("#backup, #calendar")) markUnsaved(); });
+form.addEventListener("change", (event) => { if (!event.target.closest("#backup, #calendar")) markUnsaved(); });
 
 form.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -370,7 +402,8 @@ form.addEventListener("submit", async (event) => {
       final_follow_up_enabled: document.querySelector("#follow-up-offsets").value.split(",").map(Number).includes(14),
       notification_enabled: document.querySelector("#enable-notifications").checked,
       follow_up_offsets_days: document.querySelector("#follow-up-offsets").value.split(",").map((item) => Number(item.trim())).filter((value) => Number.isInteger(value) && value >= 1 && value <= 60),
-      notification_digest_time: document.querySelector("#notification-digest-time").value || "09:00"
+      notification_digest_time: document.querySelector("#notification-digest-time").value || "09:00",
+      calendar_auto_sync: document.querySelector("#calendar-auto-sync").checked
     });
     await ApplyOS.syncAnswerMemory(data.customAnswers, {
       authoritative: true,
@@ -405,6 +438,49 @@ form.addEventListener("submit", async (event) => {
 initialize().catch((error) => {
   document.body.inert = false;
   saveStatus.textContent = `Could not load profile — ${error.message}`;
+});
+
+document.querySelector("#calendar-connect").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  setCalendarOperation("Opening Google authorization…");
+  const response = await sendCalendarMessage("APPLYOS_CALENDAR_CONNECT");
+  button.disabled = false;
+  if (!response?.ok) {
+    const cancelled = response?.status?.reason === "cancelled";
+    setCalendarOperation(cancelled ? "Connection cancelled. Scout reminders were not changed." : response?.error || "Google Calendar could not be connected.", cancelled ? "" : "error");
+    await refreshCalendarStatus();
+    return;
+  }
+  setCalendarOperation(response.status?.already_authorized ? "Google Calendar was already authorized." : "Google Calendar connected. Existing reminders remain unsynced until you choose Sync all.", "success");
+  await refreshCalendarStatus();
+});
+
+document.querySelector("#calendar-auto-sync").addEventListener("change", async (event) => {
+  await ApplyOS.updateSettings({ calendar_auto_sync: event.target.checked });
+  setCalendarOperation(event.target.checked ? "New open reminders will sync automatically." : "Automatic synchronization is off.", "success");
+});
+
+document.querySelector("#calendar-sync-all").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  setCalendarOperation("Synchronizing open reminders…");
+  const response = await sendCalendarMessage("APPLYOS_CALENDAR_SYNC_ALL");
+  button.disabled = false;
+  const result = response?.result;
+  if (!response?.ok) setCalendarOperation(response?.error || "Some reminders could not be synchronized.", "error");
+  else setCalendarOperation(`${result.synced} open reminder${result.synced === 1 ? "" : "s"} synchronized.`, "success");
+});
+
+document.querySelector("#calendar-disconnect").addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  button.disabled = true;
+  setCalendarOperation("Disconnecting Google Calendar…");
+  const response = await sendCalendarMessage("APPLYOS_CALENDAR_DISCONNECT");
+  button.disabled = false;
+  if (!response?.ok) setCalendarOperation(response?.error || "Google Calendar could not be disconnected.", "error");
+  else setCalendarOperation("Disconnected. Existing Google events were left in place.", "success");
+  await refreshCalendarStatus();
 });
 
 document.querySelector("#enable-desktop-notifications").addEventListener("click", async () => {

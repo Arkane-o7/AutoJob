@@ -1,4 +1,11 @@
-importScripts("shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/action-notifications.js", "shared/profiles.js", "shared/ai.js", "shared/agent.js", "shared/graph.js", "shared/submission.js", "shared/storage.js", "shared/cloud-config.js", "shared/cloud.js", "shared/cloud-repository.js");
+importScripts("shared/constants.js", "shared/matching.js", "shared/followup.js", "shared/action-notifications.js", "shared/profiles.js", "shared/ai.js", "shared/agent.js", "shared/graph.js", "shared/submission.js", "shared/storage.js", "shared/calendar.js", "shared/cloud-config.js", "shared/cloud.js", "shared/cloud-repository.js");
+
+ApplyOS.configureCalendarSync({
+  identity: chrome.identity,
+  request: (url, options) => fetch(url, options),
+  getState: ApplyOS.getState,
+  mutateState: ApplyOS.mutateState
+});
 
 ApplyOS.configureCloudRepository({
   request: ApplyOS.cloudRequest,
@@ -282,6 +289,7 @@ chrome.notifications?.onClicked?.addListener((notificationId) => {
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && changes[ApplyOS.STORAGE_KEY]) {
     updateBadge(false).catch(console.error);
+    ApplyOS.CalendarSync.reconcile(changes[ApplyOS.STORAGE_KEY].oldValue, changes[ApplyOS.STORAGE_KEY].newValue).catch(console.error);
     const next = changes[ApplyOS.STORAGE_KEY].newValue;
     if (next) scheduleActionAlarms(next).catch(console.error);
   }
@@ -390,6 +398,36 @@ function queueApplicationAnswerLearning(entry, sender) {
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "APPLYOS_CALENDAR_STATUS") {
+    if (!requireTrustedSender(_sender, sendResponse)) return false;
+    ApplyOS.CalendarSync.status().then((status) => sendResponse({ ok: true, status })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CALENDAR_CONNECT") {
+    if (!requireTrustedSender(_sender, sendResponse)) return false;
+    ApplyOS.CalendarSync.connect().then((status) => sendResponse(status.connected ? { ok: true, status } : { ok: false, status, error: status.error || "Google Calendar was not connected." })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CALENDAR_SYNC_ACTION") {
+    if (!requireTrustedSender(_sender, sendResponse)) return false;
+    ApplyOS.CalendarSync.syncAction(message.actionId, { explicit: true }).then((result) => sendResponse(result.ok ? { ok: true, result } : { ok: false, result, error: result.error })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CALENDAR_REMOVE_ACTION") {
+    if (!requireTrustedSender(_sender, sendResponse)) return false;
+    ApplyOS.CalendarSync.removeAction(message.actionId).then((result) => sendResponse(result.ok ? { ok: true, result } : { ok: false, result, error: result.error })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CALENDAR_SYNC_ALL") {
+    if (!requireTrustedSender(_sender, sendResponse)) return false;
+    ApplyOS.CalendarSync.syncAll().then((result) => sendResponse({ ok: result.failed === 0, result, ...(result.failed ? { error: `${result.failed} reminder${result.failed === 1 ? "" : "s"} could not be synchronized.` } : {}) })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
+  if (message?.type === "APPLYOS_CALENDAR_DISCONNECT") {
+    if (!requireTrustedSender(_sender, sendResponse)) return false;
+    ApplyOS.CalendarSync.disconnect({ removeEvents: message.removeEvents === true }).then((status) => sendResponse({ ok: true, status })).catch((error) => sendResponse({ ok: false, error: error.message }));
+    return true;
+  }
   if (message?.type === "APPLYOS_CLOUD_STATUS") {
     ApplyOS.cloudStatus().then((status) => sendResponse({ ok: true, status })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;
