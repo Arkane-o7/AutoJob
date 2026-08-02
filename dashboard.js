@@ -34,6 +34,10 @@ let contactReturnFocus = null;
 let selectedInterviewId = null;
 let selectedActionId = null;
 let actionReturnFocus = null;
+let selectedCompanyId = null;
+let companyReturnFocus = null;
+let selectedWaitingId = null;
+let waitingReturnFocus = null;
 let snoozeActionId = null;
 let snoozeReturnFocus = null;
 let contactImportParsed = null;
@@ -162,7 +166,8 @@ function filteredApplications() {
 }
 
 function cardHTML(item) {
-  return `<article class="job-card" draggable="true" data-id="${item.id}" tabindex="0"><div class="card-top"><span class="priority ${item.priority}" title="${item.priority} priority"></span><span class="match-pill">${matchLabel(item, true)}</span></div><h3>${escapeHTML(item.role)}</h3><p>${escapeHTML(item.company)}</p><div class="card-meta"><span>${escapeHTML(item.source)}</span><span>${item.deadline ? `Due ${dateLabel(item.deadline)}` : dateLabel(item.created_at)}</span></div></article>`;
+  const waiting = state.waiting_items.filter((entry) => entry.status === "open" && entry.application_id === item.id).length;
+  return `<article class="job-card" draggable="true" data-id="${item.id}" tabindex="0"><div class="card-top"><span class="priority ${item.priority}" title="${item.priority} priority"></span><span class="card-signals">${waiting ? `<span class="waiting-chip">WAITING ${waiting}</span>` : ""}<span class="match-pill">${matchLabel(item, true)}</span></span></div><h3>${escapeHTML(item.role)}</h3><p>${escapeHTML(item.company)}</p><div class="card-meta"><span>${escapeHTML(item.source)}</span><span>${item.deadline ? `Due ${dateLabel(item.deadline)}` : dateLabel(item.created_at)}</span></div></article>`;
 }
 
 function renderBoard(items) {
@@ -191,7 +196,10 @@ function renderBoard(items) {
 }
 
 function renderList(items) {
-  elements.list.innerHTML = `<div class="table-row header"><span>ROLE / COMPANY</span><span>SOURCE</span><span>STATUS</span><span>PRIORITY</span><span>DEADLINE</span><span>MATCH</span></div>` + items.map((item) => `<div class="table-row" data-id="${item.id}" tabindex="0"><div><strong>${escapeHTML(item.role)}</strong><span>${escapeHTML(item.company)}</span></div><span>${escapeHTML(item.source)}</span><span class="status-chip">${ApplyOS.STATUS_META[item.status]?.label || item.status}</span><span>${escapeHTML(item.priority)}</span><span>${dateLabel(item.deadline)}</span><span>${matchLabel(item)}</span></div>`).join("");
+  elements.list.innerHTML = `<div class="table-row header"><span>ROLE / COMPANY</span><span>SOURCE</span><span>STATUS</span><span>PRIORITY</span><span>DEADLINE</span><span>MATCH</span></div>` + items.map((item) => {
+    const waiting = state.waiting_items.some((entry) => entry.status === "open" && entry.application_id === item.id);
+    return `<div class="table-row" data-id="${item.id}" tabindex="0"><div><strong>${escapeHTML(item.role)}</strong><span>${escapeHTML(item.company)}${waiting ? ` · <i class="waiting-inline">Waiting</i>` : ""}</span></div><span>${escapeHTML(item.source)}</span><span class="status-chip">${ApplyOS.STATUS_META[item.status]?.label || item.status}</span><span>${escapeHTML(item.priority)}</span><span>${dateLabel(item.deadline)}</span><span>${matchLabel(item)}</span></div>`;
+  }).join("");
   elements.list.querySelectorAll(".table-row[data-id]").forEach((row) => {
     row.addEventListener("click", () => openDetail(row.dataset.id));
     row.addEventListener("keydown", (event) => { if (event.key === "Enter") openDetail(row.dataset.id); });
@@ -352,7 +360,8 @@ function contactCardHTML(contact) {
   const applications = contact.application_ids.map((id) => state.applications.find((item) => item.id === id)).filter(Boolean);
   const initials = contact.name.split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "?";
   const overdue = contact.next_action_at && new Date(contact.next_action_at).getTime() < Date.now();
-  return `<article class="contact-card ${overdue ? "is-overdue" : ""}" data-contact-id="${contact.id}" tabindex="0"><div class="contact-card-top"><span class="contact-monogram">${escapeHTML(initials)}</span><span class="relationship-chip">${escapeHTML(titleCase(contact.relationship))}</span></div><h3>${escapeHTML(contact.name)}</h3><p>${escapeHTML([contact.title, contact.company].filter(Boolean).join(" · ") || "Add title and company")}</p><div class="tag-line">${(contact.tags || []).slice(0, 4).map((tag) => `<i>${escapeHTML(tag)}</i>`).join("")}</div><footer><span>${applications.length ? `${applications.length} linked role${applications.length === 1 ? "" : "s"}` : "General network"}</span><span>${contact.next_action_at ? `${overdue ? "Overdue" : "Next"} ${dateLabel(contact.next_action_at)}` : "No next action"}</span></footer></article>`;
+  const waiting = state.waiting_items.filter((entry) => entry.status === "open" && entry.contact_id === contact.id).length;
+  return `<article class="contact-card ${overdue ? "is-overdue" : ""}" data-contact-id="${contact.id}" tabindex="0"><div class="contact-card-top"><span class="contact-monogram">${escapeHTML(initials)}</span><span class="contact-signals">${waiting ? `<span class="waiting-chip">WAITING ${waiting}</span>` : ""}<span class="relationship-chip">${escapeHTML(titleCase(contact.relationship))}</span></span></div><h3>${escapeHTML(contact.name)}</h3><p>${escapeHTML([contact.title, contact.company].filter(Boolean).join(" · ") || "Add title and company")}</p><div class="tag-line">${(contact.tags || []).slice(0, 4).map((tag) => `<i>${escapeHTML(tag)}</i>`).join("")}</div><footer><span>${applications.length ? `${applications.length} linked role${applications.length === 1 ? "" : "s"}` : "General network"}</span><span>${contact.next_action_at ? `${overdue ? "Overdue" : "Next"} ${dateLabel(contact.next_action_at)}` : "No next action"}</span></footer></article>`;
 }
 
 function renderContacts() {
@@ -375,6 +384,64 @@ function renderContacts() {
   });
 }
 
+function companyOptions(selected = "") {
+  return `<option value="">Not linked</option>` + state.companies
+    .slice().sort((a, b) => a.name.localeCompare(b.name))
+    .map((item) => `<option value="${item.id}" ${item.id === selected ? "selected" : ""}>${escapeHTML(item.name)}</option>`).join("");
+}
+
+function companyCardHTML(company) {
+  const applications = state.applications.filter((item) => item.company_id === company.id && !["rejected", "closed"].includes(item.status));
+  const contacts = state.contacts.filter((item) => item.company_id === company.id);
+  const openActions = state.reminders.filter((item) => item.status === "open" && (applications.some((application) => application.id === item.application_id) || contacts.some((contact) => contact.id === item.contact_id)));
+  return `<article class="company-card" data-company-id="${company.id}" tabindex="0"><div><p class="eyebrow">${escapeHTML(company.domain || "COMPANY")}</p><h2>${escapeHTML(company.name)}</h2><p>${escapeHTML(company.notes || "Add company notes and context.")}</p></div><div class="company-card-counts"><span><strong>${applications.length}</strong> active roles</span><span><strong>${contacts.length}</strong> contacts</span><span><strong>${openActions.length}</strong> open actions</span></div><div class="tag-line">${company.tags.slice(0, 5).map((tag) => `<i>${escapeHTML(tag)}</i>`).join("")}</div></article>`;
+}
+
+function renderCompanies() {
+  const query = $("#company-search").value.trim().toLowerCase();
+  const companies = state.companies.filter((item) => [item.name, item.domain, item.website_url, item.notes, ...item.tags].join(" ").toLowerCase().includes(query))
+    .sort((a, b) => a.name.localeCompare(b.name));
+  $("#company-count").textContent = `${companies.length} ${companies.length === 1 ? "company" : "companies"}`;
+  $("#companies-empty").classList.toggle("hidden", state.companies.length > 0);
+  $("#companies-list").classList.toggle("hidden", state.companies.length === 0);
+  $("#companies-list").innerHTML = companies.map(companyCardHTML).join("");
+  $("#companies-list").querySelectorAll(".company-card").forEach((card) => {
+    card.addEventListener("click", () => openCompany(card.dataset.companyId));
+    card.addEventListener("keydown", (event) => { if (event.key === "Enter") openCompany(card.dataset.companyId); });
+  });
+}
+
+function waitingGroup(item, at = new Date()) {
+  if (item.status !== "open") return "resolved";
+  if (!item.expected_by) return "no_date";
+  const start = new Date(at); start.setHours(0, 0, 0, 0);
+  const end = new Date(start); end.setDate(end.getDate() + 1);
+  const expected = new Date(item.expected_by).getTime();
+  return expected < start.getTime() ? "overdue" : expected < end.getTime() ? "today" : "upcoming";
+}
+
+function waitingRowHTML(item) {
+  const application = state.applications.find((entry) => entry.id === item.application_id);
+  const contact = state.contacts.find((entry) => entry.id === item.contact_id);
+  const context = [application ? `${application.company} · ${application.role}` : "", contact?.name || ""].filter(Boolean).join(" · ");
+  return `<article class="waiting-row" data-waiting-id="${item.id}" tabindex="0"><div><span class="waiting-kind">${escapeHTML(titleCase(item.kind))}</span><h3>${escapeHTML(item.what)}</h3><p>${escapeHTML(context || "Linked record unavailable")}</p></div><div class="waiting-date"><span>${item.expected_by ? "Expected" : "Waiting since"}</span><strong>${escapeHTML(dateLabel(item.expected_by || item.waiting_since))}</strong></div><div class="waiting-actions"><button data-resolve-waiting="${item.id}" type="button">Resolve</button>${waitingGroup(item) === "overdue" ? `<button data-convert-waiting="${item.id}" type="button">Follow up</button>` : ""}</div></article>`;
+}
+
+function renderWaiting() {
+  const labels = { overdue: "Overdue", today: "Expected today", upcoming: "Upcoming", no_date: "No expected date" };
+  $("#waiting-groups").innerHTML = Object.entries(labels).map(([group, label]) => {
+    const items = state.waiting_items.filter((item) => waitingGroup(item) === group)
+      .sort((a, b) => new Date(a.expected_by || a.waiting_since) - new Date(b.expected_by || b.waiting_since));
+    return `<section class="action-group waiting-group"><div class="action-group-heading"><h2>${label}</h2><span>${items.length} ${items.length === 1 ? "ITEM" : "ITEMS"}</span></div><div class="waiting-stack">${items.length ? items.map(waitingRowHTML).join("") : `<div class="action-empty">No ${label.toLowerCase()} items.</div>`}</div></section>`;
+  }).join("");
+  $("#waiting-groups").querySelectorAll(".waiting-row").forEach((row) => {
+    row.addEventListener("click", (event) => { if (!event.target.closest("button")) openWaiting(row.dataset.waitingId); });
+    row.addEventListener("keydown", (event) => { if (event.key === "Enter") openWaiting(row.dataset.waitingId); });
+  });
+  $("#waiting-groups").querySelectorAll("[data-resolve-waiting]").forEach((button) => button.addEventListener("click", async () => { await ApplyOS.resolveWaitingItem(button.dataset.resolveWaiting); await load(); toast("Waiting item resolved"); }));
+  $("#waiting-groups").querySelectorAll("[data-convert-waiting]").forEach((button) => button.addEventListener("click", async () => { const action = await ApplyOS.convertWaitingToFollowUp(button.dataset.convertWaiting); await load(); toast(action ? "Follow-up added to Today" : "Only overdue items can become follow-ups"); }));
+}
+
 function render() {
   if (!state) return;
   const items = filteredApplications();
@@ -395,7 +462,7 @@ function render() {
   elements.empty.classList.toggle("hidden", state.applications.length > 0);
   elements.board.classList.toggle("hidden", currentView !== "board" || !state.applications.length);
   elements.list.classList.toggle("hidden", currentView !== "list" || !state.applications.length);
-  renderBoard(items); renderList(items); renderUpcoming(); renderActions(); renderContacts();
+  renderBoard(items); renderList(items); renderUpcoming(); renderActions(); renderContacts(); renderCompanies(); renderWaiting();
 }
 
 async function load() {
@@ -412,6 +479,7 @@ function openDetail(id) {
   }
   selectedId = id;
   $("#detail-id").value = id; $("#detail-role").value = item.role; $("#detail-company").value = item.company;
+  $("#detail-company-id").innerHTML = companyOptions(item.company_id || "");
   $("#detail-status").value = item.status; $("#detail-priority").value = item.priority; $("#detail-deadline").value = ApplyOS.toDateInput(item.deadline);
   $("#detail-follow-up").value = ApplyOS.toDateInput(item.follow_up_date); $("#detail-notes").value = item.notes || "";
   $("#detail-score").textContent = matchLabel(item); $("#detail-bar").style.width = hasJobDescription(item) ? `${item.match_score || 0}%` : "0%";
@@ -510,6 +578,7 @@ function openContact(id = null, applicationId = "") {
   $("#contact-name").value = contact?.name || "";
   $("#contact-title").value = contact?.title || "";
   $("#contact-company").value = contact?.company || state.applications.find((item) => item.id === applicationId)?.company || "";
+  $("#contact-company-id").innerHTML = companyOptions(contact?.company_id || state.applications.find((item) => item.id === applicationId)?.company_id || "");
   $("#contact-relationship").value = contact?.relationship || "recruiter";
   $("#contact-email").value = contact?.email || "";
   $("#contact-phone").value = contact?.phone || "";
@@ -546,6 +615,81 @@ function closeContact() {
   selectedContactId = null;
   if (!elements.detail.classList.contains("open")) elements.scrim.classList.add("hidden");
   contactReturnFocus = null;
+}
+
+function renderCompanyContext(company) {
+  const applications = state.applications.filter((item) => item.company_id === company.id && !["rejected", "closed"].includes(item.status));
+  const contacts = state.contacts.filter((item) => item.company_id === company.id);
+  const applicationIds = new Set(applications.map((item) => item.id));
+  const contactIds = new Set(contacts.map((item) => item.id));
+  const interviews = state.interviews.filter((item) => applicationIds.has(item.application_id) && !item.completed_at && item.scheduled_at && new Date(item.scheduled_at) >= new Date()).sort((a, b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
+  const actions = state.reminders.filter((item) => item.status === "open" && (applicationIds.has(item.application_id) || contactIds.has(item.contact_id))).sort((a, b) => new Date(a.snoozed_until || a.due_at) - new Date(b.snoozed_until || b.due_at));
+  const section = (title, items, empty) => `<section><h3>${title}</h3>${items.length ? `<div>${items.join("")}</div>` : `<p>${empty}</p>`}</section>`;
+  $("#company-context").innerHTML = [
+    section("Active applications", applications.map((item) => `<button data-company-application="${item.id}" type="button"><strong>${escapeHTML(item.role)}</strong><span>${escapeHTML(titleCase(item.status))}</span></button>`), "No active applications."),
+    section("Related contacts", contacts.map((item) => `<button data-company-contact="${item.id}" type="button"><strong>${escapeHTML(item.name)}</strong><span>${escapeHTML(item.title || titleCase(item.relationship))}</span></button>`), "No related contacts."),
+    section("Upcoming interviews", interviews.map((item) => `<article><strong>${escapeHTML(titleCase(item.type))}</strong><span>${escapeHTML(dateTimeLabel(item.scheduled_at))}</span></article>`), "No upcoming interviews."),
+    section("Open actions", actions.map((item) => `<article><strong>${escapeHTML(item.title)}</strong><span>${escapeHTML(dateLabel(item.snoozed_until || item.due_at))}</span></article>`), "No open actions.")
+  ].join("");
+  $("#company-context").querySelectorAll("[data-company-application]").forEach((button) => button.addEventListener("click", () => { closeCompany(); showDashboardSection("applications"); openDetail(button.dataset.companyApplication); }));
+  $("#company-context").querySelectorAll("[data-company-contact]").forEach((button) => button.addEventListener("click", () => { closeCompany(); showDashboardSection("contacts"); openContact(button.dataset.companyContact); }));
+}
+
+function openCompany(id = null) {
+  const company = state.companies.find((item) => item.id === id) || null;
+  const active = document.activeElement;
+  companyReturnFocus = active instanceof HTMLElement ? active : null;
+  selectedCompanyId = company?.id || null;
+  $("#company-id").value = company?.id || "";
+  $("#company-name").value = company?.name || "";
+  $("#company-domain").value = company?.domain || "";
+  $("#company-website").value = company?.website_url || "";
+  $("#company-tags").value = (company?.tags || []).join(", ");
+  $("#company-notes").value = company?.notes || "";
+  $("#delete-company").classList.toggle("hidden", !company);
+  $("#company-context").classList.toggle("hidden", !company);
+  if (company) renderCompanyContext(company);
+  openDrawer($("#company-detail"));
+  $("#company-name").focus();
+}
+
+function closeCompany() {
+  const detail = $("#company-detail");
+  if (!detail.classList.contains("open")) return;
+  closeDrawer(detail, companyReturnFocus || $("#company-search"));
+  selectedCompanyId = null;
+  companyReturnFocus = null;
+  elements.scrim.classList.add("hidden");
+}
+
+function openWaiting(id = null, context = {}) {
+  const item = state.waiting_items.find((entry) => entry.id === id) || null;
+  const active = document.activeElement;
+  waitingReturnFocus = active instanceof HTMLElement ? active : null;
+  selectedWaitingId = item?.id || null;
+  $("#waiting-id").value = item?.id || "";
+  $("#waiting-what").value = item?.what || "";
+  $("#waiting-kind").value = item?.kind || context.kind || "recruiter_reply";
+  $("#waiting-application").innerHTML = `<option value="">None</option>` + applicationOptions(item?.application_id || context.application_id || "");
+  $("#waiting-contact").innerHTML = `<option value="">None</option>` + state.contacts.map((contact) => `<option value="${contact.id}">${escapeHTML(contact.name)}${contact.company ? ` · ${escapeHTML(contact.company)}` : ""}</option>`).join("");
+  $("#waiting-application").value = item?.application_id || context.application_id || "";
+  $("#waiting-contact").value = item?.contact_id || context.contact_id || "";
+  $("#waiting-since").value = ApplyOS.toDateInput(item?.waiting_since || new Date().toISOString());
+  $("#waiting-expected").value = ApplyOS.toDateInput(item?.expected_by);
+  $("#waiting-notes").value = item?.notes || "";
+  $("#resolve-waiting").classList.toggle("hidden", !item || item.status !== "open");
+  $("#convert-waiting").classList.toggle("hidden", !item || waitingGroup(item) !== "overdue");
+  openDrawer($("#waiting-detail"));
+  $("#waiting-what").focus();
+}
+
+function closeWaiting() {
+  const detail = $("#waiting-detail");
+  if (!detail.classList.contains("open")) return;
+  closeDrawer(detail, waitingReturnFocus || $("#add-waiting"));
+  selectedWaitingId = null;
+  waitingReturnFocus = null;
+  elements.scrim.classList.add("hidden");
 }
 
 function openInterviewEditor(id = null) {
@@ -618,14 +762,17 @@ function closeDetail() {
 }
 
 function showDashboardSection(section, focusSearch = false) {
-  currentSection = ["contacts", "actions"].includes(section) ? section : "applications";
+  currentSection = ["contacts", "actions", "companies", "waiting"].includes(section) ? section : "applications";
   document.querySelectorAll("[data-section]").forEach((item) => item.classList.toggle("active", item.dataset.section === currentSection));
   globalThis.ScoutHeader?.setActiveNavigation(currentSection);
   document.querySelectorAll(".application-only").forEach((item) => item.classList.toggle("hidden", currentSection !== "applications"));
   $("#actions-workspace").classList.toggle("hidden", currentSection !== "actions");
   $("#contacts-workspace").classList.toggle("hidden", currentSection !== "contacts");
+  $("#companies-workspace").classList.toggle("hidden", currentSection !== "companies");
+  $("#waiting-workspace").classList.toggle("hidden", currentSection !== "waiting");
   if (focusSearch && currentSection === "contacts") $("#contact-search").focus();
   if (focusSearch && currentSection === "actions") $("#action-search").focus();
+  if (focusSearch && currentSection === "companies") $("#company-search").focus();
 }
 
 const contactImportLabels = { name: "Name *", email: "Email", company: "Company", title: "Title", phone: "Phone", linkedin_url: "LinkedIn URL", relationship: "Relationship", tags: "Tags" };
@@ -761,6 +908,7 @@ async function initialize() {
   });
   ApplyOS.CONTACT_RELATIONSHIPS.forEach((relationship) => $("#contact-relationship").insertAdjacentHTML("beforeend", `<option value="${relationship}">${titleCase(relationship)}</option>`));
   ApplyOS.CONTACT_RELATIONSHIPS.forEach((relationship) => $("#contact-relationship-filter").insertAdjacentHTML("beforeend", `<option value="${relationship}">${titleCase(relationship)}</option>`));
+  ApplyOS.WAITING_KINDS.forEach((kind) => $("#waiting-kind").insertAdjacentHTML("beforeend", `<option value="${kind}">${titleCase(kind)}</option>`));
   ApplyOS.ACTION_KINDS.forEach((kind) => $("#action-kind-filter").insertAdjacentHTML("beforeend", `<option value="${kind}">${titleCase(kind)}</option>`));
   [["application_deadline", "Application deadline"], ["interview_schedule", "Interview schedule"]].forEach(([value, label]) => $("#action-kind-filter").insertAdjacentHTML("beforeend", `<option value="${value}">${label}</option>`));
   ApplyOS.ACTION_CHANNELS.forEach((channel) => $("#action-channel-filter").insertAdjacentHTML("beforeend", `<option value="${channel}">${titleCase(channel)}</option>`));
@@ -783,15 +931,19 @@ document.querySelectorAll("[data-section]").forEach((button) => button.addEventL
   event.preventDefault();
   showDashboardSection(button.dataset.section, true);
   const url = new URL(location.href);
-  if (["contacts", "actions"].includes(button.dataset.section)) url.searchParams.set("section", button.dataset.section);
+  if (["contacts", "actions", "companies", "waiting"].includes(button.dataset.section)) url.searchParams.set("section", button.dataset.section);
   else url.searchParams.delete("section");
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }));
 $("#contact-search").addEventListener("input", renderContacts);
+$("#company-search").addEventListener("input", renderCompanies);
 [$("#contact-relationship-filter"), $("#contact-action-filter"), $("#contact-sort")].forEach((control) => control.addEventListener("change", renderContacts));
 [$("#action-search"), $("#action-kind-filter"), $("#action-priority-filter"), $("#action-channel-filter"), $("#action-application-filter"), $("#action-contact-filter")].forEach((control) => control.addEventListener(control.tagName === "INPUT" ? "input" : "change", renderActions));
 $("#add-action").addEventListener("click", () => openAction());
 $("#add-contact").addEventListener("click", () => openContact());
+$("#add-company").addEventListener("click", () => openCompany());
+$("#companies-empty-add").addEventListener("click", () => openCompany());
+$("#add-waiting").addEventListener("click", () => openWaiting());
 $("#contacts-empty-add").addEventListener("click", () => openContact());
 $("#import-contacts").addEventListener("click", () => $("#contacts-csv").click());
 $("#contact-view-toggle").addEventListener("click", () => { currentContactView = currentContactView === "cards" ? "list" : "cards"; $("#contact-view-toggle").textContent = currentContactView === "cards" ? "List view" : "Card view"; renderContacts(); });
@@ -817,18 +969,21 @@ $("#mock").addEventListener("click", async () => { await ApplyOS.seedMockData();
 $("#close-detail").addEventListener("click", closeDetail);
 $("#close-contact").addEventListener("click", closeContact);
 $("#close-action").addEventListener("click", closeAction);
-elements.scrim.addEventListener("click", () => { closeAction(); closeContact(); closeDetail(); });
-document.addEventListener("keydown", (event) => { if (event.key === "Escape") { if ($("#action-detail").classList.contains("open")) closeAction(); else if ($("#contact-detail").classList.contains("open")) closeContact(); else closeDetail(); } });
+$("#close-company").addEventListener("click", closeCompany);
+$("#close-waiting").addEventListener("click", closeWaiting);
+elements.scrim.addEventListener("click", () => { closeAction(); closeContact(); closeDetail(); closeCompany(); closeWaiting(); });
+document.addEventListener("keydown", (event) => { if (event.key === "Escape") { if ($("#waiting-detail").classList.contains("open")) closeWaiting(); else if ($("#company-detail").classList.contains("open")) closeCompany(); else if ($("#action-detail").classList.contains("open")) closeAction(); else if ($("#contact-detail").classList.contains("open")) closeContact(); else closeDetail(); } });
 $("#detail-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const application = state.applications.find((item) => item.id === selectedId);
   const status = $("#detail-status").value;
   if (status === "applied" && !application.applied_at) await ApplyOS.markApplicationApplied(selectedId);
-  await ApplyOS.updateApplication(selectedId, { role: $("#detail-role").value.trim(), company: $("#detail-company").value.trim(), status, priority: $("#detail-priority").value, deadline: $("#detail-deadline").value || null, notes: $("#detail-notes").value.trim() });
+  await ApplyOS.updateApplication(selectedId, { role: $("#detail-role").value.trim(), company: $("#detail-company").value.trim(), company_id: $("#detail-company-id").value || null, status, priority: $("#detail-priority").value, deadline: $("#detail-deadline").value || null, notes: $("#detail-notes").value.trim() });
   if ($("#detail-follow-up").value !== ApplyOS.toDateInput(application.follow_up_date)) await ApplyOS.rescheduleFollowUp(selectedId, $("#detail-follow-up").value);
   await load(); openDetail(selectedId); toast("Application updated");
 });
 $("#detail-applied").addEventListener("click", async () => { await ApplyOS.markApplicationApplied(selectedId); await load(); openDetail(selectedId); toast("Applied · follow-ups scheduled for 7 and 14 days"); });
+$("#mark-application-waiting").addEventListener("click", () => { const applicationId = selectedId; closeDetail(); openWaiting(null, { application_id: applicationId, kind: "recruiter_reply" }); });
 $("#delete-application").addEventListener("click", async () => {
   const application = state.applications.find((item) => item.id === selectedId);
   if (!application || !await ScoutDialog.confirm({ eyebrow: "DELETE APPLICATION", title: `Remove ${application.role}?`, message: `${application.company} will be removed from your Scout pipeline.`, consequences: ["Open system actions will be cancelled.", "Completed and skipped history will remain.", "Interview workspaces for this application will be removed."], tone: "danger", confirmLabel: "Delete application", cancelLabel: "Keep application" })) return;
@@ -846,6 +1001,53 @@ $("#generate-draft").addEventListener("click", () => {
 $("#copy-draft").addEventListener("click", async () => { await navigator.clipboard.writeText(`Subject: ${$("#draft-subject").value}\n\n${$("#draft-body").value}`); toast("Draft copied for manual review"); });
 [$("#draft-subject"), $("#draft-body"), $("#draft-contact")].forEach((control) => control.addEventListener(control.tagName === "SELECT" ? "change" : "input", updateDraftComposeLinks));
 
+$("#company-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const saved = await ApplyOS.upsertCompany({
+    id: selectedCompanyId || undefined,
+    name: $("#company-name").value.trim(),
+    domain: $("#company-domain").value.trim(),
+    website_url: $("#company-website").value.trim(),
+    tags: $("#company-tags").value.split(",").map((item) => item.trim()).filter(Boolean),
+    notes: $("#company-notes").value.trim()
+  });
+  await load();
+  closeCompany();
+  if (saved) openCompany(saved.id);
+  toast("Company saved");
+});
+$("#delete-company").addEventListener("click", async () => {
+  const company = state.companies.find((item) => item.id === selectedCompanyId);
+  if (!company || !await ScoutDialog.confirm({ eyebrow: "DELETE COMPANY", title: `Delete ${company.name}?`, message: "The company record will be removed, but the applications and contacts stay in Scout.", consequences: ["Applications and contacts will be detached.", "Their displayed company names will not change."], tone: "danger", confirmLabel: "Delete company", cancelLabel: "Keep company" })) return;
+  await ApplyOS.deleteCompany(company.id);
+  await load();
+  closeCompany();
+  toast("Company deleted · linked records kept");
+});
+
+$("#waiting-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const applicationId = $("#waiting-application").value || null;
+  const contactId = $("#waiting-contact").value || null;
+  if (!applicationId && !contactId) return toast("Link an application or contact");
+  const saved = await ApplyOS.upsertWaitingItem({
+    id: selectedWaitingId || undefined,
+    kind: $("#waiting-kind").value,
+    what: $("#waiting-what").value.trim(),
+    application_id: applicationId,
+    contact_id: contactId,
+    waiting_since: new Date(`${$("#waiting-since").value}T12:00:00`).toISOString(),
+    expected_by: $("#waiting-expected").value ? new Date(`${$("#waiting-expected").value}T12:00:00`).toISOString() : null,
+    notes: $("#waiting-notes").value.trim()
+  });
+  await load();
+  closeWaiting();
+  if (saved) openWaiting(saved.id);
+  toast("Waiting item saved");
+});
+$("#resolve-waiting").addEventListener("click", async () => { if (!selectedWaitingId) return; await ApplyOS.resolveWaitingItem(selectedWaitingId); await load(); closeWaiting(); toast("Waiting item resolved"); });
+$("#convert-waiting").addEventListener("click", async () => { if (!selectedWaitingId) return; const action = await ApplyOS.convertWaitingToFollowUp(selectedWaitingId); await load(); closeWaiting(); if (action) { showDashboardSection("actions"); toast("Follow-up added to Today"); } else toast("Only overdue items can become follow-ups"); });
+
 $("#contact-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const applicationIds = Array.from($("#contact-application").selectedOptions, (option) => option.value).filter(Boolean);
@@ -853,6 +1055,7 @@ $("#contact-form").addEventListener("submit", async (event) => {
   const saved = await ApplyOS.upsertContact({
     id: selectedContactId || undefined,
     name: $("#contact-name").value.trim(), title: $("#contact-title").value.trim(), company: $("#contact-company").value.trim(),
+    ...(selectedContactId || $("#contact-company-id").value ? { company_id: $("#contact-company-id").value || null } : {}),
     email: $("#contact-email").value.trim(), phone: $("#contact-phone").value.trim(), linkedin_url: $("#contact-linkedin").value.trim(), relationship: $("#contact-relationship").value,
     preferred_channel: $("#contact-channel").value, tags: $("#contact-tags").value.split(",").map((item) => item.trim()).filter(Boolean),
     application_ids: applicationIds, notes: $("#contact-notes").value.trim(),
@@ -865,6 +1068,7 @@ $("#contact-form").addEventListener("submit", async (event) => {
   else if (existingAction) await ApplyOS.cancelAction(existingAction.id);
   await load(); closeContact(); toast("Contact saved");
 });
+$("#mark-contact-waiting").addEventListener("click", () => { if (!selectedContactId) return toast("Save the contact before marking it waiting"); const contactId = selectedContactId; closeContact(); openWaiting(null, { contact_id: contactId, kind: "recruiter_reply" }); });
 $("#delete-contact").addEventListener("click", async () => {
   if (!selectedContactId) return;
   const contact = state.contacts.find((item) => item.id === selectedContactId);

@@ -12,6 +12,8 @@
     "application",
     "contact",
     "contact_activity",
+    "company",
+    "waiting_item",
     "interview",
     "reminder",
     "answer_memory",
@@ -24,6 +26,8 @@
   const ENTITY_TYPE_SET = new Set(ENTITY_TYPES);
   const PRIVATE_ENTITY_TYPES = new Set([
     "contact_activity",
+    "company",
+    "waiting_item",
     "reminder",
     "answer_memory",
     "learned_answer",
@@ -582,7 +586,7 @@
     });
   }
 
-  /** Converts the schema-v5 local workspace into reviewed, ordered cloud records. */
+  /** Converts the local workspace into reviewed, ordered cloud records. */
   ApplyOS.projectLegacyWorkspace = function projectLegacyWorkspace(workspace = {}) {
     const records = [];
     const state = isObject(workspace[ApplyOS.STORAGE_KEY])
@@ -604,6 +608,8 @@
     for (const item of Array.isArray(state.applications) ? state.applications : []) addProjected(records, "application", item);
     for (const item of Array.isArray(state.contacts) ? state.contacts : []) addProjected(records, "contact", item);
     for (const item of Array.isArray(state.contact_activities) ? state.contact_activities : []) addProjected(records, "contact_activity", item);
+    for (const item of Array.isArray(state.companies) ? state.companies : []) addProjected(records, "company", item);
+    for (const item of Array.isArray(state.waiting_items) ? state.waiting_items : []) addProjected(records, "waiting_item", item);
     for (const item of Array.isArray(state.interviews) ? state.interviews : []) addProjected(records, "interview", item);
     for (const item of Array.isArray(state.reminders) ? state.reminders : []) addProjected(records, "reminder", item);
     for (const item of Array.isArray(state.answer_memory) ? state.answer_memory : []) addProjected(records, "answer_memory", item);

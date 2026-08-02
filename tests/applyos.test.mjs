@@ -42,7 +42,7 @@ test("migrates legacy profile without removing it", async () => {
   assert.equal(state.resume_versions[0].name, "ada.pdf");
 });
 
-test("migrates a v2 state through v6 without losing applications or the legacy profile", async () => {
+test("migrates a v2 state through v7 without losing applications or the legacy profile", async () => {
   const profile = { firstName: "Ada", email: "ada@example.com" };
   const application = {
     id: "app_existing",
@@ -77,12 +77,12 @@ test("migrates a v2 state through v6 without losing applications or the legacy p
   });
 
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 6);
+  assert.equal(state.schema_version, 7);
   assert.equal(state.revision, 0);
   assert.equal(state.applications.length, 1);
   assert.equal(state.applications[0].id, "app_existing");
   assert.equal(state.applications[0].notes, "Keep this note");
-  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5], [5, 6]]));
+  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5], [5, 6], [6, 7]]));
   assert.equal(state.contacts.length, 0);
   assert.equal(state.interviews.length, 0);
   assert.equal(data.profile.email, "ada@example.com");
@@ -107,7 +107,7 @@ test("state migration is idempotent and does not increment the mutation revision
 
   assert.equal(first.revision, 0);
   assert.equal(second.revision, 0);
-  assert.equal(second.migration_history.length, 4);
+  assert.equal(second.migration_history.length, 5);
   assert.deepEqual(data.applyos_state, storedAfterFirstRead);
 });
 
@@ -250,7 +250,7 @@ test("schema v6 migrates application, contact, and interview next actions exactl
     }
   });
   const first = await ApplyOS.ensureState();
-  assert.equal(first.schema_version, 6);
+  assert.equal(first.schema_version, 7);
   assert.equal(first.reminders.filter((item) => item.kind === "application_follow_up").length, 1);
   assert.equal(first.reminders.filter((item) => item.kind === "contact_follow_up").length, 1);
   assert.equal(first.reminders.filter((item) => item.kind === "interview_thank_you").length, 1);
@@ -258,6 +258,84 @@ test("schema v6 migrates application, contact, and interview next actions exactl
   const serialized = JSON.stringify(data.applyos_state);
   await ApplyOS.ensureState();
   assert.equal(JSON.stringify(data.applyos_state), serialized);
+});
+
+test("schema v7 migrates only exact normalized company names and preserves display strings", async () => {
+  const { ApplyOS } = await runtime({
+    applyos_state: {
+      schema_version: 6,
+      revision: 4,
+      migration_history: [],
+      applications: [
+        { id: "app_acme_a", company: "  Acme   Corp  ", role: "Engineer", url: "https://jobs.example/a", status: "saved" },
+        { id: "app_acme_b", company: "acme corp", role: "Designer", url: "https://jobs.example/b", status: "saved" },
+        { id: "app_acme_labs", company: "Acme Labs", role: "Analyst", url: "https://jobs.example/c", status: "saved" }
+      ],
+      contacts: [{ id: "contact_acme", name: "Riley", company: "ACME CORP", application_ids: [] }],
+      reminders: [], contact_activities: [], interviews: [], answer_memory: [], learned_answers: [], resume_versions: [], settings: {}
+    }
+  });
+  const state = await ApplyOS.ensureState();
+  assert.equal(state.schema_version, 7);
+  assert.equal(state.companies.length, 2);
+  assert.equal(state.applications[0].company, "  Acme   Corp  ");
+  assert.equal(state.applications[0].company_id, state.applications[1].company_id);
+  assert.equal(state.contacts[0].company_id, state.applications[0].company_id);
+  assert.notEqual(state.applications[2].company_id, state.applications[0].company_id);
+});
+
+test("company CRUD links records, matches exact domains, and deletion only detaches", async () => {
+  const { ApplyOS } = await runtime();
+  const company = await ApplyOS.upsertCompany({ name: "Northstar", domain: "northstar.example", website_url: "https://northstar.example", notes: "Target team", tags: ["target"] });
+  const sameDomain = await ApplyOS.upsertCompany({ name: "Northstar Labs", domain: "northstar.example", notes: "Updated note" });
+  assert.equal(sameDomain.id, company.id);
+  assert.equal(sameDomain.notes, "Updated note");
+  const application = await ApplyOS.upsertApplication({ company: "Northstar display", company_id: company.id, role: "Engineer", url: "https://jobs.example/northstar", description: "" });
+  const contact = await ApplyOS.upsertContact({ name: "Jordan", company: "Northstar display", company_id: company.id });
+  let state = await ApplyOS.getState();
+  assert.equal(state.applications[0].company_id, company.id);
+  assert.equal(state.contacts[0].company_id, company.id);
+  await ApplyOS.deleteCompany(company.id);
+  state = await ApplyOS.getState();
+  assert.equal(state.companies.length, 0);
+  assert.equal(state.applications.find((item) => item.id === application.id).company_id, null);
+  assert.equal(state.contacts.find((item) => item.id === contact.id).company_id, null);
+  assert.equal(state.applications[0].company, "Northstar display");
+  assert.equal(state.contacts[0].company, "Northstar display");
+});
+
+test("waiting items group, resolve, and convert overdue records into one linked follow-up", async () => {
+  const { ApplyOS } = await runtime();
+  const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://jobs.example/waiting", description: "" });
+  await ApplyOS.updateApplication(application.id, { status: "applied" });
+  const contact = await ApplyOS.upsertContact({ name: "Riley", company: "Acme", application_ids: [application.id], preferred_channel: "linkedin" });
+  const overdue = await ApplyOS.upsertWaitingItem({ kind: "recruiter_reply", what: "Recruiter response", application_id: application.id, contact_id: contact.id, waiting_since: "2026-07-01T12:00:00.000Z", expected_by: "2026-07-03T12:00:00.000Z", notes: "Asked about timing" });
+  const noDate = await ApplyOS.upsertWaitingItem({ kind: "referral_response", what: "Referral confirmation", contact_id: contact.id, waiting_since: "2026-07-02T12:00:00.000Z" });
+  let grouped = await ApplyOS.listWaitingItems({ at: "2026-07-05T12:00:00.000Z", status: "open" });
+  assert.equal(grouped.find((item) => item.id === overdue.id).group, "overdue");
+  assert.equal(grouped.find((item) => item.id === noDate.id).group, "no_date");
+  const action = await ApplyOS.convertWaitingToFollowUp(overdue.id, "2026-07-05T12:00:00.000Z");
+  assert.equal(action.kind, "contact_follow_up");
+  assert.equal(action.contact_id, contact.id);
+  assert.equal(action.application_id, application.id);
+  let state = await ApplyOS.getState();
+  assert.equal(state.waiting_items.find((item) => item.id === overdue.id).status, "resolved");
+  assert.equal(state.applications.find((item) => item.id === application.id).status, "follow_up_due");
+  await ApplyOS.resolveWaitingItem(noDate.id);
+  state = await ApplyOS.getState();
+  assert.ok(state.waiting_items.every((item) => item.status === "resolved"));
+});
+
+test("company links and waiting items persist across a storage reload", async () => {
+  const first = await runtime();
+  const company = await first.ApplyOS.upsertCompany({ name: "Persist Co", domain: "persist.example" });
+  const application = await first.ApplyOS.upsertApplication({ company: "Persist Co", company_id: company.id, role: "Tester", url: "https://jobs.example/persist", description: "" });
+  const waiting = await first.ApplyOS.upsertWaitingItem({ kind: "assignment_review", what: "Assignment review", application_id: application.id, expected_by: "2026-08-05T12:00:00.000Z" });
+  const second = await runtime(first.data);
+  const reloaded = await second.ApplyOS.ensureState();
+  assert.equal(reloaded.companies.find((item) => item.id === company.id).domain, "persist.example");
+  assert.equal(reloaded.applications.find((item) => item.id === application.id).company_id, company.id);
+  assert.equal(reloaded.waiting_items.find((item) => item.id === waiting.id).what, "Assignment review");
 });
 
 test("unified action lifecycle groups, snoozes, reschedules, and completes without changing unrelated application status", async () => {
@@ -537,7 +615,7 @@ test("stores corrections and reuses the best site-aware learned answer", async (
   });
   assert.equal(learned.answer, "4");
   const state = await ApplyOS.getState();
-  assert.equal(state.schema_version, 6);
+  assert.equal(state.schema_version, 7);
   assert.equal(state.learned_answers.length, 1);
   const match = ApplyOS.OfflynCore.bestLearnedAnswer("How many years have you handled large datasets", state.learned_answers, {
     site: "example.myworkdayjobs.com",

@@ -701,7 +701,7 @@ async function main() {
       assert.equal(sample.height, 68, `${sample.page} uses the shared 68px header geometry`);
       assert.equal(sample.brand, "Scout", `${sample.page} uses the supplied Scout wordmark`);
       assert.equal(sample.brandLoaded, true, `${sample.page} loads the supplied Scout wordmark asset`);
-      assert.deepEqual(sample.nav, ["Applications", "Today", "Contacts"], `${sample.page} uses the shared primary navigation`);
+      assert.deepEqual(sample.nav, ["Applications", "Today", "Contacts", "Companies", "Waiting"], `${sample.page} uses the shared primary navigation`);
       assert.deepEqual(sample.actions, ["Profile & answers", "Account & sync"], `${sample.page} uses the shared account actions`);
       assert.equal(sample.profile, "browser_test", `${sample.page} uses the active workspace profile`);
     }
@@ -854,6 +854,61 @@ async function main() {
     await importDialog.waitFor({ state: "hidden" });
     await helper.locator(".contact-card", { hasText: "Rowan Referral" }).waitFor({ state: "visible" });
     assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).contacts.filter((item) => item.email === "casey@example.test").length), 1, "approved CSV merge does not create a duplicate contact");
+
+    await helper.locator("[data-section='companies']").click();
+    assert.equal(new URL(helper.url()).searchParams.get("section"), "companies", "Companies keeps a shareable dashboard URL");
+    const fixtureCompanyCard = helper.locator(".company-card", { hasText: "Fixture Labs" }).first();
+    await fixtureCompanyCard.waitFor({ state: "visible" });
+    await fixtureCompanyCard.click();
+    await helper.locator("#company-domain").fill("fixture.example.test");
+    await helper.locator("#company-website").fill("https://fixture.example.test");
+    await helper.locator("#company-notes").fill("Browser-verified company context.");
+    await helper.locator("#company-form button[type='submit']").click();
+    await helper.locator("#company-context", { hasText: "Test Engineer" }).waitFor({ state: "visible" });
+    await helper.locator("#company-context", { hasText: "Casey Recruiter" }).waitFor({ state: "visible" });
+    assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).companies.some((item) => item.domain === "fixture.example.test" && item.notes === "Browser-verified company context.")), true, "company edits persist through the real extension store");
+    await helper.locator("#close-company").click();
+    await helper.locator("#add-company").click();
+    await helper.locator("#company-name").fill("Browser Delete Co");
+    await helper.locator("#company-domain").fill("delete.example.test");
+    await helper.locator("#company-form button[type='submit']").click();
+    await helper.locator("#delete-company").click();
+    const deleteCompanyDialog = helper.locator(".scout-system-dialog");
+    await deleteCompanyDialog.waitFor({ state: "visible" });
+    await deleteCompanyDialog.locator(".scout-system-dialog__confirm").click();
+    await deleteCompanyDialog.waitFor({ state: "hidden" });
+    assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).companies.some((item) => item.name === "Browser Delete Co")), false, "company deletion removes only the company record");
+    assert.equal(await worker.evaluate(async (id) => (await ApplyOS.getState()).applications.some((item) => item.id === id), applicationId), true, "company deletion leaves applications intact");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/companies-workspace.png"), fullPage: true }); }
+
+    await helper.locator("[data-section='applications']").click();
+    await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
+    await helper.locator("#mark-application-waiting").click();
+    await helper.locator("#waiting-what").fill("Recruiter response on next steps");
+    await helper.locator("#waiting-kind").selectOption("recruiter_reply");
+    const overdueExpectedDate = await helper.evaluate(() => {
+      const date = new Date(Date.now() - 86400000);
+      date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+      return date.toISOString().slice(0, 10);
+    });
+    await helper.locator("#waiting-expected").fill(overdueExpectedDate);
+    await helper.locator("#waiting-notes").fill("Follow up if the promised date passes.");
+    await helper.locator("#waiting-form button[type='submit']").click();
+    await helper.locator("#close-waiting").click();
+    await helper.reload({ waitUntil: "domcontentloaded" });
+    await helper.locator(`#board .job-card[data-id="${applicationId}"] .waiting-chip`, { hasText: "WAITING 1" }).waitFor({ state: "visible" });
+    await helper.locator("[data-section='waiting']").click();
+    assert.equal(new URL(helper.url()).searchParams.get("section"), "waiting", "Waiting keeps a shareable dashboard URL");
+    const overdueWaiting = helper.locator(".waiting-row", { hasText: "Recruiter response on next steps" });
+    await overdueWaiting.waitFor({ state: "visible" });
+    assert.equal(await overdueWaiting.locator("[data-convert-waiting]").isVisible(), true, "overdue waiting items expose follow-up conversion");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/waiting-workspace.png"), fullPage: true }); }
+    await overdueWaiting.locator("[data-convert-waiting]").click();
+    assert.equal(await worker.evaluate(async () => {
+      const current = await ApplyOS.getState();
+      return current.waiting_items.some((item) => item.what === "Recruiter response on next steps" && item.status === "resolved")
+        && current.reminders.some((item) => item.title === "Follow up: Recruiter response on next steps" && item.status === "open");
+    }), true, "overdue waiting conversion resolves the waiting item and creates one open follow-up");
 
     await helper.locator("[data-section='actions']").click();
     assert.equal(await helper.locator("[data-scout-nav='actions']").getAttribute("aria-current"), "page", "Today navigation becomes active without a reload");

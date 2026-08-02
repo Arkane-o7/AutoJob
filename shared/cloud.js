@@ -167,6 +167,8 @@
       profiles: profiles.length || (value[ApplyOS.PROFILE_KEY] ? 1 : 0),
       applications: Array.isArray(state.applications) ? state.applications.length : 0,
       contacts: Array.isArray(state.contacts) ? state.contacts.length : 0,
+      companies: Array.isArray(state.companies) ? state.companies.length : 0,
+      waiting: Array.isArray(state.waiting_items) ? state.waiting_items.filter((item) => item.status === "open").length : 0,
       interviews: Array.isArray(state.interviews) ? state.interviews.length : 0,
       answers: Array.isArray(state.answer_memory) ? state.answer_memory.length : 0,
       resumes: Array.isArray(state.resume_versions) ? state.resume_versions.length : 0

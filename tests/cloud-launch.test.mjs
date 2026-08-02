@@ -224,6 +224,21 @@ test("dashboard ignores transient removal of its cached state", async () => {
   assert.match(dashboard, /if \(!nextState \|\| !Array\.isArray\(nextState\.applications\)\) return;/);
 });
 
+test("companies and waiting stay in the focused dashboard and owner-scoped sync path", async () => {
+  const [dashboard, storage, repository, migration] = await Promise.all([
+    readFile(resolve("dashboard.html"), "utf8"),
+    readFile(resolve("shared/storage.js"), "utf8"),
+    readFile(resolve("shared/cloud-repository.js"), "utf8"),
+    readFile(resolve("supabase/migrations/202608020001_company_waiting_records.sql"), "utf8")
+  ]);
+  assert.match(dashboard, /data-scout-nav="companies"/);
+  assert.match(dashboard, /data-scout-nav="waiting"/);
+  assert.match(storage, /ApplyOS\.convertWaitingToFollowUp/);
+  assert.match(repository, /"waiting_item"/);
+  assert.match(migration, /private_records_record_type_check/);
+  assert.doesNotMatch(dashboard, /Gmail integration|Outlook integration|relationship score|company enrichment/i);
+});
+
 test("contextual tour is review-only and hands off between real product surfaces", async () => {
   const [onboarding, dashboard, tour] = await Promise.all([readFile(resolve("onboarding.js"), "utf8"), readFile(resolve("dashboard.js"), "utf8"), readFile(resolve("shared/tour.js"), "utf8")]);
   assert.match(onboarding, /ScoutTour\.prepareFirstRun/);

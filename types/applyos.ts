@@ -19,6 +19,7 @@ export type ActionStatus = "open" | "done" | "skipped" | "cancelled";
 export type ActionChannel = "email" | "linkedin" | "phone" | "meeting" | "other";
 export type ContactActivityType = "email" | "linkedin" | "phone" | "meeting" | "note";
 export type ContactActivityDirection = "outbound" | "inbound" | "none";
+export type WaitingKind = "recruiter_reply" | "referral_response" | "interview_feedback" | "scheduling" | "assignment_review" | "offer_documents" | "other";
 
 export type ATSPlatform =
   | "greenhouse"
@@ -77,6 +78,7 @@ export interface CapturedJob {
 export interface ApplicationRecord {
   id: string;
   company: string;
+  company_id: string | null;
   role: string;
   url: string;
   source: string;
@@ -175,6 +177,7 @@ export interface ContactRecord {
   name: string;
   title: string;
   company: string;
+  company_id: string | null;
   email: string;
   phone: string;
   linkedin_url: string;
@@ -185,6 +188,32 @@ export interface ContactRecord {
   notes: string;
   last_contacted_at: string | null;
   next_action_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyRecord {
+  id: string;
+  name: string;
+  domain: string;
+  website_url: string;
+  notes: string;
+  tags: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface WaitingItem {
+  id: string;
+  kind: WaitingKind;
+  what: string;
+  application_id: string | null;
+  contact_id: string | null;
+  waiting_since: string;
+  expected_by: string | null;
+  notes: string;
+  status: "open" | "resolved";
+  resolved_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -260,6 +289,8 @@ export interface ApplyOSState {
   contacts: ContactRecord[];
   contact_activities: ContactActivity[];
   interviews: InterviewRecord[];
+  companies: CompanyRecord[];
+  waiting_items: WaitingItem[];
   settings: {
     final_follow_up_enabled: boolean;
     notification_enabled: boolean;
@@ -298,7 +329,7 @@ export interface CloudSyncMeta {
   error?: string | null;
 }
 
-export type CloudEntityType = "profile" | "application" | "contact" | "contact_activity" | "interview" | "reminder" | "answer_memory" | "learned_answer" | "resume_version" | "knowledge_graph" | "settings" | "onboarding_progress";
+export type CloudEntityType = "profile" | "application" | "contact" | "contact_activity" | "company" | "waiting_item" | "interview" | "reminder" | "answer_memory" | "learned_answer" | "resume_version" | "knowledge_graph" | "settings" | "onboarding_progress";
 
 export interface CloudMutation {
   mutationId: string;
@@ -338,6 +369,8 @@ export interface BackupSummary {
   profiles: number;
   applications: number;
   contacts: number;
+  companies: number;
+  waiting: number;
   interviews: number;
   answers: number;
 }

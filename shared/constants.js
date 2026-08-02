@@ -3,7 +3,7 @@
 
   const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
 
-  ApplyOS.SCHEMA_VERSION = 6;
+  ApplyOS.SCHEMA_VERSION = 7;
   ApplyOS.STORAGE_KEY = "applyos_state";
   ApplyOS.PROFILE_KEY = "profile";
   ApplyOS.APPLICATION_STATUSES = [
@@ -35,6 +35,8 @@
   ApplyOS.ACTION_CHANNELS = ["email", "linkedin", "phone", "meeting", "other"];
   ApplyOS.CONTACT_ACTIVITY_TYPES = ["email", "linkedin", "phone", "meeting", "note"];
   ApplyOS.CONTACT_ACTIVITY_DIRECTIONS = ["outbound", "inbound", "none"];
+  ApplyOS.WAITING_KINDS = ["recruiter_reply", "referral_response", "interview_feedback", "scheduling", "assignment_review", "offer_documents", "other"];
+  ApplyOS.WAITING_STATUSES = ["open", "resolved"];
   ApplyOS.INTERVIEW_TYPES = ["recruiter_screen", "hiring_manager", "technical", "behavioral", "panel", "final", "other"];
   ApplyOS.INTERVIEW_FORMATS = ["video", "phone", "onsite", "other"];
 
