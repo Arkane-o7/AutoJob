@@ -84,6 +84,8 @@ async function materializeRepositoryWorkspace() {
     applications: byType("application"),
     contacts: byType("contact"),
     contact_activities: byType("contact_activity"),
+    companies: byType("company"),
+    waiting_items: byType("waiting_item"),
     interviews: byType("interview"),
     reminders: byType("reminder"),
     answer_memory: byType("answer_memory"),

@@ -32,6 +32,37 @@
     catch { return ""; }
   }
 
+  function normalizedCompanyName(value) {
+    return safeString(value).normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  function companyIdentityMatch(company, name, domain) {
+    const normalizedName = normalizedCompanyName(name);
+    const normalizedDomain = safeDomain(domain);
+    return Boolean((normalizedName && normalizedCompanyName(company?.name) === normalizedName)
+      || (normalizedDomain && safeDomain(company?.domain) === normalizedDomain));
+  }
+
+  function ensureCompanyForIdentity(state, name, domain = "", websiteUrl = "") {
+    const displayName = safeString(name).trim();
+    if (!displayName || normalizedCompanyName(displayName) === "unknown company") return null;
+    const matched = state.companies.find((item) => companyIdentityMatch(item, displayName, domain));
+    if (matched) return matched;
+    const now = ApplyOS.nowISO();
+    const company = normalizeCompany({
+      id: ApplyOS.uid("company"),
+      name: displayName,
+      domain,
+      website_url: websiteUrl,
+      notes: "",
+      tags: [],
+      created_at: now,
+      updated_at: now
+    });
+    state.companies.unshift(company);
+    return company;
+  }
+
   function safeResumeDataUrl(value) {
     const text = safeString(value);
     return /^data:(application\/(?:pdf|msword|vnd\.openxmlformats-officedocument\.wordprocessingml\.document));base64,[a-z0-9+/=]+$/i.test(text) ? text : "";
@@ -229,6 +260,26 @@
           notification_digest_time: "09:00"
         }
       }, 5, 6);
+    },
+    6: (state) => {
+      const draft = {
+        ...state,
+        companies: (Array.isArray(state.companies) ? state.companies : []).map(normalizeCompany).filter(Boolean),
+        waiting_items: Array.isArray(state.waiting_items) ? state.waiting_items : []
+      };
+      draft.applications = (Array.isArray(state.applications) ? state.applications : []).map((item) => {
+        if (!isRecord(item)) return item;
+        const existing = draft.companies.find((company) => company.id === item.company_id);
+        const company = existing || ensureCompanyForIdentity(draft, item.company);
+        return { ...item, company_id: company?.id || null };
+      });
+      draft.contacts = (Array.isArray(state.contacts) ? state.contacts : []).map((item) => {
+        if (!isRecord(item)) return item;
+        const existing = draft.companies.find((company) => company.id === item.company_id);
+        const company = existing || ensureCompanyForIdentity(draft, item.company);
+        return { ...item, company_id: company?.id || null };
+      });
+      return recordMigration(draft, 6, 7);
     }
   };
 
@@ -252,6 +303,7 @@
       ...item,
       id: safeId(item.id, "app"),
       company: safeString(item.company, "Unknown company") || "Unknown company",
+      company_id: safeNullableString(item.company_id),
       role: safeString(item.role, "Untitled role") || "Untitled role",
       url: safeWebUrl(item.url),
       source: safeString(item.source, "unknown") || "unknown",
@@ -375,6 +427,7 @@
       name: safeString(item.name, "Unnamed contact") || "Unnamed contact",
       title: safeString(item.title),
       company: safeString(item.company),
+      company_id: safeNullableString(item.company_id),
       email: safeString(item.email),
       phone: safeString(item.phone),
       linkedin_url: safeWebUrl(item.linkedin_url),
@@ -385,6 +438,44 @@
       notes: safeString(item.notes),
       last_contacted_at: safeNullableDate(item.last_contacted_at),
       next_action_at: safeNullableDate(item.next_action_at),
+      created_at: createdAt,
+      updated_at: safeDateString(item.updated_at, createdAt)
+    };
+  }
+
+  function normalizeCompany(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const createdAt = safeDateString(item.created_at, now);
+    const websiteUrl = safeWebUrl(item.website_url);
+    return {
+      id: safeId(item.id, "company"),
+      name: safeString(item.name, "Unnamed company").trim() || "Unnamed company",
+      domain: safeDomain(item.domain || websiteUrl),
+      website_url: websiteUrl,
+      notes: safeString(item.notes),
+      tags: [...new Set(safeStringArray(item.tags).map((tag) => tag.trim()).filter(Boolean))].slice(0, 20),
+      created_at: createdAt,
+      updated_at: safeDateString(item.updated_at, createdAt)
+    };
+  }
+
+  function normalizeWaitingItem(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const createdAt = safeDateString(item.created_at, now);
+    const status = ApplyOS.WAITING_STATUSES.includes(item.status) ? item.status : "open";
+    return {
+      id: safeId(item.id, "waiting"),
+      kind: ApplyOS.WAITING_KINDS.includes(item.kind) ? item.kind : "other",
+      what: safeString(item.what, "Reply or decision").trim() || "Reply or decision",
+      application_id: safeNullableString(item.application_id),
+      contact_id: safeNullableString(item.contact_id),
+      waiting_since: safeDateString(item.waiting_since, createdAt),
+      expected_by: safeNullableDate(item.expected_by),
+      notes: safeString(item.notes),
+      status,
+      resolved_at: status === "resolved" ? (safeNullableDate(item.resolved_at) || safeDateString(item.updated_at, now)) : null,
       created_at: createdAt,
       updated_at: safeDateString(item.updated_at, createdAt)
     };
@@ -453,6 +544,8 @@
       contacts: [],
       contact_activities: [],
       interviews: [],
+      companies: [],
+      waiting_items: [],
       settings: {
         final_follow_up_enabled: true,
         notification_enabled: true,
@@ -477,11 +570,22 @@
     state.contacts = (Array.isArray(state.contacts) ? state.contacts : []).map(normalizeContact).filter(Boolean);
     state.contact_activities = (Array.isArray(state.contact_activities) ? state.contact_activities : []).map(normalizeContactActivity).filter(Boolean);
     state.interviews = (Array.isArray(state.interviews) ? state.interviews : []).map(normalizeInterview).filter(Boolean);
+    state.companies = (Array.isArray(state.companies) ? state.companies : []).map(normalizeCompany).filter(Boolean);
+    state.waiting_items = (Array.isArray(state.waiting_items) ? state.waiting_items : []).map(normalizeWaitingItem).filter(Boolean);
     const applicationIds = new Set(state.applications.map((item) => item.id));
+    const companyIds = new Set(state.companies.map((item) => item.id));
     const resumeIds = new Set(state.resume_versions.map((item) => item.id));
-    state.applications = state.applications.map((item) => ({ ...item, resume_version_id: resumeIds.has(item.resume_version_id) ? item.resume_version_id : null }));
-    state.contacts = state.contacts.map((item) => ({ ...item, application_ids: item.application_ids.filter((id) => applicationIds.has(id)) }));
+    state.applications = state.applications.map((item) => ({ ...item, company_id: companyIds.has(item.company_id) ? item.company_id : null, resume_version_id: resumeIds.has(item.resume_version_id) ? item.resume_version_id : null }));
+    state.contacts = state.contacts.map((item) => ({ ...item, company_id: companyIds.has(item.company_id) ? item.company_id : null, application_ids: item.application_ids.filter((id) => applicationIds.has(id)) }));
     const contactIds = new Set(state.contacts.map((item) => item.id));
+    state.waiting_items = state.waiting_items.map((item) => {
+      const applicationId = applicationIds.has(item.application_id) ? item.application_id : null;
+      const contactId = contactIds.has(item.contact_id) ? item.contact_id : null;
+      if (item.status === "open" && !applicationId && !contactId) {
+        return { ...item, application_id: null, contact_id: null, status: "resolved", resolved_at: item.resolved_at || item.updated_at };
+      }
+      return { ...item, application_id: applicationId, contact_id: contactId };
+    });
     state.interviews = state.interviews
       .filter((item) => applicationIds.has(item.application_id))
       .map((item) => ({ ...item, interviewer_contact_ids: item.interviewer_contact_ids.filter((id) => contactIds.has(id)) }));
@@ -691,9 +795,13 @@
         notes: "",
         created_at: now
       };
+      const companyName = job.company || base.company || "Unknown company";
+      const explicitCompany = state.companies.find((item) => item.id === job.company_id);
+      const company = explicitCompany || ensureCompanyForIdentity(state, companyName, job.company_domain, job.company_website_url);
       saved = {
         ...base,
-        company: job.company || base.company || "Unknown company",
+        company: companyName,
+        company_id: company?.id || null,
         role: job.role || base.role || "Untitled role",
         url: job.url || base.url,
         source: job.source || base.source || "unknown",
@@ -718,7 +826,14 @@
     await ApplyOS.mutateState((state) => {
       const index = state.applications.findIndex((item) => item.id === id);
       if (index < 0) return state;
-      updated = { ...state.applications[index], ...patch, id, updated_at: ApplyOS.nowISO() };
+      const current = state.applications[index];
+      const nextCompanyName = Object.prototype.hasOwnProperty.call(patch, "company") ? patch.company : current.company;
+      const explicitCompanyId = Object.prototype.hasOwnProperty.call(patch, "company_id") ? patch.company_id : undefined;
+      const linkedCompany = explicitCompanyId === null
+        ? null
+        : state.companies.find((item) => item.id === (explicitCompanyId || current.company_id))
+          || ensureCompanyForIdentity(state, nextCompanyName);
+      updated = normalizeApplication({ ...current, ...patch, id, company_id: linkedCompany?.id || null, updated_at: ApplyOS.nowISO() });
       state.applications[index] = updated;
       if (["offer", "rejected", "closed"].includes(updated.status)) {
         const now = ApplyOS.nowISO();
@@ -772,6 +887,12 @@
         application_ids: item.application_ids.filter((applicationId) => applicationId !== id),
         updated_at: item.application_ids.includes(id) ? now : item.updated_at
       }));
+      draft.waiting_items = draft.waiting_items.map((item) => {
+        if (item.application_id !== id) return item;
+        const next = { ...item, application_id: null, updated_at: now };
+        if (!next.contact_id && next.status === "open") return { ...next, status: "resolved", resolved_at: now };
+        return next;
+      });
       return draft;
     });
     await ApplyOS.removeApplicationGraph?.(id);
@@ -1123,13 +1244,144 @@
     });
   };
 
+  ApplyOS.upsertCompany = async function upsertCompany(input = {}) {
+    let saved = null;
+    await ApplyOS.mutateState((state) => {
+      const name = safeString(input.name).trim();
+      if (!name) return state;
+      const now = ApplyOS.nowISO();
+      const requestedIndex = state.companies.findIndex((item) => item.id === input.id);
+      const matchedIndex = requestedIndex >= 0 ? requestedIndex : state.companies.findIndex((item) => companyIdentityMatch(item, name, input.domain || input.website_url));
+      const current = matchedIndex >= 0 ? state.companies[matchedIndex] : { id: ApplyOS.uid("company"), created_at: now };
+      saved = normalizeCompany({ ...current, ...input, id: current.id, name, updated_at: now });
+      if (matchedIndex >= 0) state.companies[matchedIndex] = saved;
+      else state.companies.unshift(saved);
+      return state;
+    });
+    return saved;
+  };
+
+  ApplyOS.deleteCompany = async function deleteCompany(id) {
+    return ApplyOS.mutateState((state) => {
+      if (!state.companies.some((item) => item.id === id)) return state;
+      const now = ApplyOS.nowISO();
+      state.companies = state.companies.filter((item) => item.id !== id);
+      state.applications = state.applications.map((item) => item.company_id === id ? { ...item, company_id: null, updated_at: now } : item);
+      state.contacts = state.contacts.map((item) => item.company_id === id ? { ...item, company_id: null, updated_at: now } : item);
+      return state;
+    });
+  };
+
+  ApplyOS.upsertWaitingItem = async function upsertWaitingItem(input = {}) {
+    let saved = null;
+    await ApplyOS.mutateState((state) => {
+      const applicationId = state.applications.some((item) => item.id === input.application_id) ? input.application_id : null;
+      const contactId = state.contacts.some((item) => item.id === input.contact_id) ? input.contact_id : null;
+      if (!applicationId && !contactId) return state;
+      const now = ApplyOS.nowISO();
+      const index = state.waiting_items.findIndex((item) => item.id === input.id);
+      const current = index >= 0 ? state.waiting_items[index] : { id: ApplyOS.uid("waiting"), created_at: now, waiting_since: now, status: "open" };
+      saved = normalizeWaitingItem({
+        ...current,
+        ...input,
+        id: current.id,
+        application_id: applicationId,
+        contact_id: contactId,
+        status: input.status === "resolved" ? "resolved" : "open",
+        updated_at: now
+      });
+      if (index >= 0) state.waiting_items[index] = saved;
+      else state.waiting_items.unshift(saved);
+      return state;
+    });
+    return saved;
+  };
+
+  ApplyOS.resolveWaitingItem = async function resolveWaitingItem(id) {
+    return ApplyOS.mutateState((state) => {
+      const item = state.waiting_items.find((entry) => entry.id === id && entry.status === "open");
+      if (!item) return state;
+      const now = ApplyOS.nowISO();
+      item.status = "resolved";
+      item.resolved_at = now;
+      item.updated_at = now;
+      return state;
+    });
+  };
+
+  ApplyOS.listWaitingItems = async function listWaitingItems(filters = {}) {
+    const state = await ApplyOS.getState();
+    const now = filters.at ? new Date(filters.at) : new Date();
+    const start = new Date(now); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    return state.waiting_items.filter((item) => !filters.status || item.status === filters.status).map((item) => {
+      const expected = item.expected_by ? new Date(item.expected_by).getTime() : null;
+      const group = item.status === "resolved" ? "resolved"
+        : expected === null ? "no_date"
+          : expected < start.getTime() ? "overdue"
+            : expected < end.getTime() ? "today"
+              : "upcoming";
+      return { ...item, group };
+    }).sort((left, right) => {
+      if (!left.expected_by && !right.expected_by) return new Date(left.waiting_since).getTime() - new Date(right.waiting_since).getTime();
+      if (!left.expected_by) return 1;
+      if (!right.expected_by) return -1;
+      return new Date(left.expected_by).getTime() - new Date(right.expected_by).getTime();
+    });
+  };
+
+  ApplyOS.convertWaitingToFollowUp = async function convertWaitingToFollowUp(id, at = ApplyOS.nowISO()) {
+    let action = null;
+    await ApplyOS.mutateState((state) => {
+      const waiting = state.waiting_items.find((item) => item.id === id && item.status === "open");
+      const now = safeDateString(at, ApplyOS.nowISO());
+      const dayStart = new Date(now); dayStart.setHours(0, 0, 0, 0);
+      if (!waiting?.expected_by || new Date(waiting.expected_by).getTime() >= dayStart.getTime()) return state;
+      const contact = state.contacts.find((item) => item.id === waiting.contact_id);
+      const application = state.applications.find((item) => item.id === waiting.application_id);
+      if (!contact && !application) return state;
+      action = normalizeReminder({
+        id: ApplyOS.uid("rem"),
+        kind: contact ? "contact_follow_up" : "application_follow_up",
+        title: `Follow up: ${waiting.what}`,
+        status: "open",
+        due_at: now,
+        priority: "medium",
+        channel: contact?.preferred_channel || "email",
+        application_id: application?.id || null,
+        contact_id: contact?.id || null,
+        interview_id: null,
+        notes: waiting.notes,
+        source: "user",
+        created_at: now,
+        updated_at: now
+      });
+      state.reminders.unshift(action);
+      waiting.status = "resolved";
+      waiting.resolved_at = now;
+      waiting.updated_at = now;
+      if (application && application.status === "applied") {
+        application.status = "follow_up_due";
+        application.updated_at = now;
+      }
+      return state;
+    });
+    return action;
+  };
+
   ApplyOS.upsertContact = async function upsertContact(input = {}) {
     let saved = null;
     await ApplyOS.mutateState((state) => {
       const now = ApplyOS.nowISO();
       const index = state.contacts.findIndex((item) => item.id === input.id);
       const current = index >= 0 ? state.contacts[index] : { id: ApplyOS.uid("contact"), created_at: now };
-      saved = normalizeContact({ ...current, ...input, id: current.id, updated_at: now });
+      const companyName = Object.prototype.hasOwnProperty.call(input, "company") ? input.company : current.company;
+      const explicitCompanyId = Object.prototype.hasOwnProperty.call(input, "company_id") ? input.company_id : undefined;
+      const linkedCompany = explicitCompanyId === null
+        ? null
+        : state.companies.find((item) => item.id === (explicitCompanyId || current.company_id))
+          || ensureCompanyForIdentity(state, companyName);
+      saved = normalizeContact({ ...current, ...input, id: current.id, company_id: linkedCompany?.id || null, updated_at: now });
       if (index >= 0) state.contacts[index] = saved;
       else state.contacts.unshift(saved);
       return state;
@@ -1298,6 +1550,13 @@
         if (item.contact_id !== id) return [item];
         if (item.kind === "contact_follow_up") return [];
         return [{ ...item, contact_id: null, updated_at: ApplyOS.nowISO() }];
+      });
+      const now = ApplyOS.nowISO();
+      state.waiting_items = state.waiting_items.map((item) => {
+        if (item.contact_id !== id) return item;
+        const next = { ...item, contact_id: null, updated_at: now };
+        if (!next.application_id && next.status === "open") return { ...next, status: "resolved", resolved_at: now };
+        return next;
       });
       return state;
     });

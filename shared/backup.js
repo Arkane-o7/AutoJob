@@ -101,6 +101,8 @@
       profiles: Array.isArray(index.profiles) ? index.profiles.length : Object.keys(safe.data).filter((key) => key.startsWith("profile_")).length,
       applications: Array.isArray(state.applications) ? state.applications.length : 0,
       contacts: Array.isArray(state.contacts) ? state.contacts.length : 0,
+      companies: Array.isArray(state.companies) ? state.companies.length : 0,
+      waiting: Array.isArray(state.waiting_items) ? state.waiting_items.filter((item) => item.status === "open").length : 0,
       actions: Array.isArray(state.reminders) ? state.reminders.filter((item) => item.status === "open" || (!item.status && !item.completed_at)).length : 0,
       activities: Array.isArray(state.contact_activities) ? state.contact_activities.length : 0,
       interviews: Array.isArray(state.interviews) ? state.interviews.length : 0,

@@ -92,6 +92,8 @@ function conflictRecordName(conflict = {}) {
   }
   if (conflict.entityType === "contact") return String(payload.name || [payload.first_name, payload.last_name].filter(Boolean).join(" ") || "Contact");
   if (conflict.entityType === "contact_activity") return "Contact activity";
+  if (conflict.entityType === "company") return String(payload.name || "Company");
+  if (conflict.entityType === "waiting_item") return String(payload.what || "Waiting item");
   if (conflict.entityType === "profile") return String(payload.profileName || payload.name || "Profile");
   if (conflict.entityType === "interview") return String(payload.title || payload.type || "Interview");
   return type.charAt(0).toUpperCase() + type.slice(1);
@@ -102,7 +104,7 @@ function versionTime(primary, payload = {}) {
 }
 
 function renderLegacySummary(summary = {}) {
-  const labels = { applications: "Applications", profiles: "Profiles", answers: "Saved answers", contacts: "Contacts", interviews: "Interviews", reminders: "Reminders", resumeVersions: "Resume versions", settings: "Settings" };
+  const labels = { applications: "Applications", profiles: "Profiles", answers: "Saved answers", contacts: "Contacts", companies: "Companies", waiting: "Waiting", interviews: "Interviews", reminders: "Reminders", resumeVersions: "Resume versions", settings: "Settings" };
   const entries = Object.entries(summary || {}).filter(([, value]) => Number.isFinite(Number(value)) && Number(value) > 0);
   $("#migration-summary").replaceChildren(...entries.map(([key, value]) => {
     const item = document.createElement("div");
