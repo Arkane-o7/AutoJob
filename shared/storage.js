@@ -3,6 +3,13 @@
 
   const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
   const STORAGE_LOCK_NAME = "applyos-state-write";
+  const APPLICATION_FOLLOW_UP_KINDS = new Set(["application_follow_up", "application_final_follow_up"]);
+  const GENERATED_APPLICATION_PROCESS_KINDS = new Set([
+    "application_follow_up",
+    "application_final_follow_up",
+    "interview_prep",
+    "interview_thank_you"
+  ]);
   let localStorageQueue = Promise.resolve();
 
   function isRecord(value) {
@@ -56,6 +63,46 @@
     return Object.fromEntries(Object.entries(value).filter(([, item]) => typeof item === "string"));
   }
 
+  function safeContextSnapshot(value) {
+    if (!isRecord(value)) return {};
+    return Object.fromEntries(Object.entries(value)
+      .filter(([key, item]) => ["company", "role", "interview_type", "contact_name"].includes(key) && typeof item === "string" && item.trim()));
+  }
+
+  function newestDate(...values) {
+    return values.filter((value) => safeNullableDate(value))
+      .sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0] || null;
+  }
+
+  function isSystemApplicationFollowUp(item, applicationId = item?.application_id) {
+    return item?.application_id === applicationId
+      && item?.source === "system"
+      && item?.status === "open"
+      && APPLICATION_FOLLOW_UP_KINDS.has(item?.kind);
+  }
+
+  function cancelActionRecord(item, now) {
+    if (!item || item.status !== "open") return item;
+    item.status = "cancelled";
+    item.updated_at = now;
+    return item;
+  }
+
+  function reconcileApplicationFollowUpStatus(state, applicationId, now = ApplyOS.nowISO()) {
+    if (!applicationId) return;
+    const application = state.applications.find((item) => item.id === applicationId);
+    if (!application || application.status !== "follow_up_due") return;
+    const at = new Date(now).getTime();
+    const hasDueFollowUp = state.reminders.some((item) => item.application_id === applicationId
+      && item.status === "open"
+      && APPLICATION_FOLLOW_UP_KINDS.has(item.kind)
+      && new Date(item.snoozed_until || item.due_at).getTime() <= at);
+    if (!hasDueFollowUp) {
+      application.status = "applied";
+      application.updated_at = now;
+    }
+  }
+
   function safeWebUrl(value) {
     const text = safeString(value).trim();
     if (!text) return "";
@@ -93,7 +140,96 @@
     1: (state) => recordMigration(state, 1, 2),
     2: (state) => recordMigration({ ...state, revision: Math.max(0, Math.trunc(safeNumber(state.revision))) }, 2, 3),
     3: (state) => recordMigration({ ...state, contacts: Array.isArray(state.contacts) ? state.contacts : [], interviews: Array.isArray(state.interviews) ? state.interviews : [] }, 3, 4),
-    4: (state) => recordMigration({ ...state }, 4, 5)
+    4: (state) => recordMigration({ ...state }, 4, 5),
+    5: (state) => {
+      const now = ApplyOS.nowISO();
+      const applications = Array.isArray(state.applications) ? state.applications : [];
+      const appById = new Map(applications.map((item) => [item?.id, item]));
+      const reminders = (Array.isArray(state.reminders) ? state.reminders : []).map((item) => {
+        const application = appById.get(item?.application_id) || {};
+        const isFinal = item?.type === "final_follow_up";
+        return {
+          ...item,
+          kind: isFinal ? "application_final_follow_up" : "application_follow_up",
+          title: item?.title || `${isFinal ? "Follow up again" : "Follow up"} on ${application.role || "application"}${application.company ? ` at ${application.company}` : ""}`,
+          status: item?.completed_at ? "done" : "open",
+          snoozed_until: null,
+          priority: application.priority || "medium",
+          channel: "email",
+          contact_id: null,
+          interview_id: null,
+          notes: "",
+          source: "system",
+          last_notified_at: null,
+          updated_at: item?.created_at || now
+        };
+      });
+      const existingKeys = new Set(reminders.map((item) => `${item.kind}:${item.contact_id || ""}:${item.interview_id || ""}`));
+      for (const contact of Array.isArray(state.contacts) ? state.contacts : []) {
+        if (!contact?.id || !contact.next_action_at) continue;
+        const key = `contact_follow_up:${contact.id}:`;
+        if (existingKeys.has(key)) continue;
+        reminders.push({
+          id: `contact_next_${String(contact.id).slice(-100)}`,
+          kind: "contact_follow_up",
+          type: "follow_up",
+          title: `Follow up with ${contact.name || "contact"}`,
+          status: "open",
+          due_at: contact.next_action_at,
+          snoozed_until: null,
+          priority: "medium",
+          channel: contact.preferred_channel || (contact.email ? "email" : contact.linkedin_url ? "linkedin" : "other"),
+          application_id: Array.isArray(contact.application_ids) ? contact.application_ids[0] || null : null,
+          contact_id: contact.id,
+          interview_id: null,
+          notes: "",
+          source: "system",
+          completed_at: null,
+          last_notified_at: null,
+          created_at: contact.created_at || now,
+          updated_at: contact.updated_at || contact.created_at || now
+        });
+        existingKeys.add(key);
+      }
+      for (const interview of Array.isArray(state.interviews) ? state.interviews : []) {
+        if (!interview?.id || !interview.next_action_at) continue;
+        const key = `interview_thank_you::${interview.id}`;
+        if (existingKeys.has(key)) continue;
+        reminders.push({
+          id: `interview_next_${String(interview.id).slice(-98)}`,
+          kind: "interview_thank_you",
+          type: "follow_up",
+          title: interview.next_action || "Send interview thank-you",
+          status: "open",
+          due_at: interview.next_action_at,
+          snoozed_until: null,
+          priority: "high",
+          channel: "email",
+          application_id: interview.application_id || null,
+          contact_id: Array.isArray(interview.interviewer_contact_ids) ? interview.interviewer_contact_ids[0] || null : null,
+          interview_id: interview.id,
+          notes: "",
+          source: "system",
+          completed_at: null,
+          last_notified_at: null,
+          created_at: interview.created_at || now,
+          updated_at: interview.updated_at || interview.created_at || now
+        });
+        existingKeys.add(key);
+      }
+      const oldSettings = isRecord(state.settings) ? state.settings : {};
+      return recordMigration({
+        ...state,
+        reminders,
+        contact_activities: Array.isArray(state.contact_activities) ? state.contact_activities : [],
+        settings: {
+          ...oldSettings,
+          follow_up_offsets_days: oldSettings.final_follow_up_enabled === false ? [7] : [7, 14],
+          desktop_notifications_enabled: false,
+          notification_digest_time: "09:00"
+        }
+      }, 5, 6);
+    }
   };
 
   function migrateState(input) {
@@ -144,14 +280,32 @@
   function normalizeReminder(item) {
     if (!isRecord(item)) return null;
     const now = ApplyOS.nowISO();
+    const completedAt = safeNullableDate(item.completed_at);
+    const legacyFinal = item.type === "final_follow_up";
+    const kind = ApplyOS.ACTION_KINDS.includes(item.kind)
+      ? item.kind
+      : (legacyFinal ? "application_final_follow_up" : "application_follow_up");
     return {
       ...item,
       id: safeId(item.id, "rem"),
-      application_id: safeString(item.application_id),
-      type: item.type === "final_follow_up" ? "final_follow_up" : "follow_up",
+      kind,
+      type: kind === "application_final_follow_up" ? "final_follow_up" : "follow_up",
+      title: safeString(item.title, "Next action") || "Next action",
+      status: ApplyOS.ACTION_STATUSES.includes(item.status) ? item.status : (completedAt ? "done" : "open"),
       due_at: safeDateString(item.due_at, now),
-      completed_at: safeNullableString(item.completed_at),
-      created_at: safeDateString(item.created_at, now)
+      snoozed_until: safeNullableDate(item.snoozed_until),
+      priority: ApplyOS.PRIORITIES.includes(item.priority) ? item.priority : "medium",
+      channel: ApplyOS.ACTION_CHANNELS.includes(item.channel) ? item.channel : "other",
+      application_id: safeNullableString(item.application_id),
+      contact_id: safeNullableString(item.contact_id),
+      interview_id: safeNullableString(item.interview_id),
+      notes: safeString(item.notes),
+      source: item.source === "user" ? "user" : "system",
+      completed_at: completedAt,
+      last_notified_at: safeNullableDate(item.last_notified_at),
+      context_snapshot: safeContextSnapshot(item.context_snapshot),
+      created_at: safeDateString(item.created_at, now),
+      updated_at: safeDateString(item.updated_at, safeDateString(item.created_at, now))
     };
   }
 
@@ -222,12 +376,37 @@
       title: safeString(item.title),
       company: safeString(item.company),
       email: safeString(item.email),
+      phone: safeString(item.phone),
       linkedin_url: safeWebUrl(item.linkedin_url),
+      preferred_channel: ApplyOS.ACTION_CHANNELS.includes(item.preferred_channel) ? item.preferred_channel : (item.email ? "email" : item.linkedin_url ? "linkedin" : "other"),
+      tags: [...new Set(safeStringArray(item.tags).map((tag) => tag.trim()).filter(Boolean))].slice(0, 20),
       relationship: ApplyOS.CONTACT_RELATIONSHIPS.includes(item.relationship) ? item.relationship : "other",
       application_ids: [...new Set(safeStringArray(item.application_ids).filter(Boolean))],
       notes: safeString(item.notes),
       last_contacted_at: safeNullableDate(item.last_contacted_at),
       next_action_at: safeNullableDate(item.next_action_at),
+      created_at: createdAt,
+      updated_at: safeDateString(item.updated_at, createdAt)
+    };
+  }
+
+  function normalizeContactActivity(item) {
+    if (!isRecord(item)) return null;
+    const now = ApplyOS.nowISO();
+    const createdAt = safeDateString(item.created_at, now);
+    return {
+      ...item,
+      id: safeId(item.id, "activity"),
+      contact_id: safeString(item.contact_id),
+      application_id: safeNullableString(item.application_id),
+      interview_id: safeNullableString(item.interview_id),
+      action_id: safeNullableString(item.action_id),
+      type: ApplyOS.CONTACT_ACTIVITY_TYPES.includes(item.type) ? item.type : "note",
+      direction: ApplyOS.CONTACT_ACTIVITY_DIRECTIONS.includes(item.direction) ? item.direction : "none",
+      occurred_at: safeDateString(item.occurred_at, now),
+      subject: safeString(item.subject),
+      summary: safeString(item.summary),
+      outcome: safeString(item.outcome),
       created_at: createdAt,
       updated_at: safeDateString(item.updated_at, createdAt)
     };
@@ -252,6 +431,9 @@
       question_notes: safeString(item.question_notes),
       next_action: safeString(item.next_action),
       next_action_at: safeNullableDate(item.next_action_at),
+      create_preparation_action: item.create_preparation_action !== false,
+      preparation_action_at: safeNullableDate(item.preparation_action_at),
+      create_thank_you_action: item.create_thank_you_action !== false,
       completed_at: safeNullableDate(item.completed_at),
       created_at: createdAt,
       updated_at: safeDateString(item.updated_at, createdAt)
@@ -269,8 +451,15 @@
       learned_answers: [],
       resume_versions: [],
       contacts: [],
+      contact_activities: [],
       interviews: [],
-      settings: { final_follow_up_enabled: true, notification_enabled: true },
+      settings: {
+        final_follow_up_enabled: true,
+        notification_enabled: true,
+        follow_up_offsets_days: [7, 14],
+        desktop_notifications_enabled: false,
+        notification_digest_time: "09:00"
+      },
       migrated_at: ApplyOS.nowISO()
     };
   }
@@ -286,21 +475,68 @@
     state.learned_answers = (Array.isArray(state.learned_answers) ? state.learned_answers : []).map(normalizeLearnedAnswer).filter(Boolean);
     state.resume_versions = (Array.isArray(state.resume_versions) ? state.resume_versions : []).map(normalizeResumeVersion).filter(Boolean);
     state.contacts = (Array.isArray(state.contacts) ? state.contacts : []).map(normalizeContact).filter(Boolean);
+    state.contact_activities = (Array.isArray(state.contact_activities) ? state.contact_activities : []).map(normalizeContactActivity).filter(Boolean);
     state.interviews = (Array.isArray(state.interviews) ? state.interviews : []).map(normalizeInterview).filter(Boolean);
     const applicationIds = new Set(state.applications.map((item) => item.id));
     const resumeIds = new Set(state.resume_versions.map((item) => item.id));
     state.applications = state.applications.map((item) => ({ ...item, resume_version_id: resumeIds.has(item.resume_version_id) ? item.resume_version_id : null }));
-    state.reminders = state.reminders.filter((item) => applicationIds.has(item.application_id));
     state.contacts = state.contacts.map((item) => ({ ...item, application_ids: item.application_ids.filter((id) => applicationIds.has(id)) }));
     const contactIds = new Set(state.contacts.map((item) => item.id));
     state.interviews = state.interviews
       .filter((item) => applicationIds.has(item.application_id))
       .map((item) => ({ ...item, interviewer_contact_ids: item.interviewer_contact_ids.filter((id) => contactIds.has(id)) }));
+    const interviewIds = new Set(state.interviews.map((item) => item.id));
+    state.reminders = state.reminders.filter((item) => {
+      if (item.application_id && !applicationIds.has(item.application_id)) item.application_id = null;
+      if (item.contact_id && !contactIds.has(item.contact_id)) item.contact_id = null;
+      if (item.interview_id && !interviewIds.has(item.interview_id)) item.interview_id = null;
+      if (item.kind.startsWith("application_")) return Boolean(item.application_id) || item.status !== "open";
+      if (item.kind === "contact_follow_up") return Boolean(item.contact_id) || item.status !== "open";
+      if (item.kind.startsWith("interview_")) return Boolean(item.interview_id) || item.status !== "open";
+      return item.kind === "custom";
+    });
+    const actionIds = new Set(state.reminders.map((item) => item.id));
+    state.contact_activities = state.contact_activities
+      .filter((item) => contactIds.has(item.contact_id))
+      .map((item) => ({
+        ...item,
+        application_id: applicationIds.has(item.application_id) ? item.application_id : null,
+        interview_id: interviewIds.has(item.interview_id) ? item.interview_id : null,
+        action_id: actionIds.has(item.action_id) ? item.action_id : null
+      }));
     state.settings = { ...emptyState().settings, ...(isRecord(state.settings) ? state.settings : {}) };
     state.settings.final_follow_up_enabled = state.settings.final_follow_up_enabled !== false;
     state.settings.notification_enabled = state.settings.notification_enabled !== false;
+    state.settings.follow_up_offsets_days = [...new Set((Array.isArray(state.settings.follow_up_offsets_days) ? state.settings.follow_up_offsets_days : [7, 14])
+      .map(Number).filter((value) => Number.isInteger(value) && value >= 1 && value <= 60))].sort((a, b) => a - b).slice(0, 4);
+    if (!state.settings.follow_up_offsets_days.length) state.settings.follow_up_offsets_days = [7, 14];
+    state.settings.desktop_notifications_enabled = state.settings.desktop_notifications_enabled === true;
+    state.settings.notification_digest_time = /^([01]\d|2[0-3]):[0-5]\d$/.test(state.settings.notification_digest_time) ? state.settings.notification_digest_time : "09:00";
+    syncNextActionProjections(state);
     state.migrated_at = safeDateString(state.migrated_at, ApplyOS.nowISO());
     return state;
+  }
+
+  function actionDueTime(action) {
+    return new Date(action.snoozed_until || action.due_at).getTime();
+  }
+
+  function firstOpenAction(state, predicate) {
+    return state.reminders.filter((item) => item.status === "open" && predicate(item))
+      .sort((left, right) => actionDueTime(left) - actionDueTime(right))[0] || null;
+  }
+
+  function syncNextActionProjections(state) {
+    state.applications = state.applications.map((application) => {
+      const action = firstOpenAction(state, (item) => item.application_id === application.id && ["application_follow_up", "application_final_follow_up"].includes(item.kind));
+      return { ...application, follow_up_date: action ? (action.snoozed_until || action.due_at) : null };
+    });
+    state.contacts = state.contacts.map((contact) => {
+      const action = firstOpenAction(state, (item) => item.contact_id === contact.id);
+      const latestActivity = state.contact_activities.filter((item) => item.contact_id === contact.id)
+        .sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime())[0];
+      return { ...contact, next_action_at: action ? (action.snoozed_until || action.due_at) : null, last_contacted_at: latestActivity?.occurred_at || contact.last_contacted_at || null };
+    });
   }
 
   function withStorageLock(task) {
@@ -485,7 +721,13 @@
       updated = { ...state.applications[index], ...patch, id, updated_at: ApplyOS.nowISO() };
       state.applications[index] = updated;
       if (["offer", "rejected", "closed"].includes(updated.status)) {
-        state.reminders = state.reminders.map((item) => item.application_id === id && !item.completed_at ? { ...item, completed_at: ApplyOS.nowISO() } : item);
+        const now = ApplyOS.nowISO();
+        state.reminders = state.reminders.map((item) => item.application_id === id
+          && item.status === "open"
+          && item.source === "system"
+          && GENERATED_APPLICATION_PROCESS_KINDS.has(item.kind)
+          ? { ...item, status: "cancelled", updated_at: now }
+          : item);
       }
       return state;
     });
@@ -494,13 +736,41 @@
 
   ApplyOS.deleteApplication = async function deleteApplication(id) {
     const state = await ApplyOS.mutateState((draft) => {
-      if (!draft.applications.some((item) => item.id === id)) return draft;
+      const application = draft.applications.find((item) => item.id === id);
+      if (!application) return draft;
+      const now = ApplyOS.nowISO();
       draft.applications = draft.applications.filter((item) => item.id !== id);
-      draft.reminders = draft.reminders.filter((item) => item.application_id !== id);
+      const deletedInterviews = draft.interviews.filter((item) => item.application_id === id);
+      const interviewIds = new Set(deletedInterviews.map((item) => item.id));
+      const interviewById = new Map(deletedInterviews.map((item) => [item.id, item]));
+      draft.reminders = draft.reminders.map((item) => {
+        if (item.application_id !== id && !interviewIds.has(item.interview_id)) return item;
+        const interview = interviewById.get(item.interview_id);
+        const next = {
+          ...item,
+          application_id: null,
+          interview_id: null,
+          context_snapshot: {
+            ...item.context_snapshot,
+            company: application.company,
+            role: application.role,
+            ...(interview ? { interview_type: interview.type } : {})
+          },
+          updated_at: now
+        };
+        if (next.status === "open" && (next.source === "system" || next.kind.startsWith("application_") || next.kind.startsWith("interview_"))) {
+          next.status = "cancelled";
+        }
+        return next;
+      });
       draft.interviews = draft.interviews.filter((item) => item.application_id !== id);
+      draft.contact_activities = draft.contact_activities.map((item) => item.application_id === id || interviewIds.has(item.interview_id)
+        ? { ...item, application_id: item.application_id === id ? null : item.application_id, interview_id: interviewIds.has(item.interview_id) ? null : item.interview_id, updated_at: now }
+        : item);
       draft.contacts = draft.contacts.map((item) => ({
         ...item,
-        application_ids: item.application_ids.filter((applicationId) => applicationId !== id)
+        application_ids: item.application_ids.filter((applicationId) => applicationId !== id),
+        updated_at: item.application_ids.includes(id) ? now : item.updated_at
       }));
       return draft;
     });
@@ -514,10 +784,8 @@
       const index = state.applications.findIndex((item) => item.id === id);
       if (index < 0) return state;
       const application = state.applications[index];
-      const reminders = ApplyOS.buildFollowUpReminders(application, appliedAt);
-      state.reminders = state.reminders.filter((item) => item.application_id !== id || item.completed_at).concat(
-        state.settings.final_follow_up_enabled === false ? reminders.slice(0, 1) : reminders
-      );
+      const reminders = ApplyOS.buildFollowUpReminders(application, appliedAt, state.settings.follow_up_offsets_days);
+      state.reminders = state.reminders.filter((item) => !isSystemApplicationFollowUp(item, id)).concat(reminders);
       updated = {
         ...application,
         status: "applied",
@@ -534,7 +802,9 @@
   ApplyOS.refreshDueApplications = async function refreshDueApplications(at = new Date()) {
     const now = new Date(at).getTime();
     return ApplyOS.mutateState((state) => {
-      const dueIds = new Set(state.reminders.filter((item) => !item.completed_at && new Date(item.due_at).getTime() <= now).map((item) => item.application_id));
+      const dueIds = new Set(state.reminders.filter((item) => item.status === "open"
+        && ["application_follow_up", "application_final_follow_up"].includes(item.kind)
+        && new Date(item.snoozed_until || item.due_at).getTime() <= now).map((item) => item.application_id));
       state.applications = state.applications.map((item) => dueIds.has(item.id) && item.status === "applied"
         ? { ...item, status: "follow_up_due", updated_at: ApplyOS.nowISO() }
         : item);
@@ -542,26 +812,106 @@
     });
   };
 
-  ApplyOS.completeReminder = async function completeReminder(id) {
+  ApplyOS.listActions = async function listActions(filters = {}) {
+    const state = await ApplyOS.getState();
+    const now = filters.at ? new Date(filters.at) : new Date();
+    const start = new Date(now); start.setHours(0, 0, 0, 0);
+    const end = new Date(start); end.setDate(end.getDate() + 1);
+    return state.reminders.filter((item) => {
+      if (filters.status && item.status !== filters.status) return false;
+      if (filters.kind && item.kind !== filters.kind) return false;
+      if (filters.priority && item.priority !== filters.priority) return false;
+      if (filters.channel && item.channel !== filters.channel) return false;
+      if (filters.application_id && item.application_id !== filters.application_id) return false;
+      if (filters.contact_id && item.contact_id !== filters.contact_id) return false;
+      return true;
+    }).map((item) => {
+      const effective_due_at = item.snoozed_until || item.due_at;
+      const due = new Date(effective_due_at).getTime();
+      const group = item.status !== "open" ? "done" : due < start.getTime() ? "overdue" : due < end.getTime() ? "today" : "upcoming";
+      return { ...item, effective_due_at, group };
+    }).sort((left, right) => {
+      const priorityRank = { high: 0, medium: 1, low: 2 };
+      return new Date(left.effective_due_at).getTime() - new Date(right.effective_due_at).getTime()
+        || priorityRank[left.priority] - priorityRank[right.priority]
+        || new Date(left.created_at).getTime() - new Date(right.created_at).getTime();
+    });
+  };
+
+  ApplyOS.upsertAction = async function upsertAction(input = {}) {
+    let saved = null;
+    await ApplyOS.mutateState((state) => {
+      const now = ApplyOS.nowISO();
+      const index = state.reminders.findIndex((item) => item.id === input.id);
+      const current = index >= 0 ? state.reminders[index] : { id: ApplyOS.uid("rem"), created_at: now, source: "user" };
+      saved = normalizeReminder({ ...current, ...input, id: current.id, updated_at: now });
+      const validContext = saved.kind === "custom"
+        || (saved.kind.startsWith("application_") && state.applications.some((item) => item.id === saved.application_id))
+        || (saved.kind === "contact_follow_up" && state.contacts.some((item) => item.id === saved.contact_id))
+        || (saved.kind.startsWith("interview_") && state.interviews.some((item) => item.id === saved.interview_id));
+      if (!validContext) { saved = null; return state; }
+      if (index >= 0) state.reminders[index] = saved;
+      else state.reminders.unshift(saved);
+      return state;
+    });
+    return saved;
+  };
+
+  ApplyOS.completeAction = async function completeAction(id) {
     let applicationId = null;
     const state = await ApplyOS.mutateState((draft) => {
-      const reminder = draft.reminders.find((item) => item.id === id && !item.completed_at);
+      const reminder = draft.reminders.find((item) => item.id === id && item.status === "open");
       if (!reminder) return draft;
       applicationId = reminder.application_id;
-      reminder.completed_at = ApplyOS.nowISO();
-      const application = draft.applications.find((item) => item.id === applicationId);
-      const hasDueReminder = draft.reminders.some((item) => item.application_id === applicationId && !item.completed_at && new Date(item.due_at).getTime() <= Date.now());
-      if (application?.status === "follow_up_due" && !hasDueReminder) {
-        application.status = "applied";
-        application.updated_at = ApplyOS.nowISO();
-      }
-      const next = draft.reminders
-        .filter((item) => item.application_id === applicationId && !item.completed_at)
-        .sort((left, right) => new Date(left.due_at).getTime() - new Date(right.due_at).getTime())[0];
-      if (application) application.follow_up_date = next?.due_at || null;
+      const now = ApplyOS.nowISO();
+      reminder.status = "done";
+      reminder.completed_at = now;
+      reminder.updated_at = now;
+      reconcileApplicationFollowUpStatus(draft, applicationId, now);
       return draft;
     });
     return { state, application_id: applicationId };
+  };
+
+  ApplyOS.completeReminder = ApplyOS.completeAction;
+
+  async function transitionAction(id, status) {
+    return ApplyOS.mutateState((state) => {
+      const action = state.reminders.find((item) => item.id === id && item.status === "open");
+      if (!action) return state;
+      const applicationId = action.application_id;
+      action.status = status;
+      const now = ApplyOS.nowISO();
+      action.updated_at = now;
+      reconcileApplicationFollowUpStatus(state, applicationId, now);
+      return state;
+    });
+  }
+
+  ApplyOS.skipAction = (id) => transitionAction(id, "skipped");
+  ApplyOS.cancelAction = (id) => transitionAction(id, "cancelled");
+
+  ApplyOS.snoozeAction = async function snoozeAction(id, until) {
+    return ApplyOS.mutateState((state) => {
+      const action = state.reminders.find((item) => item.id === id && item.status === "open");
+      const iso = safeNullableDate(until);
+      if (!action || !iso) return state;
+      action.snoozed_until = iso;
+      action.updated_at = ApplyOS.nowISO();
+      return state;
+    });
+  };
+
+  ApplyOS.rescheduleAction = async function rescheduleAction(id, dueAt) {
+    return ApplyOS.mutateState((state) => {
+      const action = state.reminders.find((item) => item.id === id && item.status === "open");
+      const iso = safeNullableDate(dueAt);
+      if (!action || !iso) return state;
+      action.due_at = iso;
+      action.snoozed_until = null;
+      action.updated_at = ApplyOS.nowISO();
+      return state;
+    });
   };
 
   ApplyOS.rescheduleFollowUp = async function rescheduleFollowUp(applicationId, dueAt) {
@@ -570,12 +920,15 @@
       const application = state.applications.find((item) => item.id === applicationId);
       if (!application) return state;
       const reminder = state.reminders
-        .filter((item) => item.application_id === applicationId && item.type === "follow_up" && !item.completed_at)
-        .sort((a, b) => new Date(a.due_at).getTime() - new Date(b.due_at).getTime())[0];
+        .filter((item) => item.application_id === applicationId && item.kind === "application_follow_up" && item.status === "open")
+        .sort((a, b) => new Date(a.snoozed_until || a.due_at).getTime() - new Date(b.snoozed_until || b.due_at).getTime())[0];
       const iso = dueAt ? new Date(`${String(dueAt).slice(0, 10)}T12:00:00`).toISOString() : null;
-      if (reminder && iso) reminder.due_at = iso;
-      else if (iso) state.reminders.push({ id: ApplyOS.uid("rem"), application_id: applicationId, type: "follow_up", due_at: iso, completed_at: null, created_at: ApplyOS.nowISO() });
-      application.follow_up_date = iso;
+      if (reminder && iso) { reminder.due_at = iso; reminder.snoozed_until = null; reminder.updated_at = ApplyOS.nowISO(); }
+      else if (iso) {
+        const action = ApplyOS.buildFollowUpReminders(application, new Date(new Date(iso).getTime() - 86400000), [1])[0];
+        action.due_at = iso;
+        state.reminders.push(action);
+      }
       application.updated_at = ApplyOS.nowISO();
       updated = application;
       return state;
@@ -652,6 +1005,45 @@
       if (score > (best?.score || 0)) best = { ...item, score };
     }
     return best?.score >= 0.58 ? best : null;
+  };
+
+  ApplyOS.rememberApplicationAnswer = async function rememberApplicationAnswer(entry = {}) {
+    const question = safeString(entry.question).trim().slice(0, 500);
+    const answer = safeString(entry.answer).trim().slice(0, 5000);
+    if (!question || !answer) return null;
+    const profileId = safeString(entry.profile_id || entry.profileId, "default") || "default";
+    const scope = entry.scope === "company" ? "company" : "global";
+    const companyDomain = scope === "company" ? safeDomain(entry.company_domain || entry.companyDomain) : "";
+    if (scope === "company" && !companyDomain) return null;
+    let remembered = null;
+    await ApplyOS.mutateState((state) => {
+      const normalized = ApplyOS.normalizeQuestion(question);
+      const now = ApplyOS.nowISO();
+      const memoryGroup = `custom:${profileId}`;
+      const existing = state.answer_memory.find((item) => item.normalized_question === normalized
+        && item.profile_id === profileId
+        && item.scope === scope
+        && item.company_domain === companyDomain);
+      if (existing) {
+        existing.question = question;
+        existing.answer = answer;
+        existing.source = "application";
+        existing.memory_group = memoryGroup;
+        existing.use_count = Number(existing.use_count || 0) + 1;
+        existing.updated_at = now;
+        remembered = existing;
+      } else {
+        remembered = answerFromLegacy({ question, answer, scope, company_domain: companyDomain }, {
+          source: "application",
+          profileId,
+          memoryGroup
+        });
+        remembered.use_count = 1;
+        state.answer_memory.push(remembered);
+      }
+      return state;
+    });
+    return remembered;
   };
 
   ApplyOS.rememberCorrection = async function rememberCorrection(correction = {}) {
@@ -745,10 +1137,168 @@
     return saved;
   };
 
+  ApplyOS.findDuplicateContacts = async function findDuplicateContacts(input = {}, excludeId = "") {
+    const state = await ApplyOS.getState();
+    const email = safeString(input.email).trim().toLowerCase();
+    const linkedin = safeWebUrl(input.linkedin_url).replace(/\/$/, "").toLowerCase();
+    const name = safeString(input.name).trim().toLowerCase();
+    return state.contacts.filter((item) => item.id !== excludeId).map((item) => {
+      const exactEmail = Boolean(email && item.email.trim().toLowerCase() === email);
+      const exactLinkedIn = Boolean(linkedin && item.linkedin_url.replace(/\/$/, "").toLowerCase() === linkedin);
+      const sameName = Boolean(name && item.name.trim().toLowerCase() === name);
+      return { contact: item, exact: exactEmail || exactLinkedIn, reason: exactEmail ? "email" : exactLinkedIn ? "linkedin" : sameName ? "name" : "" };
+    }).filter((item) => item.reason);
+  };
+
+  ApplyOS.applyContactImportPlan = async function applyContactImportPlan(rows = []) {
+    const summary = { created: 0, merged: 0, skipped: 0 };
+    await ApplyOS.mutateState((state) => {
+      const now = ApplyOS.nowISO();
+      for (const row of rows) {
+        if (!row || row.errors?.length || row.decision === "skip") { summary.skipped += 1; continue; }
+        if (row.decision === "merge") {
+          const index = state.contacts.findIndex((item) => item.id === row.mergeTargetId);
+          if (index < 0) { summary.skipped += 1; continue; }
+          const target = state.contacts[index];
+          const input = normalizeContact({ ...row.input, id: target.id, created_at: target.created_at, updated_at: now });
+          state.contacts[index] = normalizeContact({
+            ...input,
+            ...target,
+            id: target.id,
+            name: target.name || input.name,
+            email: target.email || input.email,
+            phone: target.phone || input.phone,
+            linkedin_url: target.linkedin_url || input.linkedin_url,
+            title: target.title || input.title,
+            company: target.company || input.company,
+            notes: [target.notes, input.notes].filter(Boolean).join("\n\n"),
+            tags: [...new Set([...(target.tags || []), ...(input.tags || [])])],
+            application_ids: [...new Set([...(target.application_ids || []), ...(input.application_ids || [])])],
+            last_contacted_at: newestDate(target.last_contacted_at, input.last_contacted_at),
+            created_at: target.created_at,
+            updated_at: now
+          });
+          summary.merged += 1;
+          continue;
+        }
+        state.contacts.unshift(normalizeContact({ ...row.input, id: ApplyOS.uid("contact"), created_at: now, updated_at: now }));
+        summary.created += 1;
+      }
+      return state;
+    });
+    return summary;
+  };
+
+  ApplyOS.logContactActivity = async function logContactActivity(input = {}, options = {}) {
+    let saved = null;
+    await ApplyOS.mutateState((state) => {
+      const contact = state.contacts.find((item) => item.id === input.contact_id);
+      if (!contact) return state;
+      const now = ApplyOS.nowISO();
+      saved = normalizeContactActivity({ ...input, id: input.id || ApplyOS.uid("activity"), created_at: input.created_at || now, updated_at: now });
+      const existingIndex = state.contact_activities.findIndex((item) => item.id === saved.id);
+      if (existingIndex >= 0) state.contact_activities[existingIndex] = saved;
+      else state.contact_activities.unshift(saved);
+      if (options.complete_action_id) {
+        const action = state.reminders.find((item) => item.id === options.complete_action_id && item.status === "open");
+        if (action) {
+          action.status = "done";
+          action.completed_at = now;
+          action.updated_at = now;
+          reconcileApplicationFollowUpStatus(state, action.application_id, now);
+        }
+      }
+      if (options.next_action?.title && options.next_action?.due_at) {
+        const next = normalizeReminder({
+          ...options.next_action,
+          id: ApplyOS.uid("rem"),
+          kind: "contact_follow_up",
+          status: "open",
+          contact_id: contact.id,
+          application_id: options.next_action.application_id || saved.application_id,
+          interview_id: null,
+          source: "user",
+          created_at: now,
+          updated_at: now
+        });
+        state.reminders.unshift(next);
+      }
+      contact.updated_at = now;
+      return state;
+    });
+    return saved;
+  };
+
+  ApplyOS.updateContactActivity = async function updateContactActivity(id, patch = {}) {
+    let updated = null;
+    await ApplyOS.mutateState((state) => {
+      const index = state.contact_activities.findIndex((item) => item.id === id);
+      if (index < 0) return state;
+      updated = normalizeContactActivity({ ...state.contact_activities[index], ...patch, id, updated_at: ApplyOS.nowISO() });
+      state.contact_activities[index] = updated;
+      return state;
+    });
+    return updated;
+  };
+
+  ApplyOS.deleteContactActivity = async function deleteContactActivity(id) {
+    return ApplyOS.mutateState((state) => {
+      const deleted = state.contact_activities.find((item) => item.id === id);
+      state.contact_activities = state.contact_activities.filter((item) => item.id !== id);
+      if (deleted) {
+        const contact = state.contacts.find((item) => item.id === deleted.contact_id);
+        const latest = state.contact_activities.filter((item) => item.contact_id === deleted.contact_id)
+          .sort((left, right) => new Date(right.occurred_at).getTime() - new Date(left.occurred_at).getTime())[0];
+        if (contact) contact.last_contacted_at = latest?.occurred_at || null;
+      }
+      return state;
+    });
+  };
+
+  ApplyOS.mergeContacts = async function mergeContacts(sourceId, targetId) {
+    if (!sourceId || !targetId || sourceId === targetId) return null;
+    let merged = null;
+    await ApplyOS.mutateState((state) => {
+      const source = state.contacts.find((item) => item.id === sourceId);
+      const target = state.contacts.find((item) => item.id === targetId);
+      if (!source || !target) return state;
+      const now = ApplyOS.nowISO();
+      merged = normalizeContact({
+        ...source,
+        ...target,
+        id: target.id,
+        name: target.name || source.name,
+        email: target.email || source.email,
+        phone: target.phone || source.phone,
+        linkedin_url: target.linkedin_url || source.linkedin_url,
+        title: target.title || source.title,
+        company: target.company || source.company,
+        notes: [target.notes, source.notes].filter(Boolean).join("\n\n"),
+        tags: [...new Set([...(target.tags || []), ...(source.tags || [])])],
+        application_ids: [...new Set([...(target.application_ids || []), ...(source.application_ids || [])])],
+        last_contacted_at: newestDate(target.last_contacted_at, source.last_contacted_at),
+        created_at: [target.created_at, source.created_at].filter(Boolean).sort()[0] || now,
+        updated_at: now
+      });
+      state.contacts = state.contacts.filter((item) => item.id !== sourceId).map((item) => item.id === targetId ? merged : item);
+      state.interviews = state.interviews.map((item) => ({ ...item, interviewer_contact_ids: [...new Set(item.interviewer_contact_ids.map((id) => id === sourceId ? targetId : id))] }));
+      state.reminders = state.reminders.map((item) => item.contact_id === sourceId ? { ...item, contact_id: targetId, updated_at: now } : item);
+      state.contact_activities = state.contact_activities.map((item) => item.contact_id === sourceId ? { ...item, contact_id: targetId, updated_at: now } : item);
+      return state;
+    });
+    return merged;
+  };
+
   ApplyOS.deleteContact = async function deleteContact(id) {
     return ApplyOS.mutateState((state) => {
       state.contacts = state.contacts.filter((item) => item.id !== id);
       state.interviews = state.interviews.map((item) => ({ ...item, interviewer_contact_ids: item.interviewer_contact_ids.filter((contactId) => contactId !== id) }));
+      state.contact_activities = state.contact_activities.filter((item) => item.contact_id !== id);
+      state.reminders = state.reminders.flatMap((item) => {
+        if (item.contact_id !== id) return [item];
+        if (item.kind === "contact_follow_up") return [];
+        return [{ ...item, contact_id: null, updated_at: ApplyOS.nowISO() }];
+      });
       return state;
     });
   };
@@ -762,6 +1312,51 @@
       saved = normalizeInterview({ ...current, ...input, id: current.id, updated_at: now });
       if (index >= 0) state.interviews[index] = saved;
       else state.interviews.unshift(saved);
+      const existingThankYou = state.reminders.find((item) => item.interview_id === saved.id && item.kind === "interview_thank_you" && item.status === "open");
+      if (saved.create_thank_you_action && saved.next_action_at) {
+        const action = normalizeReminder({
+          ...(existingThankYou || {}),
+          id: existingThankYou?.id || ApplyOS.uid("rem"),
+          kind: "interview_thank_you",
+          title: saved.next_action || "Send interview thank-you",
+          status: "open",
+          due_at: saved.next_action_at,
+          priority: "high",
+          channel: "email",
+          application_id: saved.application_id,
+          contact_id: saved.interviewer_contact_ids[0] || null,
+          interview_id: saved.id,
+          source: "system",
+          created_at: existingThankYou?.created_at || now,
+          updated_at: now
+        });
+        if (existingThankYou) state.reminders[state.reminders.indexOf(existingThankYou)] = action;
+        else state.reminders.unshift(action);
+      } else cancelActionRecord(existingThankYou, now);
+      const existingPrep = state.reminders.find((item) => item.interview_id === saved.id && item.kind === "interview_prep" && item.status === "open");
+      if (saved.create_preparation_action && saved.scheduled_at) {
+        const due = saved.preparation_action_at || new Date(new Date(saved.scheduled_at).getTime() - 86400000).toISOString();
+        saved.preparation_action_at = due;
+        state.interviews[state.interviews.findIndex((item) => item.id === saved.id)] = saved;
+        const prep = normalizeReminder({
+          ...(existingPrep || {}),
+          id: existingPrep?.id || ApplyOS.uid("rem"),
+          kind: "interview_prep",
+          title: `Prepare for ${String(saved.type).replace(/_/g, " ")} interview`,
+          status: "open",
+          due_at: due,
+          priority: "high",
+          channel: "meeting",
+          application_id: saved.application_id,
+          contact_id: saved.interviewer_contact_ids[0] || null,
+          interview_id: saved.id,
+          source: "system",
+          created_at: existingPrep?.created_at || now,
+          updated_at: now
+        });
+        if (existingPrep) state.reminders[state.reminders.indexOf(existingPrep)] = prep;
+        else state.reminders.unshift(prep);
+      } else cancelActionRecord(existingPrep, now);
       if (saved.application_id) {
         const application = state.applications.find((item) => item.id === saved.application_id);
         if (application && !["offer", "rejected", "closed"].includes(application.status)) {
@@ -776,7 +1371,27 @@
 
   ApplyOS.deleteInterview = async function deleteInterview(id) {
     return ApplyOS.mutateState((state) => {
+      const interview = state.interviews.find((item) => item.id === id);
+      if (!interview) return state;
+      const application = state.applications.find((item) => item.id === interview.application_id);
+      const now = ApplyOS.nowISO();
       state.interviews = state.interviews.filter((item) => item.id !== id);
+      state.reminders = state.reminders.map((item) => {
+        if (item.interview_id !== id) return item;
+        return {
+          ...item,
+          status: item.status === "open" ? "cancelled" : item.status,
+          interview_id: null,
+          context_snapshot: {
+            ...item.context_snapshot,
+            ...(application ? { company: application.company, role: application.role } : {}),
+            interview_type: interview.type
+          },
+          updated_at: now
+        };
+      });
+      state.contact_activities = state.contact_activities.map((item) => item.interview_id === id ? { ...item, interview_id: null, updated_at: now } : item);
+      reconcileApplicationFollowUpStatus(state, interview.application_id, now);
       return state;
     });
   };
@@ -802,10 +1417,10 @@
           match_score: score, matched_skills: ["javascript", "sql"], missing_skills: ["kubernetes"], suggested_keywords: ["kubernetes"],
           created_at: created, updated_at: created, captured_at: created, location: "Remote", extraction_confidence: { overall: 1 }
         });
-        if (status === "applied") state.reminders.push({ id: ApplyOS.uid("rem"), application_id: id, type: "follow_up", due_at: ApplyOS.addDays(now, 2), completed_at: null, created_at: created });
+        if (status === "applied") state.reminders.push({ id: ApplyOS.uid("rem"), application_id: id, contact_id: null, interview_id: null, kind: "application_follow_up", type: "follow_up", title: `Follow up on ${role} at ${company}`, status: "open", due_at: ApplyOS.addDays(now, 2), snoozed_until: null, priority, channel: "email", notes: "", source: "system", completed_at: null, last_notified_at: null, created_at: created, updated_at: created });
         if (status === "interview") {
           const contactId = ApplyOS.uid("contact");
-          state.contacts.push({ id: contactId, name: "Morgan Recruiter", title: "Talent Partner", company, email: "morgan@example.com", linkedin_url: "", relationship: "recruiter", application_ids: [id], notes: "Mock contact — safe to edit or delete.", last_contacted_at: null, next_action_at: ApplyOS.addDays(now, 1), created_at: created, updated_at: created });
+          state.contacts.push({ id: contactId, name: "Morgan Recruiter", title: "Talent Partner", company, email: "morgan@example.com", phone: "", linkedin_url: "", preferred_channel: "email", tags: ["demo"], relationship: "recruiter", application_ids: [id], notes: "Mock contact — safe to edit or delete.", last_contacted_at: null, next_action_at: ApplyOS.addDays(now, 1), created_at: created, updated_at: created });
           state.interviews.push({ id: ApplyOS.uid("interview"), application_id: id, type: "technical", format: "video", scheduled_at: ApplyOS.addDays(now, 3), location: "", meeting_url: "https://example.com/mock-meeting", interviewer_contact_ids: [contactId], company_research: "Review the product and engineering blog.", preparation_notes: "Prepare two system-design stories.", question_notes: "", next_action: "Send thank-you note", next_action_at: ApplyOS.addDays(now, 4), completed_at: null, created_at: created, updated_at: created });
         }
       });

@@ -52,6 +52,7 @@ function field(type, id, label, attributes = "") {
 
 function formMarkup(type) {
   const country = `<div ${CONTAINER[type]}><label for="country">Country of residence</label><select id="country" name="country" autocomplete="country-name" required><option value="">Select country</option><option value="United Kingdom">United Kingdom</option><option value="India">India</option></select></div>`;
+  const learnedQuestion = type === "react-dropzone" ? field(type, "manual-answer", "What kind of systems do you enjoy building?", "required") : "";
   const workdayDate = type === "workday" ? `<fieldset data-automation-id="formField"><legend>What is your desired start date?</legend><input id="start-month" type="number" data-automation-id="dateSectionMonth" aria-label="Month"><input id="start-day" type="number" data-automation-id="dateSectionDay" aria-label="Day"><input id="start-year" type="number" data-automation-id="dateSectionYear" aria-label="Year"></fieldset>` : "";
   const microsoftContact = type === "microsoft" ? `<div role="group" class="form-section"><label for="Contact_Information_q_address">Address</label><input id="Contact_Information_q_address" type="text" autocomplete="one-time-code" aria-required="true"><label for="Contact_Information_q_addressLine2">Address Line 2</label><input id="Contact_Information_q_addressLine2" type="text" autocomplete="one-time-code"><label for="Contact_Information_q_city">City</label><input id="Contact_Information_q_city" type="text" autocomplete="one-time-code" aria-required="true"><label for="Contact_Information_q_zip">Postal Code/Zip</label><input id="Contact_Information_q_zip" type="text" autocomplete="one-time-code" aria-required="true"><div id="microsoft-state-label">State</div><input id="microsoft-state" class="select-module_select-input__fixture" type="text" role="combobox" aria-labelledby="microsoft-state-label" aria-controls="microsoft-state-list" aria-expanded="false" autocomplete="one-time-code" aria-required="true"><ul id="microsoft-state-list" role="listbox" hidden><li role="option" aria-selected="false">Greater London</li><li role="option" aria-selected="false">West Midlands</li></ul></div>` : "";
   const microsoftQuestions = type === "microsoft" ? `<div role="group" class="form-section"><div id="microsoft-auth-label">Are you legally authorized to work in the country/region you are applying for?</div><input id="microsoft-auth" class="select-module_select-input__fixture" type="text" role="combobox" aria-labelledby="microsoft-auth-label" aria-controls="microsoft-auth-list" aria-expanded="false" aria-required="true"><ul id="microsoft-auth-list" role="listbox" hidden><li id="microsoft-auth-yes" role="option" aria-selected="false">Yes</li><li id="microsoft-auth-no" role="option" aria-selected="false">No</li></ul></div><div role="group" class="form-section" id="microsoft-sponsorship-group"><div id="microsoft-sponsorship-label">Will you now or in the future require visa sponsorship?</div><input id="microsoft-sponsorship" class="select-module_select-input__fixture" type="text" role="combobox" aria-labelledby="microsoft-sponsorship-label" aria-controls="microsoft-sponsorship-list" aria-expanded="false" aria-required="true"><ul id="microsoft-sponsorship-list" role="listbox" hidden><li role="option">Decline to answer</li></ul><ul id="microsoft-stray-list" role="listbox"><li id="microsoft-stray-no" role="option">No</li></ul></div><div role="radiogroup" class="form-section"><p>Do you currently have any active academic backlogs?</p><label><input id="microsoft-backlog-yes" name="microsoft-backlog" type="radio" value="Yes" aria-label="Yes, Do you currently have any active academic backlogs?" readonly required>Yes</label><label><input id="microsoft-backlog-no" name="microsoft-backlog" type="radio" value="No" aria-label="No, Do you currently have any active academic backlogs?" readonly required>No</label></div>` : "";
@@ -61,7 +62,7 @@ function formMarkup(type) {
     ${field(type, "last-name", "Last name", 'autocomplete="family-name" required')}
     ${field(type, "email", "Email address", 'type="email" autocomplete="email" value="existing@example.test" required')}
     ${field(type, "phone", "Phone number", 'type="tel" autocomplete="tel" required')}
-    ${country}${workdayDate}${microsoftContact}${microsoftQuestions}
+    ${country}${workdayDate}${microsoftContact}${microsoftQuestions}${learnedQuestion}
     ${field(type, "ssn", "Social Security Number", 'required')}
     ${field(type, "verification-code", "Verification code", 'autocomplete="one-time-code"')}
     ${field(type, "gender", "Gender / sex assigned at birth")}
@@ -92,11 +93,29 @@ function documentFor(type) {
   <body data-fixture="${escapeHtml(type)}"><h1>${escapeHtml(type)} application fixture</h1>${formMarkup(type)}<script>${TRACKING_SCRIPT}<\/script></body></html>`;
 }
 
+function delayedJobDocument() {
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Delayed job application</title></head>
+  <body><main id="app"><p>Loading application…</p></main><script>
+  window.setTimeout(() => {
+    const posting = document.createElement("script");
+    posting.type = "application/ld+json";
+    posting.textContent = JSON.stringify({
+      "@context": "https://schema.org", "@type": "JobPosting", title: "Platform Engineer",
+      hiringOrganization: { "@type": "Organization", name: "Dynamic Labs" },
+      description: "Dynamic Labs is hiring a platform engineer to build reliable cloud services. Responsibilities include improving deployment systems, observability, security, incident response, and developer tooling. Candidates should have production experience with TypeScript, AWS, Docker, and Kubernetes."
+    });
+    document.head.append(posting);
+    document.querySelector("#app").innerHTML = '<h1>Platform Engineer</h1><p>Dynamic Labs</p><form><label>First name<input name="firstName"></label><label>Email<input name="email" type="email"></label></form>';
+  }, 1800);
+  <\/script></body></html>`;
+}
+
 export function fixtureResponse(pathname) {
   if (pathname === "/health") return { status: 200, body: "ok", type: "text/plain; charset=utf-8" };
   if (pathname === "/favicon.ico") return { status: 204, body: "", type: "image/x-icon" };
   if (pathname === "/icims") return { status: 200, type: "text/html; charset=utf-8", body: '<!doctype html><html><head><meta charset="utf-8"><title>iCIMS frame fixture</title><style>iframe{width:900px;height:900px;border:0}</style></head><body><h1>iCIMS application</h1><iframe name="application-frame" src="/icims-inner"></iframe></body></html>' };
   if (pathname === "/icims-inner") return { status: 200, body: documentFor("icims"), type: "text/html; charset=utf-8" };
+  if (pathname === "/delayed-job") return { status: 200, body: delayedJobDocument(), type: "text/html; charset=utf-8" };
   const type = ATS_CASES.find((entry) => entry.path === pathname)?.id;
   if (type) return { status: 200, body: documentFor(type), type: "text/html; charset=utf-8" };
   return { status: 404, body: "Not found", type: "text/plain; charset=utf-8" };

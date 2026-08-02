@@ -16,6 +16,7 @@ includes:
 - job-search profiles and active-profile metadata;
 - applications, descriptions, priorities, statuses, deadlines, and notes;
 - reminders and completion history;
+- action schedules, snoozes, priorities, and user-confirmed contact interaction history;
 - contacts, relationships, emails, LinkedIn URLs, and networking notes;
 - interviews, meeting details, research, preparation, and question notes;
 - answer memory, company-scoped answers, corrections, and knowledge graph;
@@ -23,9 +24,19 @@ includes:
 - account settings, optional localhost Ollama configuration, and encrypted backup
   checkpoints.
 
+Application answer learning begins only after the user explicitly invokes
+autofill. Scout may then remember a safe field that it left blank after the user
+completes and leaves that field. Learned entries are visible and removable in
+Profile & Settings. Password, identity/demographic, consent, payment,
+verification, hidden, and file-upload fields are excluded before any value is
+sent to extension storage.
+
 No recruiter, employer, or other candidate may read this workspace. Scout has no
 analytics. Explicit Gmail, Outlook, LinkedIn, job, and meeting links navigate to
 those services but do not give Scout access to the user's external account.
+Opening a compose page does not create an interaction record. Relationship
+history is written only after the user confirms a log. Contact CSV files are
+parsed locally after a preview and are not uploaded as source files.
 
 ## Zone 2: User-specific offline cache
 

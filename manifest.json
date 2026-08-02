@@ -1,9 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Scout",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "description": "A private, review-first job application CRM and autofill assistant.",
   "permissions": ["storage", "unlimitedStorage", "alarms", "webNavigation", "identity"],
+  "optional_permissions": ["notifications"],
   "host_permissions": ["https://hkmrpkxiaadhlwpieyve.supabase.co/*"],
   "optional_host_permissions": ["http://localhost:11434/*", "http://127.0.0.1:11434/*", "http://localhost:54321/*", "http://127.0.0.1:54321/*"],
   "background": {

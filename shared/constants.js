@@ -3,7 +3,7 @@
 
   const ApplyOS = /** @type {any} */ (root.ApplyOS = root.ApplyOS || {});
 
-  ApplyOS.SCHEMA_VERSION = 5;
+  ApplyOS.SCHEMA_VERSION = 6;
   ApplyOS.STORAGE_KEY = "applyos_state";
   ApplyOS.PROFILE_KEY = "profile";
   ApplyOS.APPLICATION_STATUSES = [
@@ -30,6 +30,11 @@
   };
   ApplyOS.PRIORITIES = ["low", "medium", "high"];
   ApplyOS.CONTACT_RELATIONSHIPS = ["recruiter", "hiring_manager", "interviewer", "employee", "referral", "other"];
+  ApplyOS.ACTION_KINDS = ["application_follow_up", "application_final_follow_up", "contact_follow_up", "interview_prep", "interview_thank_you", "custom"];
+  ApplyOS.ACTION_STATUSES = ["open", "done", "skipped", "cancelled"];
+  ApplyOS.ACTION_CHANNELS = ["email", "linkedin", "phone", "meeting", "other"];
+  ApplyOS.CONTACT_ACTIVITY_TYPES = ["email", "linkedin", "phone", "meeting", "note"];
+  ApplyOS.CONTACT_ACTIVITY_DIRECTIONS = ["outbound", "inbound", "none"];
   ApplyOS.INTERVIEW_TYPES = ["recruiter_screen", "hiring_manager", "technical", "behavioral", "panel", "final", "other"];
   ApplyOS.INTERVIEW_FORMATS = ["video", "phone", "onsite", "other"];
 

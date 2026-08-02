@@ -8,7 +8,14 @@ const ui = {
 let handoffScheduled = false;
 
 function maybeContinue(status) {
-  if (handoffScheduled || !status?.workspaceReady || status?.migrationRequired || status?.legacyWorkspaceAvailable) return;
+  // The dashboard requires a configured cloud build before it will open. Keep
+  // the account page on the same side of that boundary so stale session data
+  // cannot bounce the tab between account.html and dashboard.html.
+  const workspaceCanOpen = status?.configured === true
+    && status?.workspaceReady === true
+    && status?.migrationRequired !== true
+    && status?.legacyWorkspaceAvailable !== true;
+  if (handoffScheduled || !workspaceCanOpen) return;
   const params = new URLSearchParams(location.search);
   const firstRun = params.get("firstRun") === "1";
   const requested = params.get("returnTo") || "";
@@ -84,6 +91,7 @@ function conflictRecordName(conflict = {}) {
     if (role || company) return role || company;
   }
   if (conflict.entityType === "contact") return String(payload.name || [payload.first_name, payload.last_name].filter(Boolean).join(" ") || "Contact");
+  if (conflict.entityType === "contact_activity") return "Contact activity";
   if (conflict.entityType === "profile") return String(payload.profileName || payload.name || "Profile");
   if (conflict.entityType === "interview") return String(payload.title || payload.type || "Interview");
   return type.charAt(0).toUpperCase() + type.slice(1);
@@ -163,7 +171,7 @@ function render(status) {
   $("#sync-state").className = `state-pill ${view.tone}`;
   text("#last-synced", formatTime(status?.sync?.lastSyncedAt));
   text("#pending-count", Number(status?.sync?.pendingCount || 0));
-  text("#connection-state", status?.offline ? "Offline" : (signedIn ? "Online" : "Sign in required"));
+  text("#connection-state", !configured ? "Unavailable" : status?.offline ? "Offline" : (signedIn ? "Online" : "Sign in required"));
   text("#sync-detail", view.detail);
   $("#sync-now").disabled = !signedIn || Boolean(status?.offline) || Boolean(status?.workspaceOwnerMismatch);
   $("#sync-notice").classList.toggle("hidden", signedIn);
@@ -358,10 +366,10 @@ $("#sync-now").addEventListener("click", async () => {
 
 async function resolveConflict(strategy, button) {
   const keepingLocal = strategy === "retry_local";
-  const prompt = keepingLocal
+  const message = keepingLocal
     ? "Use this device’s reviewed version and replace the conflicting cloud record?"
     : "Discard this device’s conflicting edit and use the cloud record?";
-  if (!window.confirm(prompt)) return;
+  if (!await ScoutDialog.confirm({ eyebrow: "SYNC CONFLICT", title: keepingLocal ? "Keep this device’s version?" : "Use the synced version?", message, consequences: [keepingLocal ? "The conflicting cloud copy will be replaced." : "This device’s conflicting edit will be discarded."], confirmLabel: keepingLocal ? "Keep this version" : "Use synced version", cancelLabel: "Review again" })) return;
   setBusy(button, true, "Resolving…");
   setStatus("#conflict-status", "Resolving and syncing this record…");
   try {
@@ -398,8 +406,7 @@ $("#import-legacy").addEventListener("click", async () => {
 });
 
 $("#discard-legacy").addEventListener("click", async () => {
-  if (!window.confirm("Permanently discard the existing pre-account browser workspace? This cannot be undone unless you exported a backup.")) return;
-  if (window.prompt("Type DISCARD LEGACY WORKSPACE to confirm") !== "DISCARD LEGACY WORKSPACE") return;
+  if (!await ScoutDialog.confirm({ eyebrow: "PERMANENT ACTION", title: "Discard this browser workspace?", message: "This cannot be undone unless you exported a backup.", consequences: ["The existing pre-account applications, profiles, answers, contacts, interviews, and reminders in this browser will be removed."], fields: [{ name: "confirmation", label: "Type DISCARD LEGACY WORKSPACE to continue", confirmationText: "DISCARD LEGACY WORKSPACE", placeholder: "DISCARD LEGACY WORKSPACE" }], tone: "danger", confirmLabel: "Discard workspace", cancelLabel: "Keep workspace" })) return;
   const button = $("#discard-legacy");
   setBusy(button, true, "Discarding…");
   $("#import-legacy").disabled = true;
@@ -440,8 +447,7 @@ $("#download-cloud").addEventListener("click", async () => {
 $("#replay-tour").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html?tour=1") }));
 
 $("#delete-account").addEventListener("click", async () => {
-  if (!window.confirm("Permanently delete your Scout account, cloud records, uploaded resumes, active sessions, and this account’s local cache?")) return;
-  if (window.prompt("Type DELETE MY SCOUT ACCOUNT to confirm") !== "DELETE MY SCOUT ACCOUNT") return;
+  if (!await ScoutDialog.confirm({ eyebrow: "PERMANENT ACTION", title: "Delete your Scout account?", message: "This removes the account rather than only signing you out.", consequences: ["Cloud workspace records and uploaded resume files will be deleted.", "Active sessions will end and this account’s local cache will be removed."], fields: [{ name: "confirmation", label: "Type DELETE MY SCOUT ACCOUNT to continue", confirmationText: "DELETE MY SCOUT ACCOUNT", placeholder: "DELETE MY SCOUT ACCOUNT" }], tone: "danger", confirmLabel: "Delete account", cancelLabel: "Keep my account" })) return;
   const button = $("#delete-account");
   setBusy(button, true, "Deleting…");
   setStatus("#account-result", "");

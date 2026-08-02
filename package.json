@@ -1,6 +1,6 @@
 {
   "name": "scout-extension",
-  "version": "0.11.0",
+  "version": "0.11.1",
   "private": true,
   "description": "Private, review-first job application CRM and autofill assistant.",
   "scripts": {
@@ -15,7 +15,7 @@
     "db:test": "npx supabase@2.109.1 test db",
     "db:lint": "npx supabase@2.109.1 db lint --schema public --level warning --fail-on warning",
     "build": "node scripts/build.mjs",
-    "build:production": "SCOUT_BUILD_MODE=production node scripts/build.mjs",
+    "build:production": "SCOUT_BUILD_MODE=production node scripts/build.mjs && node scripts/check-production-build.mjs",
     "verify": "npm run lint && npm run typecheck && npm test && npm run build && npm run test:browser:dist"
   },
   "devDependencies": {

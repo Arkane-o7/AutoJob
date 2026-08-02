@@ -87,17 +87,26 @@ Secrets. The extension needs only the project URL and publishable key.
    npm run build:production
    ```
 
-   The build writes these values into `dist/shared/cloud-config.js` and grants
-   only that Supabase origin. The Account page never asks customers for them.
+   The build writes these values into `dist/shared/cloud-config.js`, grants
+   only that Supabase origin, and automatically runs the production-build
+   checker. The command fails if the cloud configuration is missing or if the
+   output is not marked as production. The Account page never asks customers
+   for deployment values.
 
    Run the deterministic browser suite before this command with `npm run verify`.
    That suite deliberately installs a local test session and therefore uses a
-   development build. After creating the production build, validate its embedded
-   public configuration without replacing it:
+   development build. To re-check an existing `dist` directory without
+   rebuilding it, validate its embedded public configuration with:
 
    ```sh
    npm run test:production-build
    ```
+
+   Package the **contents** of `dist` (so `manifest.json` is at the ZIP root),
+   and upload only that production ZIP. Before uploading, inspect `BUILD.txt` in
+   the archive and confirm that its second line is `Mode production`. Never
+   upload an artifact produced by `npm run build`; that command intentionally
+   creates a development build and replaces `dist`.
 
 LinkedIn sign-in provides basic identity claims. It does not authorize Scout
 to import a member's connections, messages, posts, contacts, or work history.
