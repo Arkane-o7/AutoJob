@@ -1,4 +1,4 @@
-const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "profile-select", "onboarding", "ai-status"].map((id) => [id, document.getElementById(id)]));
+const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "profile-select", "onboarding", "dashboard"].map((id) => [id, document.getElementById(id)]));
 let activeTab = null;
 let profile = {};
 let detectedJob = null;
@@ -223,8 +223,6 @@ async function initialize() {
     const option = document.createElement("option"); option.value = meta.id; option.textContent = meta.targetRole ? `${meta.name} · ${meta.targetRole}` : meta.name; return option;
   }));
   ui["profile-select"].value = profilesIndex.activeId;
-  ui["ai-status"].textContent = aiConfig.enabled ? "AI + SMART" : "SMART READY";
-  ui["ai-status"].classList.add("on");
   ui.agent.classList.toggle("hidden", !aiConfig.enabled);
   ui.agent.disabled = !aiConfig.enabled || !hasCoreProfile(profile);
   await ApplyOS.ensureState();
@@ -340,5 +338,6 @@ ui.onboarding.addEventListener("click", () => {
   if (ApplyOS.isOnboardingComplete(profile)) chrome.runtime.openOptionsPage();
   else chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html?quick=1") });
 });
+ui.dashboard.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
 ui["profile-select"].addEventListener("change", async () => { await ApplyOS.setActiveProfile(ui["profile-select"].value); window.location.reload(); });
 initialize().catch((error) => say(error.message, "error"));

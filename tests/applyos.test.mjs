@@ -815,6 +815,9 @@ test("onboarding stays minimal while contextual tours use the canonical product 
   assert.match(tourRuntime, /dismissedAt/);
   assert.match(tourRuntime, /scrollIntoView/);
   assert.match(popupScript, /Edit profile/);
+  assert.match(popup, /id="dashboard"[^>]*>Go to dashboard<\/button>/);
+  assert.doesNotMatch(popup, /SMART READY/);
+  assert.match(popupScript, /chrome\.runtime\.getURL\("dashboard\.html"\)/);
 });
 
 test("knowledge graph learns corrections and reinforces a reusable answer", async () => {

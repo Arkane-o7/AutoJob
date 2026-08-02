@@ -138,7 +138,7 @@ client architecture.
 
 ### 4. View the dashboard
 
-Choose **Dashboard** from the popup. Switch between Board and List, search, filter by status/source/priority, drag cards between columns, or open a record to edit its status, dates, priority, and notes. An empty dashboard includes a **Load sample data** button.
+Choose **Go to dashboard** from the popup. Switch between Board and List, search, filter by status/source/priority, drag cards between columns, or open a record to edit its status, dates, priority, and notes. An empty dashboard includes a **Load sample data** button.
 
 ### 5. Work from Today
 
