@@ -531,6 +531,7 @@ async function main() {
       return {
         documentHeight: document.documentElement.scrollHeight,
         bodyHeight: document.body.scrollHeight,
+        bodyPadding: parseFloat(getComputedStyle(document.body).padding),
         mainHeight: main?.clientHeight || 0,
         mainContentHeight: main?.scrollHeight || 0,
         mainOverflow: main ? getComputedStyle(main).overflowY : "missing"
@@ -539,6 +540,7 @@ async function main() {
     assert.ok(popupMetrics.documentHeight <= 600, "popup document should remain within Chrome's 600px maximum");
     assert.ok(popupMetrics.bodyHeight <= 600, "popup body should not create an outer scroll surface");
     assert.ok(popupMetrics.mainHeight <= 600, "popup content surface should remain within Chrome's maximum height");
+    assert.equal(popupMetrics.bodyPadding, 0, "popup uses the Chrome-owned surface edge-to-edge without a fake outer gutter");
     assert.equal(popupMetrics.mainOverflow, "hidden", "popup must not expose a native scrollbar");
     assert.ok(popupMetrics.mainContentHeight <= popupMetrics.mainHeight, `popup content must fit without clipping (${popupMetrics.mainContentHeight}/${popupMetrics.mainHeight})`);
     await popupProbe.close();
@@ -839,6 +841,13 @@ async function main() {
     assert.equal(await detail.getAttribute("aria-modal"), "true", "open detail drawer is exposed as the active modal");
     assert.equal(await detail.getAttribute("data-state"), "open", "application drawer reports its open state");
     assert.equal(await helper.evaluate(() => document.activeElement?.id), "detail-role", "detail drawer moves focus to its first editable field");
+    assert.equal(await helper.locator("#application-record-details").getAttribute("open"), null, "secondary application fields start collapsed");
+    assert.equal(await helper.locator("#application-contacts").getAttribute("open"), null, "application workspaces start collapsed");
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await helper.waitForTimeout(250);
+      await helper.screenshot({ path: resolve(root, "output/playwright/application-detail.png") });
+    }
     await helper.locator("#delete-application").click();
     const deleteApplicationDialog = helper.locator(".scout-system-dialog");
     await deleteApplicationDialog.waitFor({ state: "visible" });
@@ -1027,9 +1036,11 @@ async function main() {
 
     await helper.locator("[data-section='pipeline']").click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
+    await helper.locator("#application-contacts > summary").click();
     await helper.locator("#linked-contacts", { hasText: "Casey Recruiter" }).waitFor({ state: "visible" });
     const contactId = await helper.locator("#draft-contact option", { hasText: "Casey Recruiter" }).getAttribute("value");
     assert.ok(contactId, "saved contact should be selectable for a reviewed follow-up");
+    await helper.locator("#application-follow-up > summary").click();
     await helper.locator("#draft-contact").selectOption(contactId);
     await helper.locator("#draft-type").selectOption("final_follow_up");
     await helper.locator("#generate-draft").click();
@@ -1047,6 +1058,7 @@ async function main() {
     await helper.locator(`[data-section="pipeline"]`).click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
 
+    await helper.locator("#application-interviews > summary").click();
     await helper.locator("#add-interview").click();
     await helper.locator("#interview-type").selectOption("technical");
     await helper.locator("#interview-format").selectOption("video");
@@ -1060,6 +1072,7 @@ async function main() {
     await helper.locator("#interview-next-action").fill("Send thank-you note");
     await helper.locator("#interview-next-date").fill("2026-08-06T12:00");
     await helper.locator("#interview-form button[type='submit']").click();
+    await helper.locator("#application-interviews > summary").click();
     const interviewCard = helper.locator("#interview-list .interview-card", { hasText: "Technical" });
     await interviewCard.waitFor({ state: "visible" });
     await interviewCard.locator("button").click();

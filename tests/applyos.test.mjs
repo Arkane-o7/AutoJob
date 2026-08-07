@@ -930,14 +930,46 @@ test("dashboard drawers use inert state instead of aria-hidden focus transitions
   assert.match(source, /drawer\.inert = true/);
 });
 
+test("application details use an essentials-first disclosure hierarchy", async () => {
+  const [html, source] = await Promise.all([readFile(resolve("dashboard.html"), "utf8"), readFile(resolve("dashboard.js"), "utf8")]);
+  assert.match(html, /class="detail-grid application-primary-grid">\s*<label><span>Status<\/span>[\s\S]*?<label><span>Deadline<\/span>/);
+  assert.match(html, /<details id="application-record-details"/);
+  assert.match(html, /<details id="application-match"/);
+  assert.equal((html.match(/<details id="application-[^"]+" class="detail-workspace/g) || []).length, 4);
+  for (const id of ["application-contacts", "application-follow-up", "application-interviews", "application-smart-drafts"]) assert.match(html, new RegExp(`<details id="${id}"`));
+  assert.doesNotMatch(html, /application-more-actions/);
+  assert.match(html, /class="application-actions__secondary"><button id="mark-application-waiting"[\s\S]*?<a id="detail-url"[\s\S]*?<button id="delete-application"/);
+  assert.match(source, /document\.querySelectorAll\("#detail > \.detail-workspace"\)/);
+  assert.match(source, /application-contacts-status/);
+  assert.match(source, /application-interviews-status/);
+});
+
 test("popup stays within Chrome's surface without exposing a native scrollbar", async () => {
   const css = await readFile(resolve("popup.css"), "utf8");
   assert.match(css, /html,body\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;/s);
-  assert.match(css, /main\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;/s);
+  assert.match(css, /main\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;[^}]*background:var\(--paper\);/s);
+  assert.match(css, /body\s*\{[^}]*padding:0;/s);
   assert.match(css, /\.result:empty\s*\{[^}]*display:none;/s);
   assert.doesNotMatch(css, /overflow-y:auto/);
   assert.doesNotMatch(css, /(?:^|[;{])\s*height:600px/);
   assert.doesNotMatch(css, /min-height:650px/);
+});
+
+test("Scout pages share one polished scrollbar system", async () => {
+  const [scrollbars, contentCss, privacyCss, ...pages] = await Promise.all([
+    readFile(resolve("shared/scrollbars.css"), "utf8"),
+    readFile(resolve("content.css"), "utf8"),
+    readFile(resolve("privacy-site/styles.css"), "utf8"),
+    ...["dashboard.html", "options.html", "account.html", "onboarding.html"].map((file) => readFile(resolve(file), "utf8"))
+  ]);
+  for (const page of pages) assert.match(page, /href="shared\/scrollbars\.css"/);
+  assert.match(scrollbars, /scrollbar-color:/);
+  assert.match(scrollbars, /scrollbar-gutter:\s*stable/);
+  assert.match(scrollbars, /html:has\(> body\[data-scout-page\]\)::-webkit-scrollbar-track\s*\{[^}]*margin-top:\s*var\(--scout-header-height,\s*68px\)/s);
+  assert.match(scrollbars, /::-webkit-scrollbar-thumb:hover/);
+  assert.match(scrollbars, /min-height:\s*44px/);
+  assert.match(contentCss, /\.applyos-review-fields::-webkit-scrollbar-thumb/);
+  assert.match(privacyCss, /\*::-webkit-scrollbar-thumb/);
 });
 
 test("major ATS compatibility registry recognizes hosted application domains", async () => {

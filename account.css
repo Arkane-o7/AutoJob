@@ -50,3 +50,45 @@ button,.state-pill,.connection-pill,.conflict-version__badge { border-radius:var
 .inline-control button { border-radius:0 var(--radius-control) var(--radius-control) 0; }
 .auth-consent { border-radius:var(--radius-card) var(--radius-card) 0 0; }
 .consent-details { border-radius:0 0 var(--radius-card) var(--radius-card); }
+
+/* Separator cleanup: group settings with space and soft surfaces, not ruled lines. */
+input,
+textarea {
+  padding: 10px 12px;
+  border: 1px solid rgba(23,24,20,.3);
+  border-radius: var(--radius-control);
+  background: rgba(255,255,255,.34);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+input:focus,
+textarea:focus {
+  padding: 10px 12px;
+  border: 1px solid #55791f;
+  background: rgba(255,255,255,.58);
+  box-shadow: 0 0 0 3px rgba(85,121,31,.14);
+}
+input[type="checkbox"],
+input[type="file"] {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.choice,
+.calendar-status-row,
+.backup-status-row,
+.advanced-settings > div {
+  border-top: 0;
+  border-bottom: 0;
+}
+.settings-check {
+  padding: 14px;
+  border-top: 0;
+  border-bottom: 0;
+  border-radius: var(--radius-control);
+  background: rgba(23,24,20,.045);
+}
+.inline-control input {
+  border: 1px solid #8a8a82 !important;
+  border-radius: var(--radius-control) 0 0 var(--radius-control);
+  background: #22231f;
+}

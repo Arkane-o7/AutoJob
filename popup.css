@@ -6,13 +6,13 @@
   --muted:#676a60;
   --line:rgba(23,24,20,.16);
   --orange:#e85836;
-  --radius-control:9px;
-  --radius-card:14px;
+  --radius-control:11px;
+  --radius-card:16px;
 }
 
 * { box-sizing:border-box; }
-html,body { width:420px; max-height:600px; overflow:hidden; }
-body { margin:0; color:var(--ink); background:var(--paper); font-family:"Avenir Next","Century Gothic",sans-serif; }
+html,body { width:420px; max-height:600px; overflow:hidden; background:var(--paper); }
+body { margin:0; padding:0; color:var(--ink); font-family:"Avenir Next","Century Gothic",sans-serif; }
 button,input,select { color:inherit; font:inherit; }
 button { cursor:pointer; }
 
@@ -25,6 +25,7 @@ main {
   gap:12px;
   padding:16px 18px 14px;
   overflow:hidden;
+  background:var(--paper);
 }
 
 .profile-strip {
@@ -97,3 +98,33 @@ button:disabled { opacity:.4; cursor:not-allowed; box-shadow:none; }
 .hidden { display:none!important; }
 button:focus-visible,input:focus-visible,select:focus-visible { outline:3px solid #55791f; outline-offset:2px; }
 @media (prefers-reduced-motion:reduce) { * { transition:none!important; } }
+
+/* Separator cleanup: preserve compact grouping without decorative rules. */
+.profile-strip {
+  padding-bottom: 6px;
+  border-bottom: 0;
+}
+.profile-strip button {
+  border-bottom: 0;
+}
+.editable-title input,
+.editable-company input {
+  border-bottom: 0;
+  border-radius: 6px;
+}
+.editable-title input:focus,
+.editable-company input:focus {
+  border-color: transparent;
+  background: rgba(255,255,255,.5);
+  box-shadow: 0 0 0 3px rgba(85,121,31,.14);
+}
+.record-controls select {
+  padding: 5px 7px;
+  border-bottom: 0;
+  border-radius: 6px;
+  background: rgba(255,255,255,.48);
+}
+.report-action {
+  padding-top: 6px;
+  border-top: 0;
+}
