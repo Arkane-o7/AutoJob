@@ -6,6 +6,7 @@
   <title>Scout — Account &amp; Sync</title>
   <link rel="icon" href="assets/icons/scout-32.png">
   <link rel="stylesheet" href="account.css">
+  <link rel="stylesheet" href="shared/side-nav.css">
   <link rel="stylesheet" href="shared/header.css">
   <link rel="stylesheet" href="shared/dialog.css">
   <style>
@@ -36,45 +37,47 @@
     @media(max-width:700px){.conflict-grid{grid-template-columns:1fr}.conflict-version{min-height:190px}}
   </style>
 </head>
-<body data-scout-page="account">
+<body data-scout-page="settings">
   <header class="scout-header" data-scout-header>
     <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
     <nav class="scout-header__nav" aria-label="Primary navigation">
-      <a href="dashboard.html" data-scout-nav="applications">Applications</a>
-      <a href="dashboard.html?section=actions" data-scout-nav="actions">Today</a>
-      <a href="dashboard.html?section=contacts" data-scout-nav="contacts">Contacts</a>
-      <a href="dashboard.html?section=companies" data-scout-nav="companies">Companies</a>
-      <a href="dashboard.html?section=waiting" data-scout-nav="waiting">Waiting</a>
+      <a href="dashboard.html" data-scout-nav="home">Home</a>
+      <a href="dashboard.html?section=pipeline" data-scout-nav="pipeline">Pipeline</a>
+      <a href="dashboard.html?section=network" data-scout-nav="network">Network</a>
     </nav>
     <div class="scout-header__actions">
       <label class="scout-header__profile"><span class="scout-visually-hidden">Active profile</span><select data-scout-profile-select aria-label="Active profile"><option>Loading…</option></select></label>
-      <a class="scout-header__action" href="options.html" data-scout-nav="profile">Profile &amp; answers</a>
-      <a class="scout-header__action" href="account.html" data-scout-nav="account">Account &amp; sync</a>
+      <a class="scout-header__action" href="options.html" data-scout-nav="profile">Profile</a>
+      <a class="scout-header__action" href="account.html" data-scout-nav="settings">Settings</a>
     </div>
   </header>
 
   <main>
     <aside>
-      <p class="eyebrow">ACCOUNT &amp; SYNC</p>
-      <h1>One account.<br><em>Your workspace,<br>everywhere.</em></h1>
-      <p>Scout securely keeps your application workspace available across your signed-in devices. LinkedIn is used only to sign in when you choose it; Scout does not import your network.</p>
+      <p class="eyebrow">SETTINGS</p>
+      <h1>Scout,<br><em>your way.</em></h1>
+      <p>Manage your account, reminders, integrations, privacy, and advanced tools in one place.</p>
       <div class="privacy-seal">
         <b>PRIVACY BOUNDARIES</b>
         <span>Private account workspace</span>
         <span>Encrypted connection and user-scoped access</span>
         <span>No recruiter-facing profile in this release</span>
       </div>
-      <nav class="account-nav" aria-label="Account and sync sections">
-        <a href="#identity">Identity</a>
-        <a href="#sync-section">Workspace sync</a>
-        <a href="#calendar">Google Calendar</a>
-        <a href="#backup">Encrypted backup</a>
-        <a href="#account-controls">Account controls</a>
+      <nav class="account-nav scout-side-nav" aria-label="Settings sections">
+        <div class="scout-side-nav__heading" aria-hidden="true">
+          <strong>Manage Scout</strong>
+          <span>Choose a section</span>
+        </div>
+        <button type="button" data-settings-view="account" aria-selected="true">Account</button>
+        <button type="button" data-settings-view="reminders" aria-selected="false">Reminders</button>
+        <button type="button" data-settings-view="integrations" aria-selected="false">Integrations</button>
+        <button type="button" data-settings-view="privacy" aria-selected="false">Privacy &amp; data</button>
+        <button type="button" data-settings-view="advanced" aria-selected="false">Advanced</button>
       </nav>
     </aside>
 
     <div class="stack">
-      <section class="account-card hero-card" id="identity" aria-labelledby="identity-title">
+      <section class="account-card hero-card settings-section-active" id="identity" data-settings-group="account" aria-labelledby="identity-title">
         <div class="identity-heading">
           <p class="eyebrow">IDENTITY</p>
           <h2 id="identity-title">Checking your session…</h2>
@@ -110,7 +113,19 @@
         <p id="identity-result" class="inline-status" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="account-card migration-card hidden" id="migration-section" aria-labelledby="migration-title">
+      <section class="account-card workspace-control" id="reminders" data-settings-group="reminders" aria-labelledby="reminders-title">
+        <div class="section-head"><div><p class="eyebrow">REMINDERS</p><h2 id="reminders-title">Keep momentum without noise.</h2></div><span class="state-pill private">YOUR DEFAULTS</span></div>
+        <p class="tool-section-copy">Choose when Scout creates follow-ups after you apply and where due actions appear. You can edit any action later.</p>
+        <div class="settings-fields">
+          <label><span>Follow up after applying</span><input id="follow-up-offsets" value="7, 14" inputmode="numeric" placeholder="7, 14"><small>Up to four days between 1 and 60, separated by commas.</small></label>
+          <label class="settings-check"><input id="enable-notifications" type="checkbox"><span><strong>Show due actions on the Scout badge</strong><small>A quiet count on the extension icon.</small></span></label>
+          <label><span>Daily reminder time</span><input id="notification-digest-time" type="time" value="09:00"></label>
+          <div class="settings-action"><div><strong>Desktop reminders</strong><span id="desktop-notification-status">Not enabled</span></div><button id="enable-desktop-notifications" class="outline" type="button">Enable</button></div>
+        </div>
+        <p id="reminder-status" class="inline-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="account-card migration-card hidden settings-section-active" id="migration-section" data-settings-group="account" aria-labelledby="migration-title">
         <div class="section-head">
           <div><p class="eyebrow">EXISTING WORKSPACE FOUND</p><h2 id="migration-title">Review before connecting</h2></div>
           <span class="state-pill warning">REVIEW</span>
@@ -122,7 +137,7 @@
         <p id="migration-status" class="inline-status" role="status" aria-live="polite"></p>
       </section>
 
-      <section class="account-card" id="sync-section" aria-labelledby="sync-title">
+      <section class="account-card settings-section-active" id="sync-section" data-settings-group="account" aria-labelledby="sync-title">
         <div class="section-head">
           <div><p class="eyebrow">PRIVATE CLOUD WORKSPACE</p><h2 id="sync-title">Workspace status</h2></div>
           <span id="sync-state" class="state-pill neutral">CHECKING</span>
@@ -155,7 +170,7 @@
         <p id="sync-detail" class="status-line" role="status" aria-live="polite">Checking workspace status…</p>
       </section>
 
-      <section class="account-card workspace-control" id="calendar" aria-labelledby="calendar-title">
+      <section class="account-card workspace-control" id="calendar" data-settings-group="integrations" aria-labelledby="calendar-title">
         <div class="section-head">
           <div><p class="eyebrow">OPTIONAL REMINDER DELIVERY</p><h2 id="calendar-title">Google Calendar</h2></div>
           <i id="calendar-connection-state" class="connection-pill">CHECKING</i>
@@ -170,7 +185,7 @@
         <div class="calendar-privacy"><strong>Before you connect</strong><p>Scout can create, update, and remove events on calendars you own. Event details are stored in your Google Calendar. Scout uses this access only for your primary calendar and queries only events carrying Scout’s private action identifiers; it does not import or browse unrelated events. Disconnecting stops future synchronization but leaves existing Google events in place.</p></div>
       </section>
 
-      <section class="account-card workspace-control" id="backup" aria-labelledby="backup-title">
+      <section class="account-card workspace-control" id="backup" data-settings-group="privacy" aria-labelledby="backup-title">
         <div class="section-head">
           <div><p class="eyebrow">PORTABILITY &amp; RECOVERY</p><h2 id="backup-title">Encrypted recovery backup</h2></div>
           <span class="state-pill private">LOCAL</span>
@@ -201,12 +216,18 @@
         <div class="backup-safety"><strong>Encrypted and review-first</strong><span>Encryption uses AES-256-GCM with a password-derived key. Restore creates a one-step rollback checkpoint on this device and never uploads the backup file.</span></div>
       </section>
 
-      <section class="account-card danger-zone workspace-control" id="account-controls">
+      <section class="account-card danger-zone workspace-control" id="account-controls" data-settings-group="privacy">
         <p class="eyebrow">ACCOUNT CONTROL</p>
         <h2>Your data</h2>
         <p>Export a copy of your workspace or permanently delete your Scout account. Deletion includes cloud records, sessions, uploaded resume files, and this account’s cached workspace on this browser.</p>
-        <div class="button-row"><button id="replay-tour" class="outline" type="button">Replay feature tour</button><button id="download-cloud" class="outline" type="button">Export my data</button><button id="delete-account" class="danger" type="button">Delete account</button></div>
+        <div class="button-row"><button id="replay-tour" class="outline" type="button">Review getting started</button><button id="download-cloud" class="outline" type="button">Export my data</button><button id="delete-account" class="danger" type="button">Delete account</button></div>
         <p id="account-result" class="inline-status" role="status" aria-live="polite"></p>
+      </section>
+
+      <section class="account-card workspace-control" id="advanced" data-settings-group="advanced" aria-labelledby="advanced-title">
+        <div class="section-head"><div><p class="eyebrow">ADVANCED · OPTIONAL</p><h2 id="advanced-title">Local AI enhancement</h2></div><span class="state-pill private">LOCAL</span></div>
+        <p class="tool-section-copy">Scout’s matching and Smart Tools work without a model download. Technical users can optionally connect an Ollama model already running on this computer.</p>
+        <details class="advanced-settings"><summary>Configure an existing Ollama installation <span>＋</span></summary><div><label><span>Ollama endpoint</span><input id="ai-endpoint" value="http://localhost:11434"></label><div class="settings-columns"><label><span>Chat model</span><input id="ai-model" value="llama3.2"></label><label><span>Embedding model</span><input id="embedding-model" value="nomic-embed-text"></label></div><div class="settings-action"><span id="ai-result">Optional · not checked</span><button id="test-ai" type="button">Detect setup</button></div></div></details>
       </section>
     </div>
   </main>
@@ -214,6 +235,7 @@
   <script src="shared/matching.js"></script>
   <script src="shared/followup.js"></script>
   <script src="shared/profiles.js"></script>
+  <script src="shared/ai.js"></script>
   <script src="shared/storage.js"></script>
   <script src="shared/backup.js"></script>
   <script src="shared/header.js"></script>

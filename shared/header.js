@@ -17,7 +17,16 @@
   }
 
   function setActiveNavigation(section = "") {
-    const active = section || (page === "dashboard" ? "applications" : page);
+    const aliases = {
+      actions: "home",
+      waiting: "home",
+      applications: "pipeline",
+      contacts: "network",
+      companies: "network",
+      account: "settings"
+    };
+    const requested = section || (page === "dashboard" ? "home" : page);
+    const active = aliases[requested] || requested;
     header.querySelectorAll("[data-scout-nav]").forEach((link) => {
       const selected = link.dataset.scoutNav === active;
       link.classList.toggle("active", selected);
@@ -66,6 +75,8 @@
       profileSelect.replaceChildren(...options);
       profileSelect.value = index.activeId;
       profileSelect.disabled = options.length < 2;
+      const wrapper = profileSelect.closest(".scout-header__profile");
+      if (wrapper) wrapper.hidden = options.length < 2 || page === "profile" || page === "setup";
     } catch {
       const option = document.createElement("option");
       option.textContent = "Profile unavailable";
@@ -87,7 +98,7 @@
   });
 
   root.ScoutHeader = Object.freeze({ setActiveNavigation, setStatus });
-  setActiveNavigation(page === "dashboard" ? new URLSearchParams(location.search).get("section") || "applications" : page);
+  setActiveNavigation(page === "dashboard" ? new URLSearchParams(location.search).get("section") || "home" : page);
 
   readCloudStatus().then(async (status) => {
     if (!status?.configured) setStatus("Service unavailable", "unavailable");

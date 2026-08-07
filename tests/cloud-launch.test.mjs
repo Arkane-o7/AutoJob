@@ -159,8 +159,9 @@ test("account, contextual tutorial, and contact surfaces preserve current produc
   assert.match(account, /id="conflict-server-device"/);
   assert.doesNotMatch(account, /id="conflict-(?:local|server)"[^>]*textarea|<textarea[^>]*id="conflict-(?:local|server)"/);
   assert.match(accountRuntime, /status\?\.configured === true[\s\S]*status\?\.workspaceReady === true/);
-  assert.match(onboarding, /TWO-MINUTE START/);
-  assert.equal((onboarding.match(/data-panel=/g) || []).length, 2);
+  assert.match(onboarding, /QUICK START/);
+  assert.equal((onboarding.match(/data-panel=/g) || []).length, 3);
+  assert.match(onboarding, /id="starter-resume"/);
   assert.match(dashboard, /data-tour-target="pipeline"/);
   assert.match(dashboard, /data-tour-target="contacts-workspace"/);
   assert.doesNotMatch(dashboard, /metric-memory|LEARNED ANSWERS/);
@@ -171,9 +172,10 @@ test("account, contextual tutorial, and contact surfaces preserve current produc
   assert.match(popupRuntime, /application\.description\?\.trim\(\) \? `\$\{application\.match_score \|\| 0\}%` : "-"/);
   assert.match(dashboardRuntime, /function matchLabel\(application, includeWord = false\)/);
   assert.match(dashboardRuntime, /A job description is required to calculate a match/);
-  assert.match(popup, /data-tour-target="autofill"/);
-  assert.match(dashboard, /id="contact-application" multiple/);
-  assert.match(dashboardRuntime, /selectedOptions/);
+  assert.match(popup, /id="fill" class="primary"/);
+  assert.doesNotMatch(popupRuntime, /ScoutTour/);
+  assert.match(dashboard, /id="contact-application" class="contact-application-list"/);
+  assert.match(dashboardRuntime, /#contact-application[\s\S]*querySelectorAll\("input:checked"\)/);
   assert.match(dashboard, /id="snooze-dialog"/);
   assert.match(dashboard, /data-snooze-preset="7"/);
   assert.doesNotMatch(dashboardRuntime, /prompt\("Snooze for how many days/);
@@ -187,20 +189,24 @@ test("account, contextual tutorial, and contact surfaces preserve current produc
 });
 
 test("full-page Scout surfaces share one header contract", async () => {
-  const pages = await Promise.all(["dashboard.html", "account.html", "options.html", "onboarding.html"].map((file) => readFile(resolve(file), "utf8")));
+  const pages = await Promise.all(["dashboard.html", "account.html", "options.html"].map((file) => readFile(resolve(file), "utf8")));
   for (const html of pages) {
     assert.match(html, /class="scout-header" data-scout-header/);
     assert.match(html, /assets\/brand\/scout-wordmark\.png/);
     assert.match(html, /assets\/brand\/scout-mark\.png/);
-    assert.match(html, /data-scout-nav="applications"/);
-    assert.match(html, /data-scout-nav="actions"/);
-    assert.match(html, /data-scout-nav="contacts"/);
-    assert.match(html, /data-scout-nav="account"/);
+    assert.match(html, /data-scout-nav="home"/);
+    assert.match(html, /data-scout-nav="pipeline"/);
+    assert.match(html, /data-scout-nav="network"/);
+    assert.match(html, /data-scout-nav="settings"/);
     assert.match(html, /data-scout-nav="profile"/);
     assert.match(html, /data-scout-profile-select/);
     assert.match(html, /shared\/header\.css/);
     assert.match(html, /shared\/header\.js/);
   }
+  const onboarding = await readFile(resolve("onboarding.html"), "utf8");
+  assert.match(onboarding, /class="scout-header setup-header" data-scout-header/);
+  assert.match(onboarding, /Private setup · about 2 minutes/);
+  assert.doesNotMatch(onboarding, /data-scout-profile-select/);
   const popup = await readFile(resolve("popup.html"), "utf8");
   assert.doesNotMatch(popup, /scout-header|shared\/header\.css|Account &amp; sync|Dashboard ↗/);
 });
@@ -231,19 +237,21 @@ test("companies and waiting stay in the focused dashboard and owner-scoped sync 
     readFile(resolve("shared/cloud-repository.js"), "utf8"),
     readFile(resolve("supabase/migrations/202608020001_company_waiting_records.sql"), "utf8")
   ]);
-  assert.match(dashboard, /data-scout-nav="companies"/);
-  assert.match(dashboard, /data-scout-nav="waiting"/);
+  assert.match(dashboard, /data-scout-nav="network"/);
+  assert.match(dashboard, /data-network-view="companies"/);
+  assert.match(dashboard, /id="waiting-preview"/);
+  assert.doesNotMatch(dashboard, /data-scout-nav="waiting"/);
   assert.match(storage, /ApplyOS\.convertWaitingToFollowUp/);
   assert.match(repository, /"waiting_item"/);
   assert.match(migration, /private_records_record_type_check/);
   assert.doesNotMatch(dashboard, /Gmail integration|Outlook integration|relationship score|company enrichment/i);
 });
 
-test("contextual tour is review-only and hands off between real product surfaces", async () => {
+test("activation onboarding opens Home without a forced product tour", async () => {
   const [onboarding, dashboard, tour] = await Promise.all([readFile(resolve("onboarding.js"), "utf8"), readFile(resolve("dashboard.js"), "utf8"), readFile(resolve("shared/tour.js"), "utf8")]);
-  assert.match(onboarding, /ScoutTour\.prepareFirstRun/);
-  assert.match(onboarding, /dashboard\.html\?tour=1/);
-  assert.match(dashboard, /ScoutTour\.handoff\("main", "options"\)/);
+  assert.doesNotMatch(onboarding, /ScoutTour/);
+  assert.match(onboarding, /dashboard\.html\?welcome=1/);
+  assert.doesNotMatch(dashboard, /await startDashboardTour\(\)/);
   assert.doesNotMatch(tour, /\.click\(/);
   assert.doesNotMatch(tour, /ApplyOS\.(?:upsert|update|mark|seed)/);
 });

@@ -27,7 +27,7 @@ includes:
 Application answer learning begins only after the user explicitly invokes
 autofill. Scout may then remember a safe field that it left blank after the user
 completes and leaves that field. Learned entries are visible and removable in
-Profile & Settings. Password, identity/demographic, consent, payment,
+**Profile → Answer library**. Password, identity/demographic, consent, payment,
 verification, hidden, and file-upload fields are excluded before any value is
 sent to extension storage.
 
@@ -136,7 +136,7 @@ Before production sync is enabled, deploy and verify the backend, then audit:
 - onboarding privacy and consent copy;
 - popup/account sync status and first-upload disclosure;
 - dashboard privacy labels;
-- Profile & Settings account, export, and deletion controls;
+- Settings account, export, and deletion controls;
 - Smart Draft/Ollama copy if any prompt can leave localhost;
 - the public privacy policy, terms, retention, support, and deletion pages;
 - Chrome Web Store listing, privacy questionnaire, permissions justification,

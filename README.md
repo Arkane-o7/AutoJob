@@ -62,7 +62,7 @@ The new modules are:
 - `shared/cloud.js`: provider-neutral email/Google/LinkedIn sessions isolated in the service-worker origin, account-specific offline-cache activation and locking, legacy-workspace review, private resume Storage uploads, support submission, sign-out, and deletion. Reserved publication APIs have no customer-facing controls in this release.
 - `shared/cloud-repository.js`: the record-level cloud repository with durable per-user outboxes, idempotent mutations, incremental pulls, tombstones, optimistic versions, and reviewable conflict state.
 - `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, cloud/account message boundaries, and localhost Ollama requests. It has no email credentials or send capability.
-- `onboarding.*`: a two-screen first-run welcome and starter profile. The versioned, resumable coach-mark runtime in `shared/tour.*` then teaches the real Dashboard, Profile & Settings, and job-page popup in context. Replaying or skipping the tour never rewrites profile or CRM data.
+- `onboarding.*`: a three-step activation flow covering Scout’s value, an optional resume import, and the core autofill identity fields. It opens directly into Home; the product uses contextual copy and clear empty states instead of a forced coach-mark tour.
 - `account.*`: required sign-in, connection/sync state, reviewed legacy import, authoritative export/deletion, and tutorial replay controls. Deployment settings and unreleased recruiter-search controls are never shown to customers.
 - `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, review-only compose handoffs, match guidance, profile switching, and the local-AI studio.
 - `types/applyos.ts`: TypeScript contracts for captured jobs, applications, contacts, interviews, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
@@ -73,7 +73,7 @@ The new modules are:
 2. Open `chrome://extensions` in Chrome and enable **Developer mode**.
 3. If Scout is already loaded, click its reload icon. Otherwise click **Load unpacked** and choose this project folder (or the generated `dist` folder).
 4. Refresh any job pages that were already open so the updated content scripts load.
-5. Pin **Scout** and choose **Finish setup** once. After completion the same button becomes **Edit profile** and opens the canonical **Profile & Settings** editor.
+5. Pin **Scout** and choose **Finish setup** once. After completion the same button becomes **Profile** and opens the canonical profile editor.
 
 Sign in with email, Google, or LinkedIn before setup. Application, contact, interview, profile, answer, and resume data belongs to that private cloud account and is cached locally for temporary offline use. The cache is namespaced by user and cleared from the active workspace on sign-out. Scout has no analytics and exposes no recruiter-search profile in this release. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
 
@@ -138,11 +138,11 @@ client architecture.
 
 ### 4. View the dashboard
 
-Choose **Go to dashboard** from the popup. Switch between Board and List, search, filter by status/source/priority, drag cards between columns, or open a record to edit its status, dates, priority, and notes. An empty dashboard includes a **Load sample data** button.
+Choose **Open Scout** from the popup. **Home** prioritizes the next actions and waiting items that need attention. **Pipeline** provides Board and List views with search and filters; open any record to edit its status, dates, priority, and notes. An empty Pipeline includes a **Load sample data** button.
 
-### 5. Work from Today
+### 5. Work from Home
 
-Applied records create follow-up actions from the offsets configured in Profile & Settings. **Today** combines application follow-ups, contact follow-ups, interview preparation, and custom actions into Overdue, Today, Upcoming, and Done groups. Complete, snooze, reschedule, or skip an action there. The toolbar badge remains available; generic desktop reminders are optional and requested only when you enable them.
+Applied records create follow-up actions from the offsets configured in **Settings → Reminders**. **Home** combines application follow-ups, contact follow-ups, interview preparation, and custom actions into **Needs attention** and **Coming up**. Complete or snooze an action in place; open Details to edit or cancel it. The toolbar badge remains available, and generic desktop reminders are optional.
 
 ### 6. Keep relationship history
 
@@ -154,7 +154,7 @@ Open an application record, choose first or final follow-up, and click **Generat
 
 ### 7. Track contacts and networking
 
-Open **Dashboard → Contacts** to add recruiters, hiring managers, interviewers, referrals, employees, or general networking contacts. Store their company, title, email, LinkedIn URL, relationship, notes, last-contacted date, and next action. A contact can be linked to an application and selected as the recipient for reviewed drafts.
+Open **Network → People** to add recruiters, hiring managers, interviewers, referrals, employees, or general networking contacts. Store their company, title, email, LinkedIn URL, relationship, notes, last-contacted date, and next action. Switch to **Companies** without leaving Network. A contact can be linked to an application and selected as the recipient for reviewed drafts.
 
 ### 8. Use the interview workspace
 
@@ -162,15 +162,15 @@ Open an application and choose **Add interview**. Record the round, format, sche
 
 ### 9. Use Smart Drafts
 
-After signing in, open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These need no model download, terminal command, or Ollama. Technical users may optionally connect an existing Ollama installation under **Profile & Settings → Advanced**, but it is never part of onboarding or required for core functionality.
+After signing in, open an application and use Smart Draft Studio to create a factual cover-letter starting point, resume focus plan, or keyword-gap analysis. These need no model download, terminal command, or Ollama. Technical users may optionally connect an existing Ollama installation under **Settings → Advanced**, but it is never part of onboarding or required for core functionality.
 
 ### 10. Export or restore an encrypted backup
 
-Open **Profile & Settings → Encrypted backup**. Choose a password of at least 10 characters and download the `.scout` file. The file includes the complete cached workspace, including saved resume files, and is encrypted before download. To restore, select the file, enter its password, review the decrypted record counts, type `RESTORE`, and confirm. A successful restore keeps one local undo checkpoint. Scout never stores or recovers the backup password. Legacy `.applyos` backups remain importable.
+Open **Settings → Privacy & data**. Choose a password of at least 10 characters and download the `.scout` file. The file includes the complete cached workspace, including saved resume files, and is encrypted before download. To restore, select the file, enter its password, review the decrypted record counts, type `RESTORE`, and confirm. A successful restore keeps one local undo checkpoint. Scout never stores or recovers the backup password. Legacy `.applyos` backups remain importable.
 
 ## Answer memory
 
-Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized authoritatively into answer memory and the local knowledge graph, so deleting an answer forgets it. After an explicit autofill pass, safe fields Scout left blank can be learned when the user completes and leaves the field; those answers appear in Profile & Settings as editable custom answers. Password, identity/demographic, consent, payment, verification, file-upload, and other blocked fields are never learned. Employer-history, company-specific long-form, and relationship answers are restricted to one company domain. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
+Saving the profile imports standard defaults for salary, notice period, authorization, sponsorship, links, relocation, remote preference, and introduction. Custom question/answer pairs are synchronized authoritatively into answer memory and the local knowledge graph, so deleting an answer forgets it. After an explicit autofill pass, safe fields Scout left blank can be learned when the user completes and leaves the field; those answers appear in **Profile → Answer library**. Password, identity/demographic, consent, payment, verification, file-upload, and other blocked fields are never learned. Employer-history, company-specific long-form, and relationship answers are restricted to one company domain. User corrections are recorded with site/field context and reinforced for later similar questions. During autofill, saved and sufficiently similar questions are considered alongside the original profile rules; no answer is generated or selected when confidence is low.
 
 ## Future AI and billing (TODO — not implemented)
 

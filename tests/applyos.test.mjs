@@ -714,12 +714,13 @@ test("profile patches preserve fields owned by other surfaces and mark completed
   };
   const { ApplyOS } = await runtime({ profile: original });
   const migrated = await ApplyOS.getActiveProfile();
-  assert.equal(ApplyOS.isOnboardingComplete(migrated), true);
+  assert.equal(ApplyOS.isOnboardingComplete(migrated), false);
   const saved = await ApplyOS.patchActiveProfile({ phone: "+1 555 0100" });
   assert.equal(saved.employment[0].company, "Navy");
   assert.equal(saved.futureFeature.enabled, true);
   assert.equal(saved.phone, "+1 555 0100");
   assert.ok(saved.onboardingCompletedAt);
+  assert.equal(ApplyOS.isOnboardingComplete(saved), true);
 });
 
 test("authoritative answer sync forgets deleted answers and honors company scope", async () => {
@@ -799,23 +800,24 @@ test("restored application identifiers and links are normalized before dashboard
   assert.equal(state.applications[0].url, "");
 });
 
-test("onboarding stays minimal while contextual tours use the canonical product surfaces", async () => {
-  const [popup, options, onboarding, tourRuntime, popupScript] = await Promise.all([
+test("onboarding stays activation-focused and product surfaces avoid forced tours", async () => {
+  const [popup, options, onboardingHtml, onboarding, popupScript] = await Promise.all([
     readFile(resolve("popup.html"), "utf8"),
     readFile(resolve("options.html"), "utf8"),
+    readFile(resolve("onboarding.html"), "utf8"),
     readFile(resolve("onboarding.js"), "utf8"),
-    readFile(resolve("shared/tour.js"), "utf8"),
     readFile(resolve("popup.js"), "utf8")
   ]);
   assert.doesNotMatch(options, /Run setup again/);
   assert.doesNotMatch(popup, /Profile & answer memory/);
-  assert.match(onboarding, /ScoutTour\.prepareFirstRun/);
+  assert.doesNotMatch(onboarding, /ScoutTour/);
+  assert.match(onboarding, /dashboard\.html\?welcome=1/);
   assert.match(onboarding, /location\.replace\(chrome\.runtime\.getURL\("options\.html"\)\)/);
-  assert.match(tourRuntime, /const VERSION = 2/);
-  assert.match(tourRuntime, /dismissedAt/);
-  assert.match(tourRuntime, /scrollIntoView/);
+  assert.equal((onboardingHtml.match(/data-panel=/g) || []).length, 3);
+  assert.match(onboardingHtml, /id="starter-resume"/);
   assert.match(popupScript, /Edit profile/);
-  assert.match(popup, /id="dashboard"[^>]*>Go to dashboard<\/button>/);
+  assert.match(popup, /id="dashboard"[^>]*>Open Scout<\/button>/);
+  assert.doesNotMatch(popupScript, /ScoutTour/);
   assert.doesNotMatch(popup, /SMART READY/);
   assert.match(popupScript, /chrome\.runtime\.getURL\("dashboard\.html"\)/);
 });
@@ -930,10 +932,11 @@ test("dashboard drawers use inert state instead of aria-hidden focus transitions
 
 test("popup stays within Chrome's surface without exposing a native scrollbar", async () => {
   const css = await readFile(resolve("popup.css"), "utf8");
-  assert.match(css, /html,body\s*\{[^}]*height:600px;[^}]*overflow:hidden;/s);
-  assert.match(css, /main\s*\{[^}]*height:600px;[^}]*overflow:hidden;/s);
+  assert.match(css, /html,body\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;/s);
+  assert.match(css, /main\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;/s);
   assert.match(css, /\.result:empty\s*\{[^}]*display:none;/s);
   assert.doesNotMatch(css, /overflow-y:auto/);
+  assert.doesNotMatch(css, /(?:^|[;{])\s*height:600px/);
   assert.doesNotMatch(css, /min-height:650px/);
 });
 

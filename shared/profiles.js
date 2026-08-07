@@ -34,7 +34,7 @@
   }
 
   function hasOnboardingIdentity(profile = {}) {
-    return Boolean(String(profile.firstName || "").trim() && String(profile.lastName || "").trim() && String(profile.email || "").trim());
+    return Boolean(String(profile.firstName || "").trim() && String(profile.lastName || "").trim() && String(profile.email || "").trim() && String(profile.phone || "").trim());
   }
 
   function migrateProfile(profile = {}) {

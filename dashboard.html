@@ -8,28 +8,25 @@
     <link rel="stylesheet" href="dashboard.css">
     <link rel="stylesheet" href="shared/header.css">
     <link rel="stylesheet" href="shared/dialog.css">
-    <link rel="stylesheet" href="shared/tour.css">
   </head>
   <body data-scout-page="dashboard">
     <header class="scout-header" data-scout-header>
       <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
       <nav class="scout-header__nav" aria-label="Primary navigation">
-        <a href="dashboard.html" data-scout-nav="applications" data-section="applications">Applications</a>
-        <a href="dashboard.html?section=actions" data-scout-nav="actions" data-section="actions">Today</a>
-        <a href="dashboard.html?section=contacts" data-scout-nav="contacts" data-section="contacts" data-tour-target="contacts-tab">Contacts</a>
-        <a href="dashboard.html?section=companies" data-scout-nav="companies" data-section="companies">Companies</a>
-        <a href="dashboard.html?section=waiting" data-scout-nav="waiting" data-section="waiting">Waiting</a>
+        <a href="dashboard.html" data-scout-nav="home" data-section="home">Home</a>
+        <a href="dashboard.html?section=pipeline" data-scout-nav="pipeline" data-section="pipeline">Pipeline</a>
+        <a href="dashboard.html?section=network" data-scout-nav="network" data-section="network">Network</a>
       </nav>
       <div class="scout-header__actions">
         <label class="scout-header__profile"><span class="scout-visually-hidden">Active profile</span><select id="active-profile" data-scout-profile-select aria-label="Active profile"><option>Loading…</option></select></label>
-        <a id="profile" class="scout-header__action" href="options.html" data-scout-nav="profile" data-tour-target="profile-settings">Profile &amp; answers</a>
-        <a id="account" class="scout-header__action" href="account.html" data-scout-nav="account">Account &amp; sync</a>
+        <a id="profile" class="scout-header__action" href="options.html" data-scout-nav="profile">Profile</a>
+        <a id="account" class="scout-header__action" href="account.html" data-scout-nav="settings">Settings</a>
       </div>
     </header>
 
     <main>
-      <section class="intro application-only">
-        <div><p class="eyebrow">OPPORTUNITY RADAR</p><h1>Keep every opportunity<br><em>in sight.</em></h1></div>
+      <section class="intro application-only hidden">
+        <div><p class="eyebrow">PIPELINE</p><h1>Every opportunity,<br><em>one clear view.</em></h1><p class="section-lede">Move roles through your search, compare priorities, and open any record for the full context.</p></div>
         <div class="metric-grid" data-tour-target="metrics">
           <article><strong id="metric-total">0</strong><span>ACTIVE</span></article>
           <article class="acid"><strong id="metric-due">0</strong><span>FOLLOW-UPS DUE</span></article>
@@ -37,12 +34,12 @@
         </div>
       </section>
 
-      <section class="due-strip application-only" data-tour-target="next-actions">
+      <section class="due-strip application-only hidden" data-tour-target="next-actions">
         <div><p class="eyebrow">NEXT ACTIONS</p><h2>Upcoming deadlines & follow-ups</h2></div>
         <div id="upcoming" class="upcoming"></div>
       </section>
 
-      <section class="workspace application-only" data-tour-target="pipeline">
+      <section class="workspace application-only pipeline-workspace hidden" data-tour-target="pipeline">
         <div class="toolbar">
           <label class="search"><span>⌕</span><input id="search" type="search" placeholder="Search company, role, notes…"></label>
           <select id="filter-status" aria-label="Filter by status"><option value="">All statuses</option></select>
@@ -56,39 +53,44 @@
         <div id="list" class="list hidden"></div>
       </section>
 
-      <section id="actions-workspace" class="actions-workspace hidden">
+      <section id="actions-workspace" class="actions-workspace home-workspace">
         <div class="actions-hero">
-          <div><p class="eyebrow">ACTION DESK</p><h1>Do the next thing.<br><em>Nothing gets lost.</em></h1></div>
-          <div class="action-scoreboard"><article><strong id="action-overdue-count">0</strong><span>OVERDUE</span></article><article><strong id="action-today-count">0</strong><span>TODAY</span></article><article><strong id="action-upcoming-count">0</strong><span>UPCOMING</span></article></div>
+          <div><p class="eyebrow">HOME</p><h1>Your search,<br><em>ready for today.</em></h1><p class="section-lede">Start with what needs attention. Everything else is one step away.</p></div>
+          <div class="action-scoreboard"><article><strong id="action-overdue-count">0</strong><span>NEEDS ATTENTION</span></article><article><strong id="action-today-count">0</strong><span>DUE TODAY</span></article><article><strong id="action-upcoming-count">0</strong><span>COMING UP</span></article></div>
         </div>
         <div class="actions-toolbar">
           <label class="search"><span>⌕</span><input id="action-search" type="search" placeholder="Search actions, people, or roles…"></label>
-          <select id="action-kind-filter" aria-label="Filter actions by type"><option value="">All action types</option></select>
-          <select id="action-priority-filter" aria-label="Filter actions by priority"><option value="">All priorities</option><option value="high">High priority</option><option value="medium">Medium priority</option><option value="low">Low priority</option></select>
-          <select id="action-channel-filter" aria-label="Filter actions by channel"><option value="">All channels</option></select>
-          <select id="action-application-filter" aria-label="Filter actions by application"><option value="">All applications</option></select>
-          <select id="action-contact-filter" aria-label="Filter actions by contact"><option value="">All contacts</option></select>
+          <details class="action-filters"><summary>Filters</summary><div><select id="action-kind-filter" aria-label="Filter actions by type"><option value="">All action types</option></select><select id="action-priority-filter" aria-label="Filter actions by priority"><option value="">All priorities</option><option value="high">High priority</option><option value="medium">Medium priority</option><option value="low">Low priority</option></select><select id="action-channel-filter" aria-label="Filter actions by channel"><option value="">All channels</option></select><select id="action-application-filter" aria-label="Filter actions by application"><option value="">All applications</option></select><select id="action-contact-filter" aria-label="Filter actions by contact"><option value="">All contacts</option></select></div></details>
           <button id="add-action" class="primary" type="button">+ New action</button>
         </div>
         <div id="action-groups" class="action-groups"></div>
+        <section class="home-secondary" aria-labelledby="waiting-preview-title">
+          <div class="home-secondary__heading"><div><p class="eyebrow">WAITING ON OTHERS</p><h2 id="waiting-preview-title">Keep promises from going quiet.</h2></div><button id="view-waiting" class="outline" type="button">View all waiting</button></div>
+          <div id="waiting-preview" class="waiting-preview"></div>
+        </section>
+      </section>
+
+      <section id="network-shell" class="network-shell hidden">
+        <div><p class="eyebrow">NETWORK</p><h1>People and companies,<br><em>in one place.</em></h1></div>
+        <div class="network-switch" role="tablist" aria-label="Network view"><button type="button" role="tab" data-network-view="people" aria-selected="true">People</button><button type="button" role="tab" data-network-view="companies" aria-selected="false">Companies</button></div>
       </section>
 
       <section id="contacts-workspace" class="contacts-workspace hidden" data-tour-target="contacts-workspace">
-        <div class="contacts-intro"><div><p class="eyebrow">RELATIONSHIP MAP</p><h1>Know the people<br><em>behind every role.</em></h1></div><button id="add-contact" class="primary" type="button">Add contact</button></div>
-        <div class="contacts-toolbar"><label class="search"><span>⌕</span><input id="contact-search" type="search" placeholder="Search name, company, role, notes…"></label><select id="contact-relationship-filter" aria-label="Filter by relationship"><option value="">All relationships</option></select><select id="contact-action-filter" aria-label="Filter by next action"><option value="">Any next action</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="none">No next action</option></select><select id="contact-sort" aria-label="Sort contacts"><option value="next">Next action</option><option value="recent">Last contacted</option><option value="name">Name</option></select><button id="contact-view-toggle" class="outline" type="button">List view</button><button id="import-contacts" class="outline" type="button">Import CSV</button><input id="contacts-csv" class="hidden" type="file" accept=".csv,text/csv"><span id="contact-count">0 contacts</span></div>
+        <div class="contacts-intro"><div><p class="eyebrow">PEOPLE</p><h2>Relationships worth remembering.</h2></div><button id="add-contact" class="primary" type="button">Add contact</button></div>
+        <div class="contacts-toolbar"><label class="search"><span>⌕</span><input id="contact-search" type="search" placeholder="Search people…"></label><details class="contacts-filters"><summary>Filters &amp; view <span>+</span></summary><div class="contacts-filters-panel"><label><span>Relationship</span><select id="contact-relationship-filter"><option value="">All relationships</option></select></label><label><span>Next action</span><select id="contact-action-filter"><option value="">Any next action</option><option value="overdue">Overdue</option><option value="today">Due today</option><option value="none">No next action</option></select></label><label><span>Sort by</span><select id="contact-sort"><option value="next">Next action</option><option value="recent">Last contacted</option><option value="name">Name</option></select></label><button id="contact-view-toggle" class="outline" type="button">List view</button><button id="import-contacts" class="outline" type="button">Import CSV</button><input id="contacts-csv" class="hidden" type="file" accept=".csv,text/csv"></div></details><span id="contact-count">0 contacts</span></div>
         <div id="contacts-empty" class="empty"><span>+</span><h2>Build your network deliberately.</h2><p>Add recruiters, interviewers, referrals, and people you meet during the search.</p><button id="contacts-empty-add" class="primary" type="button">Add first contact</button></div>
         <div id="contacts-list" class="contacts-list hidden"></div>
       </section>
 
       <section id="companies-workspace" class="companies-workspace hidden">
-        <div class="contacts-intro"><div><p class="eyebrow">COMPANY DIRECTORY</p><h1>See every company<br><em>in context.</em></h1></div><button id="add-company" class="primary" type="button">Add company</button></div>
+        <div class="contacts-intro"><div><p class="eyebrow">COMPANIES</p><h2>Every organization in context.</h2></div><button id="add-company" class="primary" type="button">Add company</button></div>
         <div class="contacts-toolbar"><label class="search"><span>⌕</span><input id="company-search" type="search" placeholder="Search company, domain, notes, tags…"></label><span id="company-count">0 companies</span></div>
         <div id="companies-empty" class="empty"><span>+</span><h2>Companies connect the work.</h2><p>Group applications, contacts, interviews, and actions without changing their original labels.</p><button id="companies-empty-add" class="primary" type="button">Add first company</button></div>
         <div id="companies-list" class="companies-list hidden"></div>
       </section>
 
       <section id="waiting-workspace" class="waiting-workspace hidden">
-        <div class="actions-hero"><div><p class="eyebrow">WAITING DESK</p><h1>Know what is<br><em>in someone else’s court.</em></h1></div><button id="add-waiting" class="primary" type="button">+ Add waiting item</button></div>
+        <div class="actions-hero"><div><p class="eyebrow">WAITING ON OTHERS</p><h1>Know when to<br><em>follow up.</em></h1></div><button id="add-waiting" class="primary" type="button">+ Add waiting item</button></div>
         <div id="waiting-groups" class="waiting-groups"></div>
       </section>
     </main>
@@ -150,7 +152,7 @@
         <input id="contact-id" type="hidden">
         <label class="hero-field"><span>NAME</span><input id="contact-name" required placeholder="Recruiter or contact name"></label>
         <label class="hero-field company-field"><span>TITLE / COMPANY</span><input id="contact-title" placeholder="Recruiter, Engineering Manager…"></label>
-        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Company record</span><select id="contact-company-id"><option value="">Not linked</option></select></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>Phone</span><input id="contact-phone" type="tel"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Preferred channel</span><select id="contact-channel"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Phone</option><option value="meeting">Meeting</option><option value="other">Other</option></select></label><label><span>Tags</span><input id="contact-tags" placeholder="referral, fintech, warm lead"></label><label><span>Applications (optional)</span><select id="contact-application" multiple size="4" aria-describedby="contact-application-help"></select><small id="contact-application-help">Choose every application this person is connected to. Leave all unselected for general networking.</small></label><label><span>Last contacted</span><input id="contact-last" type="date" disabled></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
+        <div class="detail-grid"><label><span>Company</span><input id="contact-company"></label><label><span>Company record</span><select id="contact-company-id"><option value="">Not linked</option></select></label><label><span>Relationship</span><select id="contact-relationship"></select></label><label><span>Email</span><input id="contact-email" type="email"></label><label><span>Phone</span><input id="contact-phone" type="tel"></label><label><span>LinkedIn URL</span><input id="contact-linkedin" type="url"></label><label><span>Preferred channel</span><select id="contact-channel"><option value="email">Email</option><option value="linkedin">LinkedIn</option><option value="phone">Phone</option><option value="meeting">Meeting</option><option value="other">Other</option></select></label><label><span>Tags</span><input id="contact-tags" placeholder="referral, fintech, warm lead"></label><fieldset class="contact-applications" aria-describedby="contact-application-help"><legend>Applications (optional)</legend><div id="contact-application" class="contact-application-list"></div><small id="contact-application-help">Select the roles where this relationship is relevant. Leave everything unchecked for general networking.</small></fieldset><label><span>Last contacted</span><input id="contact-last" type="date" disabled></label><label><span>Next action</span><input id="contact-next" type="date"></label></div>
         <label><span>Notes</span><textarea id="contact-notes" placeholder="How you met, context, promises, next conversation…"></textarea></label>
         <div class="detail-actions"><button class="primary" type="submit">Save contact</button><button id="mark-contact-waiting" class="outline" type="button">Waiting for reply</button><button id="merge-contact" class="outline hidden" type="button">Merge duplicate</button><button id="delete-contact" class="outline danger hidden" type="button">Delete</button><a id="open-contact-linkedin" class="outline link-button hidden" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>
       </form>
@@ -213,7 +215,6 @@
     <script src="shared/storage.js"></script>
     <script src="shared/header.js"></script>
     <script src="shared/dialog.js"></script>
-    <script src="shared/tour.js"></script>
     <script src="dashboard.js"></script>
   </body>
 </html>

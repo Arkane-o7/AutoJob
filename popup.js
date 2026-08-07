@@ -1,4 +1,4 @@
-const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "profile-select", "onboarding", "dashboard"].map((id) => [id, document.getElementById(id)]));
+const ui = Object.fromEntries(["role", "company", "score", "site-label", "confidence", "record-controls", "status", "follow-up", "save", "fill", "agent", "applied", "report", "result", "profile-select", "onboarding", "dashboard", "empty-state", "empty-dashboard"].map((id) => [id, document.getElementById(id)]));
 let activeTab = null;
 let profile = {};
 let detectedJob = null;
@@ -63,10 +63,16 @@ function populateStatuses() {
 
 function renderRecord() {
   ui["record-controls"].classList.toggle("hidden", !application);
-  if (!application) return;
+  ui.applied.classList.toggle("hidden", !application);
+  if (!application) {
+    ui.save.firstElementChild.textContent = "Save job";
+    ui.fill.firstElementChild.textContent = hasCoreProfile(profile) ? "Save & autofill" : "Complete profile to autofill";
+    return;
+  }
   ui.status.value = application.status;
   ui["follow-up"].textContent = dateLabel(application.follow_up_date);
   ui.save.firstElementChild.textContent = "Update saved job";
+  ui.fill.firstElementChild.textContent = "Autofill application";
   ui.applied.disabled = !hasCoreProfile(profile) || ["applied", "follow_up_due"].includes(application.status);
 }
 
@@ -79,10 +85,10 @@ function renderDetection(job) {
   ui.score.querySelector("strong").textContent = job.description ? `${match.score}%` : "-";
   const confidence = Math.round((job.confidence?.overall || 0) * 100);
   const warnings = job.warnings?.join(" · ");
-  ui.confidence.textContent = warnings || `${confidence}% extraction confidence. Review the editable title and company before saving.`;
+  ui.confidence.textContent = warnings || `${confidence}% detection confidence · Review the details before saving.`;
   ui.confidence.classList.toggle("low", confidence < 70 || Boolean(warnings));
   ui.save.disabled = false;
-  ui.fill.disabled = !hasCoreProfile(profile);
+  ui.fill.disabled = false;
   ui.applied.disabled = !hasCoreProfile(profile);
 }
 
@@ -170,46 +176,6 @@ function clearApplicationSession() {
   return chrome.runtime.sendMessage({ type: "APPLYOS_SESSION_CLEAR", tabId: activeTab.id }).catch(() => {});
 }
 
-async function startPopupTour() {
-  if (!detectedJob) return;
-  await ScoutTour.start({
-    id: "popup",
-    surface: "popup",
-    autoStart: true,
-    steps: [
-      {
-        target: '[data-tour-target="save-job"]',
-        eyebrow: "STEP 1 · CAPTURE",
-        title: "Save the opportunity.",
-        body: "Review the detected company and role above, then save the job to your private application pipeline.",
-        placement: "top"
-      },
-      {
-        target: '[data-tour-target="autofill"]',
-        eyebrow: "STEP 2 · AUTOFILL",
-        title: "Fill what Scout knows.",
-        body: "Scout fills confident empty fields and attaches your saved resume when the site allows it. You review every result.",
-        placement: "top"
-      },
-      {
-        target: '[data-tour-target="mark-applied"]',
-        eyebrow: "STEP 3 · TRACK",
-        title: "Confirm after you submit.",
-        body: "Once you submit the application yourself, mark it applied. Scout then creates editable follow-up reminders.",
-        placement: "top"
-      },
-      {
-        target: '[data-tour-target="report-problem"]',
-        eyebrow: "WHEN A SITE BREAKS",
-        title: "Report the structure—not your answers.",
-        body: "Review a privacy-safe field report so Scout can improve support for that site. Entered values and resume contents are excluded.",
-        placement: "top",
-        nextLabel: "Got it →"
-      }
-    ]
-  });
-}
-
 async function initialize() {
   const access = await requireWorkspaceAccess();
   if (!access) return;
@@ -223,15 +189,20 @@ async function initialize() {
     const option = document.createElement("option"); option.value = meta.id; option.textContent = meta.targetRole ? `${meta.name} · ${meta.targetRole}` : meta.name; return option;
   }));
   ui["profile-select"].value = profilesIndex.activeId;
-  ui.agent.classList.toggle("hidden", !aiConfig.enabled);
+  ui["profile-select"].closest("label").classList.toggle("hidden", profilesIndex.profiles.length < 2);
+  ui.agent.classList.toggle("hidden", !aiConfig.enabled || !hasCoreProfile(profile));
   ui.agent.disabled = !aiConfig.enabled || !hasCoreProfile(profile);
   await ApplyOS.ensureState();
   if (!activeTab?.id) {
+    document.querySelector(".page-state").classList.add("hidden");
+    ui.confidence.classList.add("hidden");
+    document.querySelector(".actions").classList.add("hidden");
+    ui["empty-state"].classList.remove("hidden");
     ui.confidence.textContent = "Open a job posting or application page to capture it.";
     ui.report.disabled = true;
     return;
   }
-  ui.fill.disabled = !hasCoreProfile(profile);
+  ui.fill.disabled = false;
   try {
     const response = await chrome.tabs.sendMessage(activeTab.id, { type: "APPLYOS_DETECT_JOB" }, { frameId: 0 });
     if (!response?.ok) throw new Error(response?.error || "Page detection failed");
@@ -252,7 +223,6 @@ async function initialize() {
     await restoreSavedRecord(fallback);
     say("Autofill is still available. Refresh this job tab once to restore automatic company and role detection.");
   }
-  await startPopupTour();
 }
 
 ui.save.addEventListener("click", async () => {
@@ -288,9 +258,9 @@ ui.fill.addEventListener("click", async () => {
     const response = await chrome.runtime.sendMessage({ type: "APPLYOS_FILL_TAB", tabId: activeTab.id });
     if (!response?.ok) throw new Error(response?.error || "This page could not be filled.");
     const { filled, attached, scanned, unmatchedRequired = 0, missingProfileFields = [], resumeStatus = "not-found", site = "This form" } = response.report;
-    const missingProfile = missingProfileFields.length ? ` Add ${missingProfileFields.join(", ")} in Profile & Settings.` : "";
+    const missingProfile = missingProfileFields.length ? ` Add ${missingProfileFields.join(", ")} in Profile.` : "";
     const resultMessage = resumeStatus === "missing"
-      ? `${site}: found the resume upload field, but no resume is saved. Add one in Profile & Settings.`
+      ? `${site}: found the resume upload field, but no resume is saved. Add one in Profile.`
       : resumeStatus === "failed"
         ? `${site}: found the resume upload field but could not attach the saved file. Attach it manually and review the form.`
         : filled || attached
@@ -339,5 +309,6 @@ ui.onboarding.addEventListener("click", () => {
   else chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html?quick=1") });
 });
 ui.dashboard.addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
+ui["empty-dashboard"].addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html") }));
 ui["profile-select"].addEventListener("change", async () => { await ApplyOS.setActiveProfile(ui["profile-select"].value); window.location.reload(); });
 initialize().catch((error) => say(error.message, "error"));

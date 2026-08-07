@@ -44,7 +44,8 @@ let contactImportParsed = null;
 let contactImportRows = [];
 let currentView = "board";
 let currentContactView = "cards";
-let currentSection = "applications";
+let currentSection = "actions";
+let currentNetworkView = "contacts";
 let profile = {};
 let aiConfig = {};
 document.body.inert = true;
@@ -167,13 +168,21 @@ function filteredApplications() {
 
 function cardHTML(item) {
   const waiting = state.waiting_items.filter((entry) => entry.status === "open" && entry.application_id === item.id).length;
-  return `<article class="job-card" draggable="true" data-id="${item.id}" tabindex="0"><div class="card-top"><span class="priority ${item.priority}" title="${item.priority} priority"></span><span class="card-signals">${waiting ? `<span class="waiting-chip">WAITING ${waiting}</span>` : ""}<span class="match-pill">${matchLabel(item, true)}</span></span></div><h3>${escapeHTML(item.role)}</h3><p>${escapeHTML(item.company)}</p><div class="card-meta"><span>${escapeHTML(item.source)}</span><span>${item.deadline ? `Due ${dateLabel(item.deadline)}` : dateLabel(item.created_at)}</span></div></article>`;
+  const detailStatus = ["saved", "applied", "interview", "offer"].includes(item.status) ? "" : `<span class="workflow-chip ${item.status === "follow_up_due" ? "attention" : ""}">${escapeHTML(ApplyOS.STATUS_META[item.status]?.label || titleCase(item.status))}</span>`;
+  return `<article class="job-card" draggable="true" data-id="${item.id}" tabindex="0"><div class="card-top"><span class="priority ${item.priority}" title="${item.priority} priority"></span><span class="card-signals">${detailStatus}${waiting ? `<span class="waiting-chip">WAITING ${waiting}</span>` : ""}<span class="match-pill">${matchLabel(item, true)}</span></span></div><h3>${escapeHTML(item.role)}</h3><p>${escapeHTML(item.company)}</p><div class="card-meta"><span>${escapeHTML(item.source)}</span><span>${item.deadline ? `Due ${dateLabel(item.deadline)}` : dateLabel(item.created_at)}</span></div></article>`;
 }
 
 function renderBoard(items) {
-  elements.board.innerHTML = ApplyOS.APPLICATION_STATUSES.map((status) => {
-    const group = items.filter((item) => item.status === status);
-    return `<section class="column" data-status="${status}"><div class="column-head"><span>${ApplyOS.STATUS_META[status].label.toUpperCase()}</span><span>${group.length}</span></div><div class="column-cards">${group.map(cardHTML).join("")}</div></section>`;
+  const stages = [
+    { label: "Saved", dropStatus: "saved", statuses: ["saved", "preparing"] },
+    { label: "Applied", dropStatus: "applied", statuses: ["applied", "follow_up_due"] },
+    { label: "Interviewing", dropStatus: "interview", statuses: ["interview", "assignment"] },
+    { label: "Offer", dropStatus: "offer", statuses: ["offer"] },
+    { label: "Archived", dropStatus: "closed", statuses: ["rejected", "closed"] }
+  ];
+  elements.board.innerHTML = stages.map((stage) => {
+    const group = items.filter((item) => stage.statuses.includes(item.status));
+    return `<section class="column" data-status="${stage.dropStatus}"><div class="column-head"><span>${stage.label.toUpperCase()}</span><span>${group.length}</span></div><div class="column-cards">${group.map(cardHTML).join("")}</div></section>`;
   }).join("");
   elements.board.querySelectorAll(".job-card").forEach((card) => {
     card.addEventListener("click", () => openDetail(card.dataset.id));
@@ -212,14 +221,14 @@ function renderUpcoming() {
   const deadlines = state.applications.filter((item) => item.deadline && new Date(item.deadline).getTime() >= now - 86400000).map((item) => ({ application: item, kind: "deadline", at: item.deadline }));
   const interviews = state.interviews.filter((item) => !item.completed_at && item.scheduled_at && new Date(item.scheduled_at).getTime() >= now - 86400000).map((item) => ({ ...item, application: state.applications.find((app) => app.id === item.application_id), kind: "interview", at: item.scheduled_at }));
   const items = [...reminders, ...deadlines, ...interviews].filter((item) => item.application).sort((a, b) => new Date(a.at) - new Date(b.at)).slice(0, 3);
-  elements.upcoming.innerHTML = (items.length ? items.map((item) => `<div class="upcoming-card ${item.kind === "deadline" ? "deadline" : ""}"><button class="upcoming-open" data-id="${item.application.id}" type="button"><strong>${escapeHTML(item.application.role)}</strong><span>${item.kind === "deadline" ? "Deadline" : item.kind === "interview" ? "Interview" : "Follow-up"} · ${escapeHTML(dateLabel(item.at))}</span></button>${item.agendaKind === "follow-up" ? `<button class="upcoming-done" data-reminder-id="${item.id}" type="button">Done</button>` : ""}</div>`).join("") : `<span class="upcoming-card"><strong>Nothing urgent</strong><span>Your next actions will appear here.</span></span>`) + `<button id="view-all-today" class="upcoming-view-all" type="button">View all in Today →</button>`;
+  elements.upcoming.innerHTML = (items.length ? items.map((item) => `<div class="upcoming-card ${item.kind === "deadline" ? "deadline" : ""}"><button class="upcoming-open" data-id="${item.application.id}" type="button"><strong>${escapeHTML(item.application.role)}</strong><span>${item.kind === "deadline" ? "Deadline" : item.kind === "interview" ? "Interview" : "Follow-up"} · ${escapeHTML(dateLabel(item.at))}</span></button>${item.agendaKind === "follow-up" ? `<button class="upcoming-done" data-reminder-id="${item.id}" type="button">Done</button>` : ""}</div>`).join("") : `<span class="upcoming-card"><strong>Nothing urgent</strong><span>Your next actions will appear here.</span></span>`) + `<button id="view-all-today" class="upcoming-view-all" type="button">Open Home →</button>`;
   elements.upcoming.querySelectorAll(".upcoming-open").forEach((button) => button.addEventListener("click", () => openDetail(button.dataset.id)));
   elements.upcoming.querySelectorAll(".upcoming-done").forEach((button) => button.addEventListener("click", async () => {
     await ApplyOS.completeReminder(button.dataset.reminderId);
     await load();
     toast("Follow-up completed");
   }));
-  $("#view-all-today").addEventListener("click", () => showDashboardSection("actions", true));
+  $("#view-all-today").addEventListener("click", () => showDashboardSection("home", true));
 }
 
 function actionContext(action) {
@@ -235,7 +244,7 @@ function actionRowHTML(action) {
   const controls = action.agenda
     ? `<button data-open-agenda-application="${action.application_id}" type="button">View application</button>`
     : action.status === "open"
-      ? `<label class="action-inline-date"><span class="sr-only">New due date</span><input data-action-reschedule-date="${action.id}" type="datetime-local" value="${toDateTimeInput(effective)}"></label><button data-action-reschedule="${action.id}" type="button">Reschedule</button><button class="done" data-action-done="${action.id}" type="button">Done</button><button data-action-snooze="${action.id}" type="button">Snooze</button><button data-action-skip="${action.id}" type="button">Skip</button>`
+      ? `<button class="done" data-action-done="${action.id}" type="button">Done</button><button data-action-snooze="${action.id}" type="button">Snooze</button><button data-open-action="${action.id}" type="button">Details</button>`
       : `<button data-open-action="${action.id}" type="button">View</button>`;
   const calendar = action.google_calendar_event_id
     ? `<i class="calendar-inline">Calendar</i>`
@@ -351,10 +360,12 @@ function bindActionRows() {
 function renderActions() {
   const items = actionItems();
   for (const group of ["overdue", "today", "upcoming"]) $(`#action-${group}-count`).textContent = items.filter((item) => item.group === group).length;
-  const labels = { overdue: "Overdue", today: "Today", upcoming: "Upcoming", done: "Done / skipped" };
-  $("#action-groups").innerHTML = Object.entries(labels).map(([group, label]) => {
-    const rows = items.filter((item) => item.group === group);
-    return `<section class="action-group"><div class="action-group-heading"><h2>${label}</h2><span>${rows.length} ${rows.length === 1 ? "ITEM" : "ITEMS"}</span></div><div class="action-stack">${rows.length ? rows.map(actionRowHTML).join("") : `<div class="action-empty">No ${label.toLowerCase()} actions.</div>`}</div></section>`;
+  const groups = [
+    { id: "attention", label: "Needs attention", rows: items.filter((item) => item.group === "overdue" || item.group === "today") },
+    { id: "upcoming", label: "Coming up", rows: items.filter((item) => item.group === "upcoming") }
+  ];
+  $("#action-groups").innerHTML = groups.map(({ id, label, rows }) => {
+    return `<section class="action-group" data-action-group="${id}"><div class="action-group-heading"><h2>${label}</h2><span>${rows.length} ${rows.length === 1 ? "ITEM" : "ITEMS"}</span></div><div class="action-stack">${rows.length ? rows.map(actionRowHTML).join("") : `<div class="action-empty">Nothing here. You’re all caught up.</div>`}</div></section>`;
   }).join("");
   bindActionRows();
 }
@@ -432,17 +443,32 @@ function waitingRowHTML(item) {
 
 function renderWaiting() {
   const labels = { overdue: "Overdue", today: "Expected today", upcoming: "Upcoming", no_date: "No expected date" };
-  $("#waiting-groups").innerHTML = Object.entries(labels).map(([group, label]) => {
+  const groups = Object.entries(labels).map(([group, label]) => {
     const items = state.waiting_items.filter((item) => waitingGroup(item) === group)
       .sort((a, b) => new Date(a.expected_by || a.waiting_since) - new Date(b.expected_by || b.waiting_since));
-    return `<section class="action-group waiting-group"><div class="action-group-heading"><h2>${label}</h2><span>${items.length} ${items.length === 1 ? "ITEM" : "ITEMS"}</span></div><div class="waiting-stack">${items.length ? items.map(waitingRowHTML).join("") : `<div class="action-empty">No ${label.toLowerCase()} items.</div>`}</div></section>`;
-  }).join("");
+    return { label, items };
+  }).filter(({ items }) => items.length);
+  $("#waiting-groups").innerHTML = groups.length ? groups.map(({ label, items }) => `<section class="action-group waiting-group"><div class="action-group-heading"><h2>${label}</h2><span>${items.length} ${items.length === 1 ? "ITEM" : "ITEMS"}</span></div><div class="waiting-stack">${items.map(waitingRowHTML).join("")}</div></section>`).join("") : `<div class="waiting-clear"><span>✓</span><div><h2>Nothing needs a follow-up.</h2><p>When you are waiting on a recruiter, contact, or decision, it will appear here.</p></div></div>`;
   $("#waiting-groups").querySelectorAll(".waiting-row").forEach((row) => {
     row.addEventListener("click", (event) => { if (!event.target.closest("button")) openWaiting(row.dataset.waitingId); });
     row.addEventListener("keydown", (event) => { if (event.key === "Enter") openWaiting(row.dataset.waitingId); });
   });
   $("#waiting-groups").querySelectorAll("[data-resolve-waiting]").forEach((button) => button.addEventListener("click", async () => { await ApplyOS.resolveWaitingItem(button.dataset.resolveWaiting); await load(); toast("Waiting item resolved"); }));
   $("#waiting-groups").querySelectorAll("[data-convert-waiting]").forEach((button) => button.addEventListener("click", async () => { const action = await ApplyOS.convertWaitingToFollowUp(button.dataset.convertWaiting); await load(); toast(action ? "Follow-up added to Today" : "Only overdue items can become follow-ups"); }));
+}
+
+function renderWaitingPreview() {
+  const preview = $("#waiting-preview");
+  if (!preview) return;
+  const items = state.waiting_items.filter((item) => item.status === "open")
+    .sort((a, b) => new Date(a.expected_by || "9999-12-31") - new Date(b.expected_by || "9999-12-31"))
+    .slice(0, 3);
+  preview.innerHTML = items.length ? items.map(waitingRowHTML).join("") : `<div class="action-empty">Nothing is waiting on someone else.</div>`;
+  preview.querySelectorAll(".waiting-row").forEach((row) => row.addEventListener("click", (event) => {
+    if (!event.target.closest("button")) openWaiting(row.dataset.waitingId);
+  }));
+  preview.querySelectorAll("[data-resolve-waiting]").forEach((button) => button.addEventListener("click", async () => { await ApplyOS.resolveWaitingItem(button.dataset.resolveWaiting); await load(); toast("Waiting item resolved"); }));
+  preview.querySelectorAll("[data-convert-waiting]").forEach((button) => button.addEventListener("click", async () => { const action = await ApplyOS.convertWaitingToFollowUp(button.dataset.convertWaiting); await load(); toast(action ? "Follow-up added to Home" : "Only overdue items can become follow-ups"); }));
 }
 
 function render() {
@@ -465,7 +491,7 @@ function render() {
   elements.empty.classList.toggle("hidden", state.applications.length > 0);
   elements.board.classList.toggle("hidden", currentView !== "board" || !state.applications.length);
   elements.list.classList.toggle("hidden", currentView !== "list" || !state.applications.length);
-  renderBoard(items); renderList(items); renderUpcoming(); renderActions(); renderContacts(); renderCompanies(); renderWaiting();
+  renderBoard(items); renderList(items); renderUpcoming(); renderActions(); renderContacts(); renderCompanies(); renderWaiting(); renderWaitingPreview();
 }
 
 async function load() {
@@ -504,6 +530,14 @@ function openDetail(id) {
 function applicationOptions(selected = []) {
   const selectedIds = new Set(Array.isArray(selected) ? selected : [selected].filter(Boolean));
   return state.applications.map((item) => `<option value="${item.id}" ${selectedIds.has(item.id) ? "selected" : ""}>${escapeHTML(item.company)} · ${escapeHTML(item.role)}</option>`).join("");
+}
+
+function renderContactApplicationPicker(selected = []) {
+  const selectedIds = new Set(Array.isArray(selected) ? selected : [selected].filter(Boolean));
+  const picker = $("#contact-application");
+  picker.innerHTML = state.applications.length
+    ? state.applications.map((item) => `<label class="contact-application-option"><input type="checkbox" value="${escapeHTML(item.id)}" ${selectedIds.has(item.id) ? "checked" : ""}><span><strong>${escapeHTML(item.role)}</strong><small>${escapeHTML(item.company)}</small></span></label>`).join("")
+    : `<p class="contact-application-empty">No saved applications yet.</p>`;
 }
 
 function linkedContacts(applicationId) {
@@ -636,7 +670,7 @@ function openContact(id = null, applicationId = "") {
   $("#contact-linkedin").value = contact?.linkedin_url || "";
   $("#contact-channel").value = contact?.preferred_channel || (contact?.email ? "email" : contact?.linkedin_url ? "linkedin" : "other");
   $("#contact-tags").value = (contact?.tags || []).join(", ");
-  $("#contact-application").innerHTML = applicationOptions(contact?.application_ids?.length ? contact.application_ids : [applicationId].filter(Boolean));
+  renderContactApplicationPicker(contact?.application_ids?.length ? contact.application_ids : [applicationId].filter(Boolean));
   $("#contact-last").value = ApplyOS.toDateInput(contact?.last_contacted_at);
   $("#contact-next").value = ApplyOS.toDateInput(contact?.next_action_at);
   $("#contact-notes").value = contact?.notes || "";
@@ -813,14 +847,21 @@ function closeDetail() {
 }
 
 function showDashboardSection(section, focusSearch = false) {
-  currentSection = ["contacts", "actions", "companies", "waiting"].includes(section) ? section : "applications";
-  document.querySelectorAll("[data-section]").forEach((item) => item.classList.toggle("active", item.dataset.section === currentSection));
-  globalThis.ScoutHeader?.setActiveNavigation(currentSection);
+  if (["home", "actions"].includes(section)) currentSection = "actions";
+  else if (["pipeline", "applications"].includes(section)) currentSection = "applications";
+  else if (["network", "contacts"].includes(section)) currentSection = currentNetworkView = "contacts";
+  else if (section === "companies") currentSection = currentNetworkView = "companies";
+  else currentSection = section === "waiting" ? "waiting" : "actions";
+  const visibleSection = currentSection === "applications" ? "pipeline" : ["contacts", "companies"].includes(currentSection) ? "network" : "home";
+  document.querySelectorAll("[data-section]").forEach((item) => item.classList.toggle("active", item.dataset.section === visibleSection));
+  globalThis.ScoutHeader?.setActiveNavigation(visibleSection);
   document.querySelectorAll(".application-only").forEach((item) => item.classList.toggle("hidden", currentSection !== "applications"));
   $("#actions-workspace").classList.toggle("hidden", currentSection !== "actions");
   $("#contacts-workspace").classList.toggle("hidden", currentSection !== "contacts");
   $("#companies-workspace").classList.toggle("hidden", currentSection !== "companies");
   $("#waiting-workspace").classList.toggle("hidden", currentSection !== "waiting");
+  $("#network-shell").classList.toggle("hidden", !["contacts", "companies"].includes(currentSection));
+  document.querySelectorAll("[data-network-view]").forEach((button) => button.setAttribute("aria-selected", String(button.dataset.networkView === (currentSection === "companies" ? "companies" : "people"))));
   if (focusSearch && currentSection === "contacts") $("#contact-search").focus();
   if (focusSearch && currentSection === "actions") $("#action-search").focus();
   if (focusSearch && currentSection === "companies") $("#company-search").focus();
@@ -888,66 +929,10 @@ async function importContactsFile(file) {
   openContactImport(ApplyOS.parseContactCSV(await file.text()), file.name);
 }
 
-async function startDashboardTour() {
-  const force = new URLSearchParams(location.search).get("tour") === "1";
-  await ScoutTour.start({
-    id: "main",
-    surface: "dashboard",
-    force,
-    steps: [
-      {
-        target: '[data-tour-target="metrics"]',
-        eyebrow: "YOUR SEARCH AT A GLANCE",
-        title: "Know what needs attention.",
-        body: "These live totals show active applications, follow-ups due, and interviews.",
-        placement: "bottom"
-      },
-      {
-        target: '[data-tour-target="next-actions"]',
-        eyebrow: "DEADLINES & REMINDERS",
-        title: "Your next move stays visible.",
-        body: "Deadlines, seven-day follow-ups, fourteen-day final follow-ups, and interview actions surface here as they become due.",
-        placement: "bottom"
-      },
-      {
-        target: '[data-tour-target="pipeline"]',
-        eyebrow: "APPLICATION CRM",
-        title: "This is your working pipeline.",
-        body: "Search and filter every opportunity, move between board and list views, and open a card to manage status, notes, drafts, interviews, and match guidance.",
-        placement: "top"
-      },
-      {
-        target: '[data-tour-target="contacts-workspace"]',
-        eyebrow: "CONTACTS & NETWORKING",
-        title: "Map the people behind each role.",
-        body: "Keep recruiters, hiring managers, referrals, and interviewers connected to applications—with notes and next-contact dates.",
-        placement: "top",
-        prepare: () => showDashboardSection("contacts")
-      },
-      {
-        target: '[data-tour-target="profile-settings"]',
-        eyebrow: "YOUR SOURCE OF TRUTH",
-        title: "Complete your application profile.",
-        body: "Profile & answers holds your resume, address, work history, preferences, and reusable answers. Next, Scout will show you the most important sections.",
-        placement: "bottom",
-        nextLabel: "Open profile →",
-        prepare: () => showDashboardSection("applications"),
-        onNext: async () => {
-          await ScoutTour.handoff("main", "options");
-          location.assign(chrome.runtime.getURL("options.html?tour=1"));
-          return false;
-        }
-      }
-    ],
-    onSkip: () => showDashboardSection("applications")
-  });
-}
-
 async function initialize() {
   const access = await requireWorkspaceAccess();
   if (!access) return;
   const query = new URLSearchParams(location.search);
-  const isTour = query.get("tour") === "1";
   const [activeProfile, config] = await Promise.all([ApplyOS.getActiveProfile(), ApplyOS.getAIConfig()]);
   profile = activeProfile; aiConfig = config;
   $("#studio-status").textContent = aiConfig.enabled ? "AI ENHANCED" : "SMART READY";
@@ -967,11 +952,12 @@ async function initialize() {
   ApplyOS.INTERVIEW_FORMATS.forEach((format) => $("#interview-format").insertAdjacentHTML("beforeend", `<option value="${format}">${titleCase(format)}</option>`));
   // Contextual coach marks are strictly read-only. Normal dashboard visits
   // refresh any saved scores made stale by profile or resume updates.
-  if (!isTour) await ApplyOS.refreshApplicationMatches(profile);
+  await ApplyOS.refreshApplicationMatches(profile);
   await load();
-  if (!query.has("tour")) showDashboardSection(query.get("section") || "applications");
+  const requested = query.get("section") || "home";
+  if (requested === "network" && query.get("view") === "companies") currentNetworkView = "companies";
+  showDashboardSection(requested);
   if (query.get("action")) openAction(query.get("action"));
-  await startDashboardTour();
 }
 
 [elements.search, elements.status, elements.source, elements.priority].forEach((control) => control.addEventListener(control === elements.search ? "input" : "change", render));
@@ -982,10 +968,22 @@ document.querySelectorAll("[data-section]").forEach((button) => button.addEventL
   event.preventDefault();
   showDashboardSection(button.dataset.section, true);
   const url = new URL(location.href);
-  if (["contacts", "actions", "companies", "waiting"].includes(button.dataset.section)) url.searchParams.set("section", button.dataset.section);
-  else url.searchParams.delete("section");
+  if (button.dataset.section === "home") url.searchParams.delete("section");
+  else url.searchParams.set("section", button.dataset.section);
   history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
 }));
+document.querySelectorAll("[data-network-view]").forEach((button) => button.addEventListener("click", () => {
+  const view = button.dataset.networkView === "companies" ? "companies" : "contacts";
+  showDashboardSection(view, true);
+  const url = new URL(location.href);
+  url.searchParams.set("section", "network");
+  if (view === "companies") url.searchParams.set("view", "companies"); else url.searchParams.delete("view");
+  history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+}));
+$("#view-waiting").addEventListener("click", () => {
+  showDashboardSection("waiting");
+  const url = new URL(location.href); url.searchParams.set("section", "waiting"); history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+});
 $("#contact-search").addEventListener("input", renderContacts);
 $("#company-search").addEventListener("input", renderCompanies);
 [$("#contact-relationship-filter"), $("#contact-action-filter"), $("#contact-sort")].forEach((control) => control.addEventListener("change", renderContacts));
@@ -1101,7 +1099,7 @@ $("#convert-waiting").addEventListener("click", async () => { if (!selectedWaiti
 
 $("#contact-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const applicationIds = Array.from($("#contact-application").selectedOptions, (option) => option.value).filter(Boolean);
+  const applicationIds = Array.from($("#contact-application").querySelectorAll("input:checked"), (input) => input.value).filter(Boolean);
   const previous = state.contacts.find((item) => item.id === selectedContactId);
   const saved = await ApplyOS.upsertContact({
     id: selectedContactId || undefined,

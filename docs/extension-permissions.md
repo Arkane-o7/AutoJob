@@ -41,7 +41,7 @@ events in place unless the user explicitly removes them first.
 ## Optional desktop notifications
 
 Scout requests Chrome's `notifications` permission only after the user chooses
-**Enable desktop reminders** in Profile & Settings. Notifications use generic
+**Enable desktop reminders** in **Settings → Reminders**. Notifications use generic
 counts such as “3 Scout actions are due”; contact names, company names, message
 summaries, notes, and interview details stay inside Scout. Denying or revoking
-the permission leaves the Today inbox and toolbar badge available.
+the permission leaves Home and the toolbar badge available.

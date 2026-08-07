@@ -9,19 +9,11 @@
     <link rel="stylesheet" href="shared/header.css">
   </head>
   <body data-scout-page="setup">
-    <header class="scout-header" data-scout-header>
+    <header class="scout-header setup-header" data-scout-header>
       <a class="scout-header__brand" href="dashboard.html" aria-label="Scout dashboard"><img class="scout-header__wordmark" src="assets/brand/scout-wordmark.png" alt="Scout"><img class="scout-header__mark-image" src="assets/brand/scout-mark.png" alt=""></a>
-      <nav class="scout-header__nav" aria-label="Primary navigation">
-        <a href="dashboard.html" data-scout-nav="applications">Applications</a>
-        <a href="dashboard.html?section=actions" data-scout-nav="actions">Today</a>
-        <a href="dashboard.html?section=contacts" data-scout-nav="contacts">Contacts</a>
-        <a href="dashboard.html?section=companies" data-scout-nav="companies">Companies</a>
-        <a href="dashboard.html?section=waiting" data-scout-nav="waiting">Waiting</a>
-      </nav>
+      <nav class="scout-header__nav" aria-label="Setup"><span class="setup-header__label">Private setup · about 2 minutes</span></nav>
       <div class="scout-header__actions">
-        <label class="scout-header__profile"><span class="scout-visually-hidden">Active profile</span><select data-scout-profile-select aria-label="Active profile"><option>Loading…</option></select></label>
-        <a class="scout-header__action" href="options.html" data-scout-nav="profile">Profile &amp; answers</a>
-        <a class="scout-header__action" href="account.html" data-scout-nav="account">Account &amp; sync</a>
+        <span class="scout-header__status" data-scout-account-state><i></i><span>Private account</span></span>
       </div>
     </header>
 
@@ -29,40 +21,55 @@
       <aside class="rail">
         <p class="eyebrow">WELCOME ABOARD</p>
         <h1>Apply with<br><em>less repetition.</em></h1>
-        <p class="promise">Give Scout the essentials once. Then learn the product by using the real dashboard—not by reading a manual.</p>
+        <p class="promise">Add the details you reuse most. Scout turns them into a private application workspace you can refine at any time.</p>
         <div class="rail-progress" aria-label="Setup progress"><span id="rail-progress"></span></div>
         <div class="rail-step"><strong id="rail-step">01</strong><span id="rail-label">A quick hello</span></div>
       </aside>
 
       <form id="onboarding-form" class="stage">
         <section class="panel active welcome-panel" data-panel="0">
-          <p class="eyebrow">01 / TWO-MINUTE START</p>
-          <h2>Set up the basics.<br>We’ll show you the rest in context.</h2>
-          <p class="lede">After one short profile screen, Scout opens your real application workspace and points out each control with a focused, skippable walkthrough.</p>
+          <p class="eyebrow">01 / QUICK START</p>
+          <h2>Less repetition.<br>More momentum.</h2>
+          <p class="lede">Scout saves jobs, helps fill applications, and keeps follow-ups visible. You stay in control of every answer and every submission.</p>
           <div class="promise-grid">
             <article><span>01</span><strong>Save opportunities</strong><p>Capture the company, role, description, source, and match guidance.</p></article>
             <article><span>02</span><strong>Autofill confidently</strong><p>Fill known fields and attach your resume while keeping submission manual.</p></article>
             <article><span>03</span><strong>Keep momentum</strong><p>Track applications, people, interviews, and follow-up reminders.</p></article>
           </div>
-          <div class="welcome-note"><span>✓</span><p>The walkthrough never creates sample records, submits forms, or changes your answers.</p></div>
+          <div class="welcome-note"><span>✓</span><p>Your workspace is private. Scout never submits an application or sends a message for you.</p></div>
         </section>
 
-        <section class="panel essentials-panel" data-panel="1">
-          <p class="eyebrow">02 / STARTER PROFILE</p>
+        <section class="panel resume-panel" data-panel="1">
+          <p class="eyebrow">02 / RESUME</p>
+          <h2>Start from what<br>you already have.</h2>
+          <p class="lede">Add your current resume and Scout will keep it ready for applications. PDF text is used to improve match guidance. You can skip this and add it later.</p>
+          <label class="resume-drop" for="starter-resume">
+            <input id="starter-resume" type="file" accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+            <span class="resume-drop__mark">↑</span>
+            <strong id="resume-drop-title">Choose your resume</strong>
+            <small id="resume-drop-copy">PDF, DOC, or DOCX · up to 8 MB</small>
+          </label>
+          <button id="remove-resume" class="remove-resume hidden" type="button">Remove selected file</button>
+        </section>
+
+        <section class="panel essentials-panel" data-panel="2">
+          <p class="eyebrow">03 / ESSENTIALS</p>
           <h2>The details almost every application asks first.</h2>
-          <p class="lede">This is only the minimum. Profile & Settings holds your address, resume, work history, preferences, and reusable answers.</p>
+          <p class="lede">Only the essentials are required. Add work history, links, preferences, and reusable answers later from Profile.</p>
           <div class="grid">
             <label><span>First name *</span><input name="firstName" required autocomplete="given-name"></label>
             <label><span>Last name *</span><input name="lastName" required autocomplete="family-name"></label>
             <label><span>Email *</span><input name="email" required type="email" autocomplete="email"></label>
             <label><span>Phone *</span><input name="phone" required type="tel" autocomplete="tel"></label>
             <label class="wide"><span>Current location</span><input name="currentLocation" autocomplete="address-level2" placeholder="Bengaluru, Karnataka, India"></label>
+            <label class="wide"><span>Target role</span><input name="targetRole" autocomplete="organization-title" placeholder="Product designer, software engineer…"></label>
           </div>
-          <div class="next-up"><span>UP NEXT</span><strong>Your live Dashboard tour</strong><p>Metrics → follow-ups → application pipeline → contacts → complete profile</p></div>
+          <div class="next-up"><span>UP NEXT</span><strong>Your Home workspace</strong><p>See the next actions that matter, then save your first opportunity.</p></div>
         </section>
 
         <footer class="controls">
           <button id="back" class="back" type="button" disabled>← Back</button>
+          <p id="setup-status" role="status" aria-live="polite"></p>
           <button id="next" type="button">Start setup →</button>
         </footer>
       </form>
@@ -70,10 +77,10 @@
     <script src="shared/constants.js"></script>
     <script src="shared/matching.js"></script>
     <script src="shared/followup.js"></script>
+    <script src="shared/resume-parser.js"></script>
     <script src="shared/profiles.js"></script>
     <script src="shared/storage.js"></script>
     <script src="shared/header.js"></script>
-    <script src="shared/tour.js"></script>
     <script src="onboarding.js"></script>
   </body>
 </html>

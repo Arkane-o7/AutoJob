@@ -12,6 +12,7 @@ const saveStatus = document.querySelector("#save-status");
 let savedResume = null;
 let pendingResume = null;
 let profilesIndex = null;
+let isDirty = false;
 document.body.inert = true;
 
 function accountGateUrl(reason) {
@@ -51,6 +52,7 @@ function createAnswerRow(answer = {}) {
   }
 
   const questionLabel = document.createElement("label");
+  questionLabel.className = "answer-question-field";
   const questionTitle = document.createElement("span");
   questionTitle.textContent = "Question phrase";
   if (answer.source === "application") {
@@ -67,6 +69,7 @@ function createAnswerRow(answer = {}) {
   questionLabel.append(question);
 
   const answerLabel = document.createElement("label");
+  answerLabel.className = "answer-copy-field";
   answerLabel.innerHTML = "<span>Your answer</span>";
   const text = document.createElement("textarea");
   text.className = "custom-answer";
@@ -106,7 +109,7 @@ function createAnswerRow(answer = {}) {
   remove.className = "delete-answer";
   remove.type = "button";
   remove.setAttribute("aria-label", "Delete custom answer");
-  remove.textContent = "×";
+  remove.innerHTML = `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M7 7l1 13h8l1-13M10 11v5M14 11v5"/></svg>`;
   remove.addEventListener("click", () => {
     row.remove();
     markUnsaved();
@@ -116,59 +119,40 @@ function createAnswerRow(answer = {}) {
   customAnswers.append(row);
 }
 
-async function startProfileTour() {
-  const force = new URLSearchParams(location.search).get("tour") === "1";
-  await ScoutTour.start({
-    id: "main",
-    surface: "options",
-    force,
-    steps: [
-      {
-        target: '[data-tour-target="profile-switcher"]',
-        eyebrow: "ROLE-SPECIFIC PROFILES",
-        title: "Keep more than one version of you.",
-        body: "Create focused profiles for different role types, then choose which one Scout uses for matching and autofill.",
-        placement: "right"
-      },
-      {
-        target: '[data-tour-target="identity"]',
-        eyebrow: "CORE DETAILS",
-        title: "Your application source of truth.",
-        body: "Identity, contact details, links, address, employment, education, and work preferences live here. Scout only fills facts you have provided.",
-        placement: "bottom"
-      },
-      {
-        target: '[data-tour-target="resume"]',
-        eyebrow: "RESUME",
-        title: "Save the file and the evidence.",
-        body: "The PDF or DOCX is used for supported upload fields. Resume text powers private matching, keyword gaps, and review-first Smart Tools.",
-        placement: "top"
-      },
-      {
-        target: '[data-tour-target="answers"]',
-        eyebrow: "ANSWER MEMORY",
-        title: "Teach Scout repeated questions.",
-        body: "Save reviewed answers once, optionally scope sensitive employer-history answers to one company, and reuse them when similar questions appear.",
-        placement: "top"
-      },
-      {
-        target: '[data-tour-target="save-profile"]',
-        eyebrow: "YOU STAY IN CONTROL",
-        title: "Review, then save your profile.",
-        body: "Nothing on this page changes until you choose Save profile. You can edit these details at any time; Scout still never submits an application for you.",
-        placement: "top",
-        nextLabel: "Finish tour →"
-      }
-    ],
-    onFinish: () => {
-      saveStatus.textContent = "Tour complete · add any missing details, then Save profile";
-      history.replaceState(null, "", chrome.runtime.getURL("options.html"));
-    }
-  });
+function markUnsaved() {
+  isDirty = true;
+  saveStatus.textContent = "Unsaved changes";
+  updateSaveBarVisibility();
+  updateProfileOverview(profileFromForm());
 }
 
-function markUnsaved() {
-  saveStatus.textContent = "Unsaved changes";
+function updateSaveBarVisibility(view = document.querySelector("[data-profile-view][aria-selected='true']")?.dataset.profileView) {
+  document.querySelector(".save-bar").classList.toggle("hidden", view === "overview" || !isDirty);
+}
+
+function profileFromForm() {
+  const value = Object.fromEntries(new FormData(form).entries());
+  value.resume = pendingResume || savedResume;
+  return value;
+}
+
+function updateProfileOverview(profile) {
+  const completeness = ApplyOS.profileCompleteness(profile);
+  document.querySelector("#completion-value").textContent = `${completeness.percentage}%`;
+  document.querySelector("#completion-ring").style.setProperty("--completion", `${completeness.percentage * 3.6}deg`);
+  document.querySelector("#ready-count").textContent = `${10 - completeness.missing.length} of 10 essentials`;
+  document.querySelector("#missing-fields").innerHTML = completeness.missing.length
+    ? completeness.missing.slice(0, 5).map((field) => `<li>${field}</li>`).join("")
+    : "<li>Everything essential is ready.</li>";
+}
+
+function setProfileView(view) {
+  const active = ["overview", "basics", "experience", "preferences", "resume", "answers"].includes(view) ? view : "overview";
+  document.querySelectorAll("[data-profile-group]").forEach((section) => section.classList.toggle("profile-section-active", section.dataset.profileGroup === active));
+  document.querySelectorAll("[data-profile-view]").forEach((button) => button.setAttribute("aria-selected", String(button.dataset.profileView === active)));
+  updateSaveBarVisibility(active);
+  history.replaceState(null, "", `${location.pathname}#${active}`);
+  window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
 function showResume(resume) {
@@ -241,7 +225,7 @@ async function initialize() {
   const access = await requireWorkspaceAccess();
   if (!access) return;
   profilesIndex = await ApplyOS.getProfilesIndex();
-  const [profile, state] = await Promise.all([ApplyOS.getActiveProfile(), ApplyOS.getState()]);
+  const profile = await ApplyOS.getActiveProfile();
   const profileSelect = document.querySelector("#profile-select");
   profileSelect.replaceChildren(...profilesIndex.profiles.map((meta) => {
     const option = document.createElement("option"); option.value = meta.id; option.textContent = meta.targetRole ? `${meta.name} · ${meta.targetRole}` : meta.name; return option;
@@ -262,18 +246,9 @@ async function initialize() {
   (profile.customAnswers || []).forEach(createAnswerRow);
   if (!(profile.customAnswers || []).length) createAnswerRow();
   saveStatus.textContent = profile.firstName ? "Profile saved" : "Complete your profile";
-  const config = await ApplyOS.getAIConfig();
-  document.querySelector("#ai-endpoint").value = config.endpoint;
-  document.querySelector("#ai-model").value = config.chatModel;
-  document.querySelector("#embedding-model").value = config.embeddingModel;
-  if (config.enabled) { document.querySelector("#ai-result").textContent = `Connected · Ollama ${config.version || "ready"}`; document.querySelector("#ai-result").className = "success"; }
-  document.querySelector("#enable-notifications").checked = state.settings.notification_enabled !== false;
-  document.querySelector("#follow-up-offsets").value = (state.settings.follow_up_offsets_days || [7, 14]).join(", ");
-  document.querySelector("#notification-digest-time").value = state.settings.notification_digest_time || "09:00";
-  const desktopGranted = await chrome.permissions?.contains?.({ permissions: ["notifications"] }).catch(() => false);
-  document.querySelector("#desktop-notification-status").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Enabled" : desktopGranted ? "Permission granted · turn on" : "Not enabled";
-  document.querySelector("#enable-desktop-notifications").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Disable desktop reminders" : "Enable desktop reminders";
-  await startProfileTour();
+  updateProfileOverview(profile);
+  setProfileView(location.hash.replace("#", "") || "overview");
+  isDirty = false;
 }
 
 resumeInput.addEventListener("change", async () => {
@@ -344,12 +319,6 @@ form.addEventListener("submit", async (event) => {
   try {
     const profileId = profilesIndex?.activeId || "default";
     const savedProfile = await ApplyOS.completeOnboarding(data);
-    await ApplyOS.updateSettings({
-      final_follow_up_enabled: document.querySelector("#follow-up-offsets").value.split(",").map(Number).includes(14),
-      notification_enabled: document.querySelector("#enable-notifications").checked,
-      follow_up_offsets_days: document.querySelector("#follow-up-offsets").value.split(",").map((item) => Number(item.trim())).filter((value) => Number.isInteger(value) && value >= 1 && value <= 60),
-      notification_digest_time: document.querySelector("#notification-digest-time").value || "09:00"
-    });
     await ApplyOS.syncAnswerMemory(data.customAnswers, {
       authoritative: true,
       removeLegacyProfileEntries: true,
@@ -372,8 +341,10 @@ form.addEventListener("submit", async (event) => {
     if (resumeVersion) await ApplyOS.patchActiveProfile({ currentResumeVersionId: resumeVersion.id });
     savedResume = data.resume;
     pendingResume = null;
+    isDirty = false;
+    updateProfileOverview(savedProfile);
     saveStatus.textContent = "Saved just now";
-    window.setTimeout(() => { saveStatus.textContent = "Profile saved"; }, 2200);
+    window.setTimeout(() => { saveStatus.textContent = "Profile saved"; updateSaveBarVisibility(); }, 900);
   } catch (error) {
     saveStatus.textContent = "Could not save — storage error";
     console.error(error);
@@ -385,23 +356,14 @@ initialize().catch((error) => {
   saveStatus.textContent = `Could not load profile — ${error.message}`;
 });
 
-document.querySelector("#enable-desktop-notifications").addEventListener("click", async () => {
-  const status = document.querySelector("#desktop-notification-status");
-  const current = await chrome.permissions.contains({ permissions: ["notifications"] });
-  const state = await ApplyOS.getState();
-  if (current && state.settings.desktop_notifications_enabled) {
-    await ApplyOS.updateSettings({ desktop_notifications_enabled: false });
-    status.textContent = "Disabled";
-    document.querySelector("#enable-desktop-notifications").textContent = "Enable desktop reminders";
-    return;
-  }
-  const granted = current || await chrome.permissions.request({ permissions: ["notifications"] });
-  await ApplyOS.updateSettings({ desktop_notifications_enabled: granted });
-  status.textContent = granted ? "Enabled" : "Permission not granted";
-  document.querySelector("#enable-desktop-notifications").textContent = granted ? "Disable desktop reminders" : "Enable desktop reminders";
+document.querySelectorAll("[data-profile-view]").forEach((button) => button.addEventListener("click", () => setProfileView(button.dataset.profileView)));
+document.querySelectorAll("[data-profile-jump]").forEach((button) => button.addEventListener("click", () => setProfileView(button.dataset.profileJump)));
+window.addEventListener("beforeunload", (event) => { if (isDirty) event.preventDefault(); });
+document.querySelector("#profile-select").addEventListener("change", async (event) => {
+  if (isDirty && !await ScoutDialog.confirm({ eyebrow: "UNSAVED PROFILE", title: "Switch profiles without saving?", message: "Changes on this profile will be lost.", confirmLabel: "Discard and switch", cancelLabel: "Keep editing", tone: "danger" })) { event.target.value = profilesIndex.activeId; return; }
+  isDirty = false;
+  await ApplyOS.setActiveProfile(event.target.value); window.location.reload();
 });
-
-document.querySelector("#profile-select").addEventListener("change", async (event) => { await ApplyOS.setActiveProfile(event.target.value); window.location.reload(); });
 document.querySelector("#new-profile").addEventListener("click", async () => {
   const values = await ScoutDialog.form({ eyebrow: "NEW PROFILE", title: "Create another version of you.", message: "Use profiles to keep different resumes, answers, and targets organized.", fields: [{ name: "name", label: "Profile name", placeholder: "Frontend roles", required: true, maxLength: 80 }, { name: "targetRole", label: "Target role (optional)", placeholder: "Senior Frontend Engineer", maxLength: 120 }], confirmLabel: "Create profile", cancelLabel: "Not now" });
   if (!values?.name.trim()) return;
@@ -420,17 +382,4 @@ document.querySelector("#delete-profile").addEventListener("click", async () => 
   if (!await ScoutDialog.confirm({ eyebrow: "DELETE PROFILE", title: `Delete “${current?.name || "this profile"}”?`, message: "Applications will remain in the CRM.", consequences: ["The profile’s resume, autofill details, and saved answers will be removed."], tone: "danger", confirmLabel: "Delete profile", cancelLabel: "Keep profile" })) return;
   await ApplyOS.deleteProfile(profilesIndex.activeId);
   window.location.reload();
-});
-document.querySelector("#test-ai").addEventListener("click", async (event) => {
-  const button = event.currentTarget; const result = document.querySelector("#ai-result"); button.disabled = true; result.className = ""; result.textContent = "Checking…";
-  const endpoint = document.querySelector("#ai-endpoint").value.trim();
-  try {
-    const origin = new URL(endpoint).origin;
-    const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });
-    if (!granted) throw new Error("Localhost access was not granted. Smart Tools remain available without it.");
-    await ApplyOS.saveAIConfig({ endpoint, chatModel: document.querySelector("#ai-model").value.trim(), embeddingModel: document.querySelector("#embedding-model").value.trim() });
-    const status = await ApplyOS.testAIConnection(); result.className = status.success ? "success" : "error"; result.textContent = status.success ? `Connected · ${status.config.chatModel} · Ollama ${status.version}` : status.error;
-    if (status.success) document.querySelector("#ai-model").value = status.config.chatModel;
-  } catch (error) { result.className = "error"; result.textContent = error.message; }
-  button.disabled = false;
 });

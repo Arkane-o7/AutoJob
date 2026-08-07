@@ -8,12 +8,12 @@
   top: 0;
   height: var(--scout-header-height);
   display: grid;
-  grid-template-columns: minmax(150px, 1fr) auto minmax(390px, 1fr);
+  grid-template-columns: minmax(150px, 1fr) auto minmax(280px, 1fr);
   align-items: stretch;
   gap: 24px;
   padding: 0 clamp(22px, 3vw, 48px);
-  border-bottom: 1px solid var(--ink, #171814);
-  background: rgba(242, 239, 228, .96);
+  border-bottom: 1px solid rgba(23, 24, 20, .14);
+  background: rgba(247, 245, 238, .97);
   color: var(--ink, #171814);
   backdrop-filter: blur(14px);
 }
@@ -28,7 +28,7 @@
 
 .scout-header__wordmark {
   display: block;
-  width: 104px;
+  width: 98px;
   height: auto;
   flex: 0 0 auto;
 }
@@ -57,9 +57,8 @@
   border: 0;
   color: var(--muted, #6b6d64);
   text-decoration: none;
-  font: 800 9px/1 "Courier New", monospace;
-  letter-spacing: .09em;
-  text-transform: uppercase;
+  font: 700 11px/1 "Avenir Next", "Century Gothic", sans-serif;
+  letter-spacing: .01em;
   transition: color 140ms ease, background 140ms ease;
 }
 
@@ -135,6 +134,7 @@
   font: 800 9px/1.2 "Avenir Next", "Century Gothic", sans-serif;
 }
 
+.scout-header__profile[hidden] { display: none; }
 .scout-header__profile select:disabled { opacity: .52; }
 
 .scout-header__action {
@@ -142,20 +142,22 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 12px;
-  border: 1px solid var(--ink, #171814);
+  padding: 0 8px;
+  border: 0;
+  border-bottom: 1px solid transparent;
   white-space: nowrap;
   color: var(--ink, #171814);
   background: transparent;
   text-decoration: none;
-  font: 800 9px/1 "Avenir Next", "Century Gothic", sans-serif;
+  font: 700 11px/1 "Avenir Next", "Century Gothic", sans-serif;
 }
 
 .scout-header__action:hover,
 .scout-header__action.active,
 .scout-header__action[aria-current="page"] {
-  background: var(--ink, #171814);
-  color: var(--paper, #f2efe4);
+  border-bottom-color: var(--ink, #171814);
+  background: transparent;
+  color: var(--ink, #171814);
 }
 
 .scout-header a:focus-visible,
@@ -198,15 +200,21 @@
 }
 
 @media (max-width: 860px) {
-  .scout-header { grid-template-columns: auto 1fr; }
-  .scout-header .scout-header__nav { display: none; }
+  :root { --scout-header-height: 108px; }
+  .scout-header { height:var(--scout-header-height); grid-template-columns:auto 1fr; grid-template-rows:60px 48px; padding-inline:18px; }
+  .scout-header .scout-header__nav { grid-column:1 / -1; grid-row:2; min-width:0; overflow-x:auto; border-top:1px solid rgba(23,24,20,.16); }
+  .scout-header .scout-header__nav a { flex:1; justify-content:center; min-width:94px; padding:0 12px; }
   .scout-header__profile { margin-left: auto; }
 }
 
 @media (max-width: 620px) {
-  .scout-header { height: 60px; padding-inline: 14px; gap: 8px; }
+  :root { --scout-header-height: 102px; }
+  .scout-header { height:var(--scout-header-height); grid-template-rows:56px 46px; padding-inline:14px; gap:8px; }
   .scout-header__profile { display: none; }
   .scout-header__action { min-height: 32px; padding-inline: 8px; font-size: 8px; }
   .scout-header__wordmark { display: none; }
   .scout-header__mark-image { display: block; }
 }
+
+/* Shared controls use the same restrained curve as the product surfaces. */
+.scout-header__profile select { border-radius:8px; }

@@ -1,0 +1,104 @@
+.scout-side-nav {
+  width: 100%;
+  margin-top: 24px;
+  padding: 8px;
+  display: grid;
+  gap: 4px;
+  border: 1px solid rgba(23, 24, 20, .28);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .42);
+  box-shadow: 0 8px 26px rgba(23, 24, 20, .06);
+}
+
+.scout-side-nav__heading {
+  display: grid;
+  gap: 4px;
+  margin: 0 2px 3px;
+  padding: 9px 9px 12px;
+  border-bottom: 1px solid rgba(23, 24, 20, .16);
+}
+
+.scout-side-nav__heading strong {
+  color: var(--ink, #171814);
+  font: 800 12px/1.2 "Avenir Next", "Century Gothic", sans-serif;
+}
+
+.scout-side-nav__heading span {
+  color: var(--muted, #6b6d63);
+  font: 500 9px/1.2 "Avenir Next", "Century Gothic", sans-serif;
+}
+
+.scout-side-nav button {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 11px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 0;
+  border-radius: 8px;
+  color: #3f4139;
+  background: transparent;
+  box-shadow: none;
+  text-align: left;
+  font: 700 11px/1 "Avenir Next", "Century Gothic", sans-serif;
+  text-transform: none;
+  cursor: pointer;
+  transition: background 150ms, color 150ms, box-shadow 150ms, transform 150ms;
+}
+
+.scout-side-nav button::after {
+  content: "\2192";
+  opacity: .32;
+  font-size: 15px;
+  line-height: 1;
+  transform: translateX(-2px);
+  transition: opacity 150ms, transform 150ms;
+}
+
+.scout-side-nav button:hover {
+  padding-left: 11px;
+  color: var(--ink, #171814);
+  background: rgba(23, 24, 20, .06);
+}
+
+.scout-side-nav button:hover::after {
+  opacity: .7;
+  transform: none;
+}
+
+.scout-side-nav button[aria-selected="true"] {
+  padding-left: 11px;
+  color: var(--ink, #171814);
+  background: var(--acid, #b8f34a);
+  box-shadow: inset 0 0 0 1px rgba(23, 24, 20, .72), 0 2px 0 var(--ink, #171814);
+  font-weight: 800;
+}
+
+.scout-side-nav button[aria-selected="true"]::after {
+  opacity: 1;
+  transform: none;
+}
+
+@media (max-width: 860px) {
+  .scout-side-nav {
+    display: flex;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scrollbar-width: none;
+  }
+
+  .scout-side-nav::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scout-side-nav__heading {
+    display: none;
+  }
+
+  .scout-side-nav button {
+    width: auto;
+    min-width: max-content;
+    padding-inline: 13px;
+  }
+}

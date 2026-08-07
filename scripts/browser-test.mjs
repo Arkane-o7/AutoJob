@@ -519,6 +519,7 @@ async function main() {
     await popupProbe.setViewportSize({ width: 420, height: 600 });
     await popupProbe.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
     await popupProbe.waitForFunction(() => document.querySelector("#score strong")?.textContent.trim() === "-");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await popupProbe.waitForTimeout(300); await popupProbe.evaluate(() => scrollTo(0, 0)); await popupProbe.locator("main").screenshot({ path: resolve(root, "output/playwright/popup-job.png") }); }
     const popupMetrics = await popupProbe.evaluate(() => {
       document.querySelector("#record-controls")?.classList.remove("hidden");
       document.querySelector("#agent")?.classList.remove("hidden");
@@ -535,8 +536,9 @@ async function main() {
         mainOverflow: main ? getComputedStyle(main).overflowY : "missing"
       };
     });
-    assert.equal(popupMetrics.documentHeight, 600, "popup document should remain at Chrome's 600px maximum");
-    assert.equal(popupMetrics.bodyHeight, 600, "popup body should not create an outer scroll surface");
+    assert.ok(popupMetrics.documentHeight <= 600, "popup document should remain within Chrome's 600px maximum");
+    assert.ok(popupMetrics.bodyHeight <= 600, "popup body should not create an outer scroll surface");
+    assert.ok(popupMetrics.mainHeight <= 600, "popup content surface should remain within Chrome's maximum height");
     assert.equal(popupMetrics.mainOverflow, "hidden", "popup must not expose a native scrollbar");
     assert.ok(popupMetrics.mainContentHeight <= popupMetrics.mainHeight, `popup content must fit without clipping (${popupMetrics.mainContentHeight}/${popupMetrics.mainHeight})`);
     await popupProbe.close();
@@ -589,10 +591,14 @@ async function main() {
     assert.equal(await accountProbe.locator("#email-request-form").count(), 1, "email code login is available as a supported sign-in method");
     assert.equal(await accountProbe.locator("#calendar").count(), 1, "Google Calendar belongs to Account & sync");
     assert.equal(await accountProbe.locator("#backup").count(), 1, "encrypted recovery belongs to Account & sync");
-    assert.equal(await accountProbe.locator('.account-nav a[href="#calendar"]').count(), 1, "account navigation links directly to Calendar");
-    assert.equal(await accountProbe.locator('.account-nav a[href="#backup"]').count(), 1, "account navigation links directly to backup and recovery");
+    assert.equal(await accountProbe.locator("[data-settings-view='integrations']").count(), 1, "Settings exposes a focused Integrations category");
+    assert.equal(await accountProbe.locator("[data-settings-view='privacy']").count(), 1, "Settings exposes a focused Privacy and data category");
+    assert.equal(await accountProbe.locator(".scout-side-nav__heading").count(), 1, "Settings uses the shared, labeled sidebar navigation component");
+    const settingsNavStyle = await accountProbe.locator(".scout-side-nav").evaluate((nav) => ({ radius: getComputedStyle(nav).borderRadius, activeBackground: getComputedStyle(nav.querySelector("[aria-selected='true']")).backgroundColor }));
+    assert.deepEqual(settingsNavStyle, { radius: "12px", activeBackground: "rgb(184, 243, 74)" }, "Settings matches the Profile sidebar surface and selected state");
     if (process.env.SCOUT_CAPTURE_UI === "1") {
       await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await accountProbe.waitForTimeout(250);
       await accountProbe.screenshot({ path: resolve(root, "output/playwright/account-sync.png"), fullPage: true });
     }
     assert.match(await accountProbe.locator(".auth-consent").textContent(), /stores personal data you choose to provide/i, "account consent keeps the storage disclosure concise and clear");
@@ -611,6 +617,7 @@ async function main() {
     assert.match(await accountProbe.locator("body").innerText(), /account|required|offline|cache/i, "account page explains cloud authority and the user-specific offline cache");
     assert.equal((await accountProbe.locator("body").innerText()).includes("github.com/Arkane-o7"), false, "account and support surfaces never expose the source repository");
     assert.deepEqual(accountMessages, [], `account page should not emit console warnings or errors: ${accountMessages.join(" | ")}`);
+    await accountProbe.locator("[data-settings-view='privacy']").click();
     await accountProbe.locator("#delete-account").click();
     const accountConfirm = accountProbe.locator(".scout-system-dialog");
     await accountConfirm.waitFor({ state: "visible" });
@@ -655,17 +662,22 @@ async function main() {
     const starterProbe = await context.newPage();
     await starterProbe.goto(`chrome-extension://${extensionId}/onboarding.html?start=1`, { waitUntil: "domcontentloaded" });
     await starterProbe.waitForFunction(() => document.querySelector("[data-panel='0']")?.classList.contains("active"));
-    assert.equal(await starterProbe.locator("[data-panel]").count(), 2, "first-run onboarding stays focused on two screens");
-    assert.match(await starterProbe.locator("[data-panel='0'] h2").textContent(), /show you the rest in context/i);
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await starterProbe.waitForTimeout(400); await starterProbe.screenshot({ path: resolve(root, "output/playwright/onboarding-welcome.png"), fullPage: true }); }
+    assert.equal(await starterProbe.locator("[data-panel]").count(), 3, "first-run onboarding stays focused on three activation steps");
+    assert.match(await starterProbe.locator("[data-panel='0'] h2").textContent(), /Less repetition/i);
     await starterProbe.locator("#next").click();
     await starterProbe.waitForFunction(() => document.querySelector("[data-panel='1']")?.classList.contains("active"));
-    assert.equal(await starterProbe.locator("[data-panel='1'] input[required]").count(), 4, "starter profile asks only for core autofill identity fields");
-    assert.match(await starterProbe.locator("#next").textContent(), /Save & show me around/);
+    assert.equal(await starterProbe.locator("[data-panel='1'] input[required]").count(), 0, "resume import is useful but optional");
     await starterProbe.locator("#next").click();
-    await starterProbe.waitForURL(`chrome-extension://${extensionId}/dashboard.html?tour=1`);
-    await starterProbe.locator(".scout-tour-card", { hasText: "Know what needs attention." }).waitFor({ state: "visible" });
+    await starterProbe.waitForFunction(() => document.querySelector("[data-panel='2']")?.classList.contains("active"));
+    assert.equal(await starterProbe.locator("[data-panel='2'] input[required]").count(), 4, "starter profile asks only for core autofill identity fields");
+    assert.match(await starterProbe.locator("#next").textContent(), /Open my workspace/);
+    await starterProbe.locator("#next").click();
+    await starterProbe.waitForURL(`chrome-extension://${extensionId}/dashboard.html?welcome=1`);
+    await starterProbe.locator("#actions-workspace").waitFor({ state: "visible" });
+    assert.equal(await starterProbe.locator(".scout-tour-card").count(), 0, "setup opens the real Home workspace without a blocking tour");
     await starterProbe.close();
-    console.log("PASS two-screen starter setup hands off to the real dashboard tour");
+    console.log("PASS activation setup opens the real Home workspace without a forced tour");
 
     await worker.evaluate(async () => {
       const stored = await chrome.storage.local.get("profile_browser_test");
@@ -677,6 +689,8 @@ async function main() {
     await profileProbe.locator("#profile-form").waitFor({ state: "visible" });
     assert.equal(await profileProbe.getByText("Run setup again").count(), 0, "the full profile editor must not expose a competing setup editor");
     assert.equal(await profileProbe.locator("#calendar, #backup").count(), 0, "profile settings stay focused on profile and answer data");
+    await profileProbe.locator("[data-profile-view='basics']").click();
+    await profileProbe.locator("[name='preferredName']").fill("Browser Test");
     await profileProbe.locator("button[type='submit']").click();
     await profileProbe.waitForFunction(() => document.querySelector("#save-status")?.textContent === "Saved just now");
     const savedProfileState = await worker.evaluate(async () => {
@@ -687,46 +701,28 @@ async function main() {
     assert.equal(savedProfileState.profile.structuredFutureField.preserved, true, "profile form saves preserve fields owned by future or imported schema versions");
     assert.ok(savedProfileState.profile.onboardingCompletedAt, "saving the canonical profile completes first-run setup");
     assert.match(savedProfileState.resume?.sha256 || "", /^[a-f0-9]{64}$/, "saved resume versions retain a content hash");
-    await worker.evaluate(async () => chrome.storage.local.set({ applyos_tour_progress: { version: 2, setupCompletedAt: new Date().toISOString(), flows: { main: { surface: "options", step: 4, completedAt: new Date().toISOString(), dismissedAt: null } } } }));
     const onboardingProbe = await context.newPage();
     await onboardingProbe.goto(`chrome-extension://${extensionId}/onboarding.html`, { waitUntil: "domcontentloaded" });
     await onboardingProbe.waitForURL(`chrome-extension://${extensionId}/options.html`);
     await onboardingProbe.close();
-    const stateBeforeTour = await worker.evaluate(async () => {
-      const value = await ApplyOS.getState();
-      return { revision: value.revision, applications: value.applications.length, contacts: value.contacts.length };
+    await profileProbe.locator("[data-profile-view='overview']").click();
+    assert.equal(await profileProbe.locator("[data-profile-view='overview']").getAttribute("aria-selected"), "true", "Profile opens on a useful completion overview");
+    assert.equal(await profileProbe.locator(".scout-side-nav__heading").count(), 1, "Profile sections use the shared, labeled sidebar navigation component");
+    const activeProfileNavBackground = await profileProbe.locator("[data-profile-view='overview']").evaluate((node) => getComputedStyle(node).backgroundColor);
+    assert.notEqual(activeProfileNavBackground, "rgba(0, 0, 0, 0)", "The active profile section is visually prominent rather than a muted text link");
+    assert.match(await profileProbe.locator("#completion-value").textContent(), /\d+%/, "Profile communicates readiness at a glance");
+    assert.equal(await profileProbe.locator("#local-ai, #follow-up-offsets").count(), 0, "Profile keeps reminder and advanced configuration in Settings");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await profileProbe.waitForTimeout(250); await profileProbe.screenshot({ path: resolve(root, "output/playwright/profile-overview.png"), fullPage: true }); }
+    await profileProbe.locator("[data-profile-view='answers']").click();
+    const answerRowLayout = await profileProbe.locator(".answer-row").first().evaluate((row) => {
+      const question = row.querySelector(".answer-question-field")?.getBoundingClientRect();
+      const answer = row.querySelector(".answer-copy-field")?.getBoundingClientRect();
+      return { fits: row.scrollWidth <= row.clientWidth, aligned: Math.abs((question?.top || 0) - (answer?.top || 0)) <= 2, radius: parseFloat(getComputedStyle(row).borderRadius) };
     });
-    const tourProbe = await context.newPage();
-    await tourProbe.goto(`chrome-extension://${extensionId}/dashboard.html?tour=1`, { waitUntil: "domcontentloaded" });
-    await tourProbe.locator(".scout-tour-card").waitFor({ state: "visible" });
-    await tourProbe.waitForFunction(() => document.querySelector(".scout-tour-card h2")?.textContent === "Know what needs attention.");
-    assert.match(await tourProbe.locator(".scout-tour-kicker").textContent(), /1\s*\/\s*5/, "dashboard coach marks start on the first real control");
-    for (const expectedTitle of ["Your next move stays visible.", "This is your working pipeline.", "Map the people behind each role.", "Complete your application profile."]) {
-      await tourProbe.locator(".scout-tour-next").click();
-      await tourProbe.waitForFunction((title) => document.querySelector(".scout-tour-card h2")?.textContent === title, expectedTitle);
-    }
-    assert.match(await tourProbe.locator(".scout-tour-card").textContent(), /Complete your application profile/, "dashboard tour reaches the profile handoff");
-    await tourProbe.locator(".scout-tour-next").click();
-    await tourProbe.waitForURL(`chrome-extension://${extensionId}/options.html?tour=1`);
-    await tourProbe.locator(".scout-tour-card").waitFor({ state: "visible" });
-    await tourProbe.waitForFunction(() => document.querySelector(".scout-tour-card h2")?.textContent === "Keep more than one version of you.");
-    assert.match(await tourProbe.locator(".scout-tour-kicker").textContent(), /1\s*\/\s*5/, "profile coach marks resume on the next real surface");
-    for (const expectedTitle of ["Your application source of truth.", "Save the file and the evidence.", "Teach Scout repeated questions.", "Review, then save your profile."]) {
-      await tourProbe.locator(".scout-tour-next").click();
-      await tourProbe.waitForFunction((title) => document.querySelector(".scout-tour-card h2")?.textContent === title, expectedTitle);
-    }
-    await tourProbe.locator(".scout-tour-next").click();
-    await tourProbe.locator(".scout-tour-card").waitFor({ state: "detached" });
-    const stateAfterTour = await worker.evaluate(async () => {
-      const value = await ApplyOS.getState();
-      const stored = await chrome.storage.local.get("applyos_tour_progress");
-      return { revision: value.revision, applications: value.applications.length, contacts: value.contacts.length, tour: stored.applyos_tour_progress };
-    });
-    assert.deepEqual({ revision: stateAfterTour.revision, applications: stateAfterTour.applications, contacts: stateAfterTour.contacts }, stateBeforeTour, "coach marks do not mutate profile or CRM data");
-    assert.ok(stateAfterTour.tour.flows.main.completedAt, "cross-page tour completion is persisted");
-    await tourProbe.close();
+    assert.deepEqual(answerRowLayout, { fits: true, aligned: true, radius: 12 }, "answer cards align their primary fields without overflow and use the shared curved surface");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await profileProbe.waitForTimeout(250); await profileProbe.screenshot({ path: resolve(root, "output/playwright/profile-answers.png"), fullPage: true }); }
     await profileProbe.close();
-    console.log("PASS canonical profile round-trip and contextual read-only product tour");
+    console.log("PASS canonical profile round-trip and section-based profile overview");
 
     const helper = await context.newPage();
     const dashboardMessages = [];
@@ -735,6 +731,7 @@ async function main() {
     helper.on("dialog", async (dialog) => { dashboardNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
     await helper.goto(`chrome-extension://${extensionId}/dashboard.html`, { waitUntil: "domcontentloaded" });
     await helper.locator("[data-scout-header]").waitFor({ state: "visible" });
+    await helper.waitForFunction(() => document.querySelector("[data-scout-profile-select]")?.value === "browser_test");
     const headerSnapshot = (target) => target.evaluate(() => {
       const header = document.querySelector("[data-scout-header]");
       const rect = header.getBoundingClientRect();
@@ -753,6 +750,7 @@ async function main() {
       const surface = await context.newPage();
       await surface.goto(`chrome-extension://${extensionId}/${path}`, { waitUntil: "domcontentloaded" });
       await surface.locator("[data-scout-header]").waitFor({ state: "visible" });
+      if (name !== "setup") await surface.waitForFunction(() => document.querySelector("[data-scout-profile-select]")?.value === "browser_test");
       headerSamples.push({ page: name, ...(await headerSnapshot(surface)) });
       await surface.close();
     }
@@ -760,12 +758,18 @@ async function main() {
       assert.equal(sample.height, 68, `${sample.page} uses the shared 68px header geometry`);
       assert.equal(sample.brand, "Scout", `${sample.page} uses the supplied Scout wordmark`);
       assert.equal(sample.brandLoaded, true, `${sample.page} loads the supplied Scout wordmark asset`);
-      assert.deepEqual(sample.nav, ["Applications", "Today", "Contacts", "Companies", "Waiting"], `${sample.page} uses the shared primary navigation`);
-      assert.deepEqual(sample.actions, ["Profile & answers", "Account & sync"], `${sample.page} uses the shared account actions`);
-      assert.equal(sample.profile, "browser_test", `${sample.page} uses the active workspace profile`);
+      if (sample.page === "setup") {
+        assert.deepEqual(sample.nav, [], "setup removes unrelated product navigation");
+        assert.deepEqual(sample.actions, [], "setup keeps attention on activation");
+        assert.equal(sample.profile, "", "setup does not expose profile switching");
+      } else {
+        assert.deepEqual(sample.nav, ["Home", "Pipeline", "Network"], `${sample.page} uses the simplified primary navigation`);
+        assert.deepEqual(sample.actions, ["Profile", "Settings"], `${sample.page} uses clear utility actions`);
+        assert.equal(sample.profile, "browser_test", `${sample.page} uses the active workspace profile`);
+      }
     }
-    assert.equal(headerSamples.find((sample) => sample.page === "dashboard").active, "applications");
-    assert.equal(headerSamples.find((sample) => sample.page === "account").active, "account");
+    assert.equal(headerSamples.find((sample) => sample.page === "dashboard").active, "home");
+    assert.equal(headerSamples.find((sample) => sample.page === "account").active, "settings");
     assert.equal(headerSamples.find((sample) => sample.page === "profile").active, "profile");
     console.log("PASS shared Scout header geometry, navigation, account state and profile controls");
     const runtime = await helper.evaluate(() => chrome.runtime.sendMessage({ type: "APPLYOS_RUNTIME_PING" }));
@@ -820,12 +824,16 @@ async function main() {
     assert.equal(confirmedState.application.status, "applied", "affirmative review marks the application applied");
     assert.equal(confirmedState.reminders.length, 2, "affirmative review schedules 7/14-day reminders");
     await helper.reload({ waitUntil: "domcontentloaded" });
-    const completeReminder = helper.locator(".upcoming-done").first();
+    await helper.locator("[data-section='home']").click();
+    const completeReminder = helper.locator(".action-row", { hasText: "Follow up" }).first().locator("[data-action-done]");
     await completeReminder.waitFor({ state: "visible" });
     await completeReminder.click();
     assert.equal(await worker.evaluate(async (id) => (await ApplyOS.getState()).reminders.filter((item) => item.application_id === id && item.completed_at).length, applicationId), 1, "dashboard Done completes a reminder instead of leaving it due forever");
+    await helper.locator("[data-section='pipeline']").click();
     const applicationCard = helper.locator(`#board .job-card[data-id="${applicationId}"]`);
     await applicationCard.waitFor({ state: "visible" });
+    assert.deepEqual(await helper.locator("#board .column-head > span:first-child").allTextContents(), ["SAVED", "APPLIED", "INTERVIEWING", "OFFER", "ARCHIVED"], "Pipeline groups detailed application states into five understandable stages");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/pipeline-workspace.png"), fullPage: true }); }
     await applicationCard.click();
     const detail = helper.locator("#detail");
     assert.equal(await detail.getAttribute("aria-modal"), "true", "open detail drawer is exposed as the active modal");
@@ -851,9 +859,16 @@ async function main() {
     assert.equal(await detail.getAttribute("inert"), "", "closed detail drawer is removed from keyboard interaction");
     assert.equal(await helper.evaluate(() => document.activeElement?.classList.contains("job-card")), true, "closing details restores focus to the opening card");
 
-    await helper.locator("[data-section='contacts']").click();
-    assert.equal(await helper.locator("[data-scout-nav='contacts']").getAttribute("aria-current"), "page", "contacts navigation becomes active without a reload");
-    assert.equal(new URL(helper.url()).searchParams.get("section"), "contacts", "contacts navigation keeps a shareable dashboard URL");
+    await helper.locator("[data-section='network']").click();
+    assert.equal(await helper.locator("[data-scout-nav='network']").getAttribute("aria-current"), "page", "Network navigation becomes active without a reload");
+    assert.equal(new URL(helper.url()).searchParams.get("section"), "network", "Network keeps a shareable dashboard URL");
+    await helper.locator("#contact-search").focus();
+    const searchFocusStyle = await helper.locator("#contact-search").evaluate((input) => ({
+      shadow: getComputedStyle(input.closest(".search")).boxShadow,
+      inputOutline: getComputedStyle(input).outlineStyle
+    }));
+    assert.notEqual(searchFocusStyle.shadow, "none", "search focus highlights the complete rounded search control");
+    assert.equal(searchFocusStyle.inputOutline, "none", "search inputs do not draw a misaligned inner focus rectangle");
     await helper.locator("#add-contact").click();
     const contactDetail = helper.locator("#contact-detail");
     await contactDetail.waitFor({ state: "visible" });
@@ -862,13 +877,17 @@ async function main() {
     await helper.locator("#contact-company").fill("Fixture Labs");
     await helper.locator("#contact-email").fill("casey@example.test");
     await helper.locator("#contact-relationship").selectOption("recruiter");
-    await helper.locator("#contact-application").selectOption(applicationId);
+    await helper.locator(`#contact-application input[value="${applicationId}"]`).check();
+    assert.equal(await helper.locator("#contact-application select[multiple]").count(), 0, "contact applications avoid the native scrolling multi-select");
+    assert.equal(await helper.locator("#contact-application .contact-application-option").count() > 0, true, "contact applications are exposed as readable checkable options");
     await helper.locator("#contact-notes").fill("Met during the reviewed browser fixture.");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/contact-editor.png") }); }
     await helper.locator("#contact-form button[type='submit']").click();
     await helper.waitForFunction(() => document.querySelector("#contact-detail")?.dataset.state === "closed");
     assert.equal(await contactDetail.getAttribute("inert"), "", "closed contact drawer is removed from keyboard interaction");
     const contactCard = helper.locator(".contact-card", { hasText: "Casey Recruiter" });
     await contactCard.waitFor({ state: "visible" });
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(300); await helper.screenshot({ path: resolve(root, "output/playwright/people-workspace.png"), fullPage: true }); }
     await contactCard.click();
     assert.match(await helper.locator("#contact-gmail").getAttribute("href"), /mail\.google\.com\/mail\/\?.*to=casey%40example\.test/);
     assert.match(await helper.locator("#contact-outlook").getAttribute("href"), /outlook\.office\.com\/mail\/deeplink\/compose\?/);
@@ -914,8 +933,9 @@ async function main() {
     await helper.locator(".contact-card", { hasText: "Rowan Referral" }).waitFor({ state: "visible" });
     assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).contacts.filter((item) => item.email === "casey@example.test").length), 1, "approved CSV merge does not create a duplicate contact");
 
-    await helper.locator("[data-section='companies']").click();
-    assert.equal(new URL(helper.url()).searchParams.get("section"), "companies", "Companies keeps a shareable dashboard URL");
+    await helper.locator("[data-network-view='companies']").click();
+    assert.equal(new URL(helper.url()).searchParams.get("section"), "network", "Companies stays inside the shareable Network URL");
+    assert.equal(new URL(helper.url()).searchParams.get("view"), "companies", "Network preserves the selected Companies view");
     const fixtureCompanyCard = helper.locator(".company-card", { hasText: "Fixture Labs" }).first();
     await fixtureCompanyCard.waitFor({ state: "visible" });
     await fixtureCompanyCard.click();
@@ -940,7 +960,7 @@ async function main() {
     assert.equal(await worker.evaluate(async (id) => (await ApplyOS.getState()).applications.some((item) => item.id === id), applicationId), true, "company deletion leaves applications intact");
     if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/companies-workspace.png"), fullPage: true }); }
 
-    await helper.locator("[data-section='applications']").click();
+    await helper.locator("[data-section='pipeline']").click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
     await helper.locator("#mark-application-waiting").click();
     await helper.locator("#waiting-what").fill("Recruiter response on next steps");
@@ -956,9 +976,10 @@ async function main() {
     await helper.locator("#close-waiting").click();
     await helper.reload({ waitUntil: "domcontentloaded" });
     await helper.locator(`#board .job-card[data-id="${applicationId}"] .waiting-chip`, { hasText: "WAITING 1" }).waitFor({ state: "visible" });
-    await helper.locator("[data-section='waiting']").click();
+    await helper.locator("[data-section='home']").click();
+    await helper.locator("#view-waiting").click();
     assert.equal(new URL(helper.url()).searchParams.get("section"), "waiting", "Waiting keeps a shareable dashboard URL");
-    const overdueWaiting = helper.locator(".waiting-row", { hasText: "Recruiter response on next steps" });
+    const overdueWaiting = helper.locator("#waiting-workspace .waiting-row", { hasText: "Recruiter response on next steps" });
     await overdueWaiting.waitFor({ state: "visible" });
     assert.equal(await overdueWaiting.locator("[data-convert-waiting]").isVisible(), true, "overdue waiting items expose follow-up conversion");
     if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/waiting-workspace.png"), fullPage: true }); }
@@ -969,18 +990,19 @@ async function main() {
         && current.reminders.some((item) => item.title === "Follow up: Recruiter response on next steps" && item.status === "open");
     }), true, "overdue waiting conversion resolves the waiting item and creates one open follow-up");
 
-    await helper.locator("[data-section='actions']").click();
-    assert.equal(await helper.locator("[data-scout-nav='actions']").getAttribute("aria-current"), "page", "Today navigation becomes active without a reload");
-    assert.equal(new URL(helper.url()).searchParams.get("section"), "actions", "Today keeps a shareable dashboard URL");
+    await helper.locator("[data-section='home']").click();
+    assert.equal(await helper.locator("[data-scout-nav='home']").getAttribute("aria-current"), "page", "Home navigation becomes active without a reload");
+    assert.equal(new URL(helper.url()).searchParams.has("section"), false, "Home keeps the canonical dashboard URL");
     const relationshipAction = helper.locator(".action-row", { hasText: "Check for Casey's reply" });
     await relationshipAction.waitFor({ state: "visible" });
     const snoozedActionId = await relationshipAction.getAttribute("data-action-id");
-    await relationshipAction.locator("[data-action-reschedule-date]").fill("2026-08-09T09:00");
-    await relationshipAction.locator("[data-action-reschedule]").click();
+    await relationshipAction.locator(".action-row-main").click();
+    await helper.locator("#action-due").fill("2026-08-09T09:00");
+    await helper.locator("#action-form button[type='submit']").click();
     assert.equal(await worker.evaluate(async (id) => {
       const action = (await ApplyOS.getState()).reminders.find((item) => item.id === id);
       return new Date(action?.due_at).getTime() === new Date("2026-08-09T09:00").getTime();
-    }, snoozedActionId), true, "Today reschedules an action inline");
+    }, snoozedActionId), true, "Home reschedules an action from its focused details");
     await relationshipAction.locator("[data-action-snooze]").click();
     const snoozeDialog = helper.locator("#snooze-dialog");
     await snoozeDialog.waitFor({ state: "visible" });
@@ -1003,7 +1025,7 @@ async function main() {
     await relationshipAction.locator("[data-action-done]").click();
     assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).reminders.some((item) => item.title === "Check for Casey's reply" && item.status === "done")), true, "Today completes a relationship action persistently");
 
-    await helper.locator("[data-section='applications']").click();
+    await helper.locator("[data-section='pipeline']").click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
     await helper.locator("#linked-contacts", { hasText: "Casey Recruiter" }).waitFor({ state: "visible" });
     const contactId = await helper.locator("#draft-contact option", { hasText: "Casey Recruiter" }).getAttribute("value");
@@ -1022,7 +1044,7 @@ async function main() {
     assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities.length), applicationComposeActivityCount, "application compose handoff requires explicit activity confirmation");
     await helper.locator("#cancel-activity").click();
     await helper.locator("#close-contact").click();
-    await helper.locator(`[data-section="applications"]`).click();
+    await helper.locator(`[data-section="pipeline"]`).click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
 
     await helper.locator("#add-interview").click();
@@ -1058,7 +1080,7 @@ async function main() {
     assert.equal(crmState.interview.preparation_notes, "Prepare a system-design story.", "interview workspace persists preparation");
     assert.equal(crmState.application.status, "interview", "saving an interview advances an active application to interview");
     await helper.locator("#close-detail").click();
-    await helper.locator("[data-section='actions']").click();
+    await helper.locator("[data-section='home']").click();
     await helper.locator(".action-row.is-agenda", { hasText: "Technical interview" }).waitFor({ state: "visible" });
     assert.equal(await helper.locator("#action-channel-filter").count(), 1, "Today exposes a channel filter");
     assert.equal(await helper.locator("#action-application-filter").count(), 1, "Today exposes an application filter");
@@ -1074,6 +1096,7 @@ async function main() {
       const exported = await ApplyOS.upsertAction({ kind: "custom", title: "Portable calendar reminder", due_at: "2026-08-21T10:00:00.000Z", priority: "medium", channel: "other", notes: "ICS download test", source: "user" });
       return { primary: primary.id, exported: exported.id };
     });
+    await accountToolsPage.locator("[data-settings-view='integrations']").click();
     await accountToolsPage.locator("#calendar-connection-label").waitFor({ state: "visible" });
     assert.match(await accountToolsPage.locator("#calendar-connection-label").textContent(), /disconnected/i, "calendar settings begin disconnected without interactive authorization");
     await accountToolsPage.locator("#calendar-connect").click();
@@ -1083,7 +1106,7 @@ async function main() {
     assert.equal(connectedCalendar.identityCalls.filter((call) => call.interactive).length, 1, "connect button starts the only interactive authorization request");
 
     await helper.reload({ waitUntil: "domcontentloaded" });
-    await helper.locator("[data-section='actions']").click();
+    await helper.locator("[data-section='home']").click();
     let calendarRow = helper.locator(".action-row", { hasText: "Calendar lifecycle reminder" });
     await calendarRow.locator(".action-row-main").click();
     await helper.locator("#action-calendar-sync").click();
@@ -1096,7 +1119,7 @@ async function main() {
     assert.equal(initiallySynced.event.summary, "[Scout] Calendar lifecycle reminder", "mocked Google API receives the standard Scout event");
 
     await helper.reload({ waitUntil: "domcontentloaded" });
-    await helper.locator("[data-section='actions']").click();
+    await helper.locator("[data-section='home']").click();
     calendarRow = helper.locator(".action-row", { hasText: "Calendar lifecycle reminder" });
     assert.match(await calendarRow.locator(".calendar-inline").textContent(), /calendar/i, "calendar mapping remains visible after extension reload");
     await calendarRow.locator(".action-row-main").click();
@@ -1151,6 +1174,8 @@ async function main() {
     const profileControlsPage = await context.newPage();
     profileControlsPage.on("dialog", async (dialog) => { optionsNativeDialogs.push(dialog.type()); await dialog.dismiss(); });
     await profileControlsPage.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: "domcontentloaded" });
+    assert.equal(await profileControlsPage.locator(".profile-manager__actions button").count(), 3, "profile management exposes three compact actions without a disclosure menu");
+    assert.equal(await profileControlsPage.getByRole("button", { name: "Rename active profile" }).count(), 1, "profile action icons keep explicit accessible labels");
     await profileControlsPage.locator("#new-profile").click();
     const profileDialog = profileControlsPage.locator(".scout-system-dialog");
     await profileDialog.waitFor({ state: "visible" });
@@ -1160,6 +1185,7 @@ async function main() {
     await profileControlsPage.close();
     assert.deepEqual(optionsNativeDialogs, [], "profile and backup controls never open native browser dialogs");
     const encryptedBackup = await accountToolsPage.evaluate((password) => ApplyOS.exportEncryptedBackup(password, "browser-test"), backupPassword);
+    await accountToolsPage.locator("[data-settings-view='privacy']").click();
     await accountToolsPage.locator("#backup-password").fill(backupPassword);
     await accountToolsPage.locator("#backup-confirm").fill(backupPassword);
     const downloadPromise = accountToolsPage.waitForEvent("download");

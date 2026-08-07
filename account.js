@@ -1,4 +1,6 @@
 const $ = (selector) => document.querySelector(selector);
+const pageParams = new URLSearchParams(location.search);
+document.body.classList.toggle("first-run-auth", pageParams.get("firstRun") === "1" || pageParams.get("reason") === "sign-in-required");
 
 const ui = {
   status: null,
@@ -7,6 +9,14 @@ const ui = {
 };
 let handoffScheduled = false;
 let pendingRestore = null;
+
+function setSettingsView(view, updateUrl = true) {
+  const active = ["account", "reminders", "integrations", "privacy", "advanced"].includes(view) ? view : "account";
+  document.querySelectorAll("[data-settings-group]").forEach((section) => section.classList.toggle("settings-section-active", section.getAttribute("data-settings-group") === active));
+  document.querySelectorAll("[data-settings-view]").forEach((button) => button.setAttribute("aria-selected", String(button.getAttribute("data-settings-view") === active)));
+  if (updateUrl) history.replaceState(null, "", `${location.pathname}#${active}`);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
 
 function maybeContinue(status) {
   // The dashboard requires a configured cloud build before it will open. Keep
@@ -136,6 +146,17 @@ async function refreshWorkspaceTools(status) {
   try {
     const state = await ApplyOS.getState();
     await refreshCalendarStatus(state);
+    $("#enable-notifications").checked = state.settings.notification_enabled !== false;
+    $("#follow-up-offsets").value = (state.settings.follow_up_offsets_days || [7, 14]).join(", ");
+    $("#notification-digest-time").value = state.settings.notification_digest_time || "09:00";
+    const desktopGranted = await chrome.permissions?.contains?.({ permissions: ["notifications"] }).catch(() => false);
+    $("#desktop-notification-status").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Enabled" : desktopGranted ? "Permission granted · currently off" : "Not enabled";
+    $("#enable-desktop-notifications").textContent = desktopGranted && state.settings.desktop_notifications_enabled ? "Disable" : "Enable";
+    const config = await ApplyOS.getAIConfig();
+    $("#ai-endpoint").value = config.endpoint;
+    $("#ai-model").value = config.chatModel;
+    $("#embedding-model").value = config.embeddingModel;
+    if (config.enabled) { $("#ai-result").textContent = `Connected · ${config.chatModel}`; $("#ai-result").className = "success"; }
     visible("#undo-restore", await ApplyOS.hasRestoreCheckpoint());
     if (!$("#backup-status").className) setBackupStatus("No backup operation running.");
   } catch (error) {
@@ -664,7 +685,47 @@ $("#download-cloud").addEventListener("click", async () => {
   }
 });
 
-$("#replay-tour").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("dashboard.html?tour=1") }));
+async function saveReminderSettings() {
+  const offsets = $("#follow-up-offsets").value.split(",").map((item) => Number(item.trim())).filter((value) => Number.isInteger(value) && value >= 1 && value <= 60).slice(0, 4);
+  if (!offsets.length) { setStatus("#reminder-status", "Add at least one day between 1 and 60.", "error"); return; }
+  await ApplyOS.updateSettings({ final_follow_up_enabled: offsets.includes(14), notification_enabled: $("#enable-notifications").checked, follow_up_offsets_days: offsets, notification_digest_time: $("#notification-digest-time").value || "09:00" });
+  setStatus("#reminder-status", "Reminder defaults saved.", "success");
+}
+
+[$("#follow-up-offsets"), $("#enable-notifications"), $("#notification-digest-time")].forEach((control) => control.addEventListener("change", () => saveReminderSettings().catch((error) => setStatus("#reminder-status", error.message, "error"))));
+
+$("#enable-desktop-notifications").addEventListener("click", async () => {
+  const current = await chrome.permissions.contains({ permissions: ["notifications"] });
+  const state = await ApplyOS.getState();
+  if (current && state.settings.desktop_notifications_enabled) {
+    await ApplyOS.updateSettings({ desktop_notifications_enabled: false });
+    $("#desktop-notification-status").textContent = "Disabled";
+    $("#enable-desktop-notifications").textContent = "Enable";
+    return;
+  }
+  const granted = current || await chrome.permissions.request({ permissions: ["notifications"] });
+  await ApplyOS.updateSettings({ desktop_notifications_enabled: granted });
+  $("#desktop-notification-status").textContent = granted ? "Enabled" : "Permission not granted";
+  $("#enable-desktop-notifications").textContent = granted ? "Disable" : "Enable";
+});
+
+$("#test-ai").addEventListener("click", async (event) => {
+  const button = event.currentTarget; const result = $("#ai-result"); button.disabled = true; result.className = ""; result.textContent = "Checking…";
+  const endpoint = $("#ai-endpoint").value.trim();
+  try {
+    const origin = new URL(endpoint).origin;
+    const granted = await chrome.permissions.request({ origins: [`${origin}/*`] });
+    if (!granted) throw new Error("Localhost access was not granted.");
+    await ApplyOS.saveAIConfig({ endpoint, chatModel: $("#ai-model").value.trim(), embeddingModel: $("#embedding-model").value.trim() });
+    const status = await ApplyOS.testAIConnection(); result.className = status.success ? "success" : "error"; result.textContent = status.success ? `Connected · ${status.config.chatModel}` : status.error;
+  } catch (error) { result.className = "error"; result.textContent = error.message; }
+  button.disabled = false;
+});
+
+$("#replay-tour").addEventListener("click", () => chrome.tabs.create({ url: chrome.runtime.getURL("onboarding.html?start=1") }));
+
+document.querySelectorAll("[data-settings-view]").forEach((button) => button.addEventListener("click", () => setSettingsView(button.getAttribute("data-settings-view"))));
+setSettingsView(location.hash.replace("#", "") || "account", false);
 
 $("#delete-account").addEventListener("click", async () => {
   if (!await ScoutDialog.confirm({ eyebrow: "PERMANENT ACTION", title: "Delete your Scout account?", message: "This removes the account rather than only signing you out.", consequences: ["Cloud workspace records and uploaded resume files will be deleted.", "Active sessions will end and this account’s local cache will be removed."], fields: [{ name: "confirmation", label: "Type DELETE MY SCOUT ACCOUNT to continue", confirmationText: "DELETE MY SCOUT ACCOUNT", placeholder: "DELETE MY SCOUT ACCOUNT" }], tone: "danger", confirmLabel: "Delete account", cancelLabel: "Keep my account" })) return;
