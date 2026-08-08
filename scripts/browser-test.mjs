@@ -24,7 +24,14 @@ const profile = Object.freeze({
     name: resumeName, type: "application/pdf", size: 51,
     dataUrl: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\n% ApplyOS browser regression fixture\n%%EOF").toString("base64")}`
   },
-  customAnswers: [{ question: "Do you currently have any active academic backlogs?", answer: "No" }]
+  customAnswers: [
+    { question: "Do you currently have any active academic backlogs?", answer: "No" },
+    { question: "Reg No.", answer: "24BDS0129", source: "application" },
+    { question: "College email id", answer: "ada@university.example", source: "application" },
+    { question: "10th %", answer: "95", source: "application" },
+    { question: "12th %", answer: "89", source: "application" },
+    { question: "Degree & specialization", answer: "CSE (Data Science)", source: "application" }
+  ]
 });
 
 function startFixtureServer() {
@@ -105,6 +112,15 @@ async function installBrowserAccount(worker) {
     });
     await ApplyOS.ensureState();
     await ApplyOS.ensureGraph();
+    for (const question of ["Reg No.", "Name", "College email id", "10th %", "12th %", "Degree & specialization"]) {
+      await ApplyOS.rememberCorrection({
+        fingerprint: `docs.google.com|stale|text|${question}`,
+        question,
+        answer: fakeProfile.phone,
+        field_type: "text",
+        site: "docs.google.com"
+      });
+    }
     await ApplyOS.persistActiveUserCache(userId);
   }, { fakeProfile: profile, userId: "11111111-1111-4111-8111-111111111111" });
 }
@@ -242,6 +258,15 @@ async function snapshot(target) {
     microsoftSponsorshipExpanded: document.querySelector("#microsoft-sponsorship")?.getAttribute("aria-expanded"),
     microsoftStrayOptionClicks: window.__fixture.microsoftStrayOptionClicks,
     manualAnswer: document.querySelector("#manual-answer")?.value || "",
+    registrationNumber: document.querySelector("#registration-number")?.value || "",
+    googleFullName: document.querySelector("#google-full-name")?.value || "",
+    personalEmail: document.querySelector("#personal-email")?.value || "",
+    collegeEmail: document.querySelector("#college-email")?.value || "",
+    preservedCollegeEmail: document.querySelector("#preserved-college-email")?.value || "",
+    institutionalEmail: document.querySelector("#institutional-email")?.value || "",
+    tenthPercentage: document.querySelector("#tenth-percentage")?.value || "",
+    twelfthPercentage: document.querySelector("#twelfth-percentage")?.value || "",
+    degreeSpecialization: document.querySelector("#degree-specialization")?.value || "",
     ssn: document.querySelector("#ssn")?.value, verificationCode: document.querySelector("#verification-code")?.value,
     gender: document.querySelector("#gender")?.value,
     consent: document.querySelector("#privacy-consent")?.checked,
@@ -298,6 +323,17 @@ function assertSafeFill(testCase, response, state) {
     assert.ok(state.events["microsoft-backlog-no:change"] >= 1, "microsoft: radio change event should fire");
     assert.equal(state.microsoftSponsorshipExpanded, "false", "microsoft: an unmatched dropdown must be closed after one bounded attempt");
     assert.equal(state.microsoftStrayOptionClicks, 0, "microsoft: a dropdown must never select an option from a sibling listbox");
+  }
+  if (testCase.id === "react-dropzone") {
+    assert.equal(state.registrationNumber, "24BDS0129", "answer memory: exact registration-number answer beats stale same-site correction memory");
+    assert.equal(state.googleFullName, "Ada Lovelace", "answer memory: exact saved name beats stale same-site correction memory");
+    assert.equal(state.personalEmail, "ada@example.test", "answer memory: personal email uses the personal profile identity");
+    assert.equal(state.collegeEmail, "ada@university.example", "answer memory: college email stays distinct from the generic profile email");
+    assert.equal(state.preservedCollegeEmail, "ada@example.test", "answer memory: a Google-restored draft value is preserved until the user corrects it");
+    assert.equal(state.institutionalEmail, "", "answer memory: a generic personal email must not fill an unknown institutional field");
+    assert.equal(state.tenthPercentage, "95", "answer memory: exact 10th-percentage answer beats stale phone-number contamination");
+    assert.equal(state.twelfthPercentage, "89", "answer memory: exact 12th-percentage answer beats stale phone-number contamination");
+    assert.equal(state.degreeSpecialization, "CSE (Data Science)", "answer memory: exact degree answer beats stale same-site correction memory");
   }
   if (testCase.expectedDrops) assert.deepEqual(state.drops, ["dragenter", "dragover", "drop"], `${testCase.id}: ATS dropzone events`);
   assert.equal(state.submitCount, 0, `${testCase.id}: form must not submit`);
@@ -367,6 +403,22 @@ async function main() {
       assert.equal(repeated.resumeName, testCase.existingResume ? "" : resumeName, `${testCase.id}: repeat fill preserves attachment state`);
 
       if (testCase.id === "react-dropzone") {
+        await target.locator("#preserved-college-email").fill("updated@university.example");
+        await target.locator("#preserved-college-email").press("Tab");
+        const correctedMemory = await worker.evaluate(async () => {
+          const deadline = Date.now() + 5000;
+          while (Date.now() < deadline) {
+            const activeProfile = await ApplyOS.getActiveProfile();
+            const corrected = (activeProfile.customAnswers || []).find((item) => item.question === "University email id");
+            if (corrected?.answer === "updated@university.example" && activeProfile.collegeEmail === "updated@university.example") {
+              return { corrected, collegeEmail: activeProfile.collegeEmail };
+            }
+            await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+          }
+          return null;
+        });
+        assert.equal(correctedMemory?.corrected?.source, "application", "a corrected restored draft becomes visible, editable Answer Library memory");
+        assert.equal(correctedMemory?.collegeEmail, "updated@university.example", "a college-email correction updates the reusable college identity");
         await target.locator("#ssn").fill("000-00-0000");
         await target.locator("#ssn").press("Tab");
         await target.waitForTimeout(400);

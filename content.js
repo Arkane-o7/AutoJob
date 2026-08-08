@@ -56,7 +56,9 @@
     rule("lastName", ["last name", "lastname", "surname", "family name", "familyname", "legal last name"], ["first", "given"]),
     rule("fullName", ["full name", "fullname", "your name", "applicant name", "candidate name", "legal name", "name"], ["first", "last", "preferred", "company", "school", "university"]),
     rule("preferredName", ["preferred name", "nickname", "known as", "chosen name"]),
-    rule("email", ["email address", "email", "e mail"]),
+    rule("collegeEmail", ["college email", "university email", "institutional email", "academic email", "school email"]),
+    rule("personalEmail", ["personal email", "private email"]),
+    rule("email", ["email address", "email", "e mail"], ["college", "university", "institutional", "academic", "school", "personal"]),
     rule("phone", ["phone number", "phone", "mobile number", "mobile", "telephone", "tel"], ["country code", "dial code", "calling code"]),
     rule("address", ["street address", "address line 1", "address1", "home address", "mailing address", "street", "address"], ["email", "web", "url", "address line 2", "address2"]),
     rule("address2", ["address line 2", "address2", "apartment", "apt suite", "suite unit"]),
@@ -214,6 +216,25 @@
     return root.querySelector?.(selector) || document.querySelector(selector);
   }
 
+  function referencedText(element, attribute = "aria-labelledby") {
+    return String(element?.getAttribute?.(attribute) || "").split(/\s+/)
+      .filter(Boolean)
+      .map((id) => rootQuery(element, `#${window.CSS?.escape ? CSS.escape(id) : id}`)?.innerText || "")
+      .map((value) => String(value || "").replace(/\s+/g, " ").trim())
+      .find(Boolean) || "";
+  }
+
+  function choiceGroupQuestion(element) {
+    const type = String(element?.type || element?.getAttribute?.("role") || "").toLowerCase();
+    if (!["radio", "checkbox"].includes(type)) return "";
+    const group = element.closest?.("[role='radiogroup'], fieldset, [role='group']");
+    if (!group) return "";
+    const labelled = referencedText(group);
+    if (labelled) return labelled;
+    const prompt = group.querySelector(":scope > legend, :scope > p, :scope > [role='heading'], :scope > [data-automation-id='promptQuestion'], :scope > [data-automation-id='questionText']");
+    return String(prompt?.innerText || prompt?.textContent || "").replace(/\s+/g, " ").trim();
+  }
+
   function nearbyContainer(element) {
     return element.closest([
       "fieldset",
@@ -254,6 +275,8 @@
   }
 
   function inferredQuestionText(element) {
+    const groupQuestion = choiceGroupQuestion(element);
+    if (groupQuestion) return groupQuestion;
     let node = element.parentElement;
     for (let depth = 0; depth < 8 && node; depth += 1, node = node.parentElement) {
       const controlCount = node.querySelectorAll(CONTROL_SELECTOR).length;
@@ -270,7 +293,10 @@
   }
 
   function descriptor(element, includeValue = false) {
-    const dataset = Object.values(element.dataset || {}).slice(0, 10);
+    const dataset = Object.entries(element.dataset || {})
+      .filter(([key]) => !/value|answer|response|initial|default|selected/i.test(key))
+      .slice(0, 10)
+      .map(([key, value]) => `${key} ${String(value || "").slice(0, 160)}`);
     // Microsoft's closest role=group is an entire form section containing
     // several unrelated questions. Appending that section text makes answers
     // from sibling fields compete with the control's exact aria label.
@@ -380,6 +406,8 @@
     const parsedLocation = locationParts(profile.currentLocation);
     const flat = {
       ...profile,
+      personalEmail: profile.personalEmail || profile.email || "",
+      collegeEmail: profile.collegeEmail || profile.universityEmail || profile.institutionalEmail || profile.academicEmail || profile.schoolEmail || "",
       address: profile.address || profile.streetAddress || "",
       address2: profile.address2 || profile.addressLine2 || "",
       city: profile.city || parsedLocation.city,
@@ -433,7 +461,7 @@
   }
 
   function profileFieldLabel(key) {
-    return ({ address: "street address", address2: "address line 2", city: "city", state: "state / province", postalCode: "postal code", country: "country" })[key]
+    return ({ address: "street address", address2: "address line 2", city: "city", state: "state / province", postalCode: "postal code", country: "country", personalEmail: "personal email", collegeEmail: "college / university email" })[key]
       || String(key || "profile details").replace(/([a-z])([A-Z])/g, "$1 $2").toLowerCase();
   }
 
@@ -488,6 +516,25 @@
     };
     if (!classification.shouldAutofill) return null;
 
+    const exactQuestion = normalize(manualLearningQuestion(element));
+    if (exactQuestion) {
+      const exactSaved = (flatProfile.customAnswers || []).find((custom) =>
+        custom.question?.trim()
+        && custom.answer?.trim()
+        && answerMatchesPageScope(custom)
+        && normalize(custom.question) === exactQuestion
+      );
+      if (exactSaved) {
+        const candidate = prepareAnswer(element, {
+          key: `custom:${exactSaved.question}`,
+          value: exactSaved.answer,
+          score: 260,
+          context
+        }, classification);
+        if (candidate) return candidate;
+      }
+    }
+
     if (isMicrosoftCareers()) {
       const exactKey = /legally authorized to work/.test(context)
         ? "workAuthorization"
@@ -502,11 +549,22 @@
 
     const learned = OfflynCore?.bestLearnedAnswer(context, flatProfile._learnedAnswers || [], {
       site: location.hostname,
-      fieldType
+      fieldType,
+      canonicalField: classification.canonicalField || null
     });
     if (learned) {
       const candidate = prepareAnswer(element, { key: `learned:${learned.id}`, value: learned.answer, score: 190, context }, classification);
       if (candidate) return candidate;
+    }
+
+    // A browser/ATS may mark every email control autocomplete="email". Keep
+    // that generic hint from collapsing personal and college identities.
+    if (classification.canonicalField === "collegeEmail") {
+      if (!hasAnswer(flatProfile.collegeEmail)) return null;
+      return prepareAnswer(element, { key: "collegeEmail", value: flatProfile.collegeEmail, score: 185, context }, classification);
+    }
+    if (classification.canonicalField === "personalEmail" && hasAnswer(flatProfile.personalEmail)) {
+      return prepareAnswer(element, { key: "personalEmail", value: flatProfile.personalEmail, score: 185, context }, classification);
     }
 
     const automationId = element.getAttribute("data-automation-id") || "";
@@ -890,14 +948,14 @@
   }
 
   function manualLearningQuestion(element) {
+    const groupQuestion = choiceGroupQuestion(element);
     const directLabel = element.labels ? Array.from(element.labels, (label) => label.innerText).find((value) => String(value || "").trim()) : "";
-    const labelledBy = String(element.getAttribute("aria-labelledby") || "").split(/\s+/)
-      .filter(Boolean)
-      .map((id) => rootQuery(element, `#${window.CSS?.escape ? CSS.escape(id) : id}`)?.innerText || "")
-      .find((value) => String(value || "").trim());
-    return String(inferredQuestionText(element) || directLabel || labelledBy || element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.name || "")
+    const labelledBy = referencedText(element);
+    return String(groupQuestion || inferredQuestionText(element) || directLabel || labelledBy || element.getAttribute("aria-label") || element.getAttribute("placeholder") || element.name || "")
       .replace(/\s+/g, " ")
+      .replace(/\brequired question\b/gi, " ")
       .replace(/\s*\*\s*$/, "")
+      .replace(/\s+/g, " ")
       .trim()
       .slice(0, 500);
   }
@@ -929,7 +987,11 @@
         site: location.hostname,
         canonicalField: classification.canonicalField || null
       }),
-      lastAnswer: ""
+      // Preserve the baseline without learning it. Google Forms can restore a
+      // draft before Scout runs; if the user then corrects that value, the
+      // trusted change/blur event should be learned while an untouched draft
+      // must remain merely preserved.
+      lastAnswer: elementValue(element)
     });
   }
 
@@ -974,13 +1036,18 @@
   function trackFilledElement(element, answer) {
     if (!OfflynCore || !answer.classification?.shouldPersist) return;
     const fieldType = String(element.type || element.getAttribute("role") || element.tagName || "text").toLowerCase();
-    const question = answer.context || descriptor(element);
+    const question = manualLearningQuestion(element) || answer.context || descriptor(element);
+    const companyOnly = answer.classification.promptType === "long_form_company"
+      || ["previouslyWorkedForCompany", "priorCompanyDetails", "knowsEmployeeAtCompany", "employeeConnectionDetails"].includes(answer.classification.canonicalField);
     recentFills.set(element, {
       question,
       originalAnswer: String(answer.value),
       canonicalField: answer.classification.canonicalField || answer.key || null,
       fieldType,
+      promptType: answer.classification.promptType || "free_text_short",
       site: location.hostname,
+      scope: companyOnly ? "company" : "global",
+      companyDomain: companyOnly ? currentCompanyDomain() : "",
       fingerprint: OfflynCore.fieldFingerprint({
         label: question,
         type: fieldType,
@@ -997,9 +1064,10 @@
     if (!(element instanceof Element)) return;
     const metadata = recentFills.get(element);
     if (!metadata) {
-      if (["change", "blur"].includes(event.type)) {
-        queueManualAnswerLearning(element, manualLearningCandidates.get(element));
-      }
+      // Restored drafts are not Scout fills, so they live in the manual
+      // candidate map. Listen while the user types as well as on blur; the
+      // debounced validator prevents incomplete email fragments being saved.
+      queueManualAnswerLearning(element, manualLearningCandidates.get(element));
       return;
     }
     window.clearTimeout(correctionTimers.get(element));
@@ -1016,7 +1084,17 @@
           answer,
           canonical_field: metadata.canonicalField,
           field_type: metadata.fieldType,
-          site: metadata.site
+          prompt_type: metadata.promptType,
+          site: metadata.site,
+          scope: metadata.scope,
+          company_domain: metadata.companyDomain
+        }
+      }).then((response) => {
+        if (response?.ok) {
+          showPageNotification("Scout updated this answer for similar questions. You can review it in Profile & Settings.", {
+            key: "learned-application-answer",
+            duration: 5000
+          });
         }
       }).catch(() => {});
       metadata.originalAnswer = answer;
@@ -1086,6 +1164,7 @@
         }
 
         if (hasExistingValue(element)) {
+          trackManualLearningCandidate(element);
           settleAssistField(element, "preserved");
           continue;
         }

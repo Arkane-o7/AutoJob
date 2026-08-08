@@ -365,7 +365,13 @@ async function rememberApplicationAnswer(entry = {}, sender) {
       learned_at: learnedAt
     });
   }
-  await ApplyOS.patchActiveProfile({ customAnswers });
+  const profilePatch = { customAnswers };
+  if (entry.canonical_field === "collegeEmail") profilePatch.collegeEmail = answer;
+  if (entry.canonical_field === "personalEmail") {
+    profilePatch.personalEmail = answer;
+    profilePatch.email = answer;
+  }
+  await ApplyOS.patchActiveProfile(profilePatch);
   const remembered = await ApplyOS.rememberApplicationAnswer({
     question,
     answer,
@@ -701,8 +707,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
   if (message?.type === "APPLYOS_LEARN_CORRECTION") {
-    ApplyOS.rememberCorrection(message.correction)
-      .then(async (learned) => {
+    queueApplicationAnswerLearning(message.correction, _sender)
+      .then(async (remembered) => {
+        const learned = await ApplyOS.rememberCorrection(message.correction);
         await ApplyOS.recordGraphCorrection({
           question: message.correction?.question,
           correctedValue: message.correction?.answer,
@@ -710,7 +717,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
           fingerprint: message.correction?.fingerprint,
           platform: message.correction?.site
         });
-        sendResponse({ ok: true, learned });
+        sendResponse({ ok: true, learned, remembered });
       })
       .catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;

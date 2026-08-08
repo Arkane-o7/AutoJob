@@ -599,8 +599,14 @@ test("Offlyn-derived classifier recognizes ATS fields and keeps sensitive answer
   const authorization = ApplyOS.OfflynCore.classifyField("Are you legally permitted to work in this country?", "select-one", "workAuth");
   assert.equal(authorization.canonicalField, "workAuthorization");
   assert.equal(authorization.shouldAutofill, true);
+  assert.equal(ApplyOS.OfflynCore.classifyField("Personal Email ID", "email").canonicalField, "personalEmail");
+  assert.equal(ApplyOS.OfflynCore.classifyField("College email id", "email").canonicalField, "collegeEmail");
   const demographic = ApplyOS.OfflynCore.classifyField("What is your race or ethnicity?", "select-one", "race");
   assert.equal(demographic.shouldAutofill, false);
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("Name", "9030065423").reason, "invalid_name");
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("College email id", "9030065423").reason, "invalid_email");
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("10th %", "9030065423").reason, "invalid_percentage");
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("Degree & specialization", "9030065423").reason, "invalid_degree");
 });
 
 test("stores corrections and reuses the best site-aware learned answer", async () => {
@@ -622,6 +628,51 @@ test("stores corrections and reuses the best site-aware learned answer", async (
     fieldType: "number"
   });
   assert.equal(match.answer, "4");
+});
+
+test("site and input-type bonuses cannot reuse an unrelated short learned answer", async () => {
+  const { ApplyOS } = await runtime();
+  const items = [{
+    id: "learned_phone",
+    fingerprint: "docs.google.com|phone|text|phone no",
+    question: "Phone No.",
+    normalized_question: "phone no",
+    answer: "9030065423",
+    canonical_field: "phone",
+    field_type: "text",
+    site: "docs.google.com",
+    use_count: 5
+  }];
+  const match = ApplyOS.OfflynCore.bestLearnedAnswer("Reg No.", items, {
+    site: "docs.google.com",
+    fieldType: "text"
+  });
+  assert.equal(match, null);
+});
+
+test("generic email memory cannot cross personal and college email identities", async () => {
+  const { ApplyOS } = await runtime();
+  const items = [{
+    id: "learned_generic_email",
+    fingerprint: "docs.google.com|email|email|email address",
+    question: "Email address",
+    normalized_question: "email address",
+    answer: "personal@example.test",
+    canonical_field: "email",
+    field_type: "email",
+    site: "docs.google.com",
+    use_count: 5
+  }];
+  assert.equal(ApplyOS.OfflynCore.bestLearnedAnswer("College email address", items, {
+    site: "docs.google.com",
+    fieldType: "email",
+    canonicalField: "collegeEmail"
+  }), null);
+  assert.equal(ApplyOS.OfflynCore.bestLearnedAnswer("Personal email address", items, {
+    site: "docs.google.com",
+    fieldType: "email",
+    canonicalField: "personalEmail"
+  }), null);
 });
 
 test("follow-up generation produces a draft but no send action", async () => {
