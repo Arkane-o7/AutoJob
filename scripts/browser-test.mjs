@@ -657,7 +657,7 @@ async function main() {
     }
     assert.match(await accountProbe.locator(".auth-consent").textContent(), /stores personal data you choose to provide/i, "account consent keeps the storage disclosure concise and clear");
     assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/terms.html"]').count(), 1, "account consent links the User Agreement");
-    assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/index.html"]').count(), 1, "account consent links the Privacy Policy");
+    assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/privacy.html"]').count(), 1, "account consent links the Privacy Policy");
     assert.equal(await accountProbe.locator("details.consent-details").count(), 1, "account consent offers a compact data-category explanation");
     assert.equal(await accountProbe.locator("#publication-section").count(), 0, "unreleased recruiter search has no customer-facing controls");
     await accountProbe.evaluate((conflict) => renderConflict(conflict), conflictFixture.meta.conflict);
@@ -697,12 +697,12 @@ async function main() {
     await accountProbe.close();
 
     const legalProbe = await context.newPage();
-    await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/index.html`, { waitUntil: "domcontentloaded" });
+    await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/privacy.html`, { waitUntil: "domcontentloaded" });
     assert.match(await legalProbe.locator("h1").textContent(), /job search is/i, "packaged Privacy Policy renders");
     assert.equal(await legalProbe.locator('a[href="terms.html"]').count() > 0, true, "Privacy Policy links the User Agreement");
     await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/terms.html`, { waitUntil: "domcontentloaded" });
     assert.match(await legalProbe.locator("h1").textContent(), /helpful automation/i, "packaged User Agreement renders");
-    assert.equal(await legalProbe.locator('a[href="index.html"]').count() > 0, true, "User Agreement links the Privacy Policy");
+    assert.equal(await legalProbe.locator('a[href="privacy.html"]').count() > 0, true, "User Agreement links the Privacy Policy");
     await legalProbe.close();
     console.log("PASS concise account consent links complete packaged legal disclosures");
     await worker.evaluate(async () => {
@@ -1124,8 +1124,11 @@ async function main() {
     await helper.locator("#interview-next-action").fill("Send thank-you note");
     await helper.locator("#interview-next-date").fill("2026-08-06T12:00");
     await helper.locator("#interview-form button[type='submit']").click();
-    await helper.locator("#application-interviews > summary").click();
     const interviewCard = helper.locator("#interview-list .interview-card", { hasText: "Technical" });
+    await interviewCard.waitFor({ state: "attached" });
+    if (await helper.locator("#application-interviews").getAttribute("open") === null) {
+      await helper.locator("#application-interviews > summary").click();
+    }
     await interviewCard.waitFor({ state: "visible" });
     await interviewCard.locator("button").click();
     await helper.locator("#generate-thank-you").click();

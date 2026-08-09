@@ -149,7 +149,7 @@ test("account, contextual tutorial, and contact surfaces preserve current produc
   assert.match(account, /I agree to create my private Scout workspace/);
   assert.match(account, /securely stores personal data you choose to provide/i);
   assert.match(account, /privacy-site\/terms\.html/);
-  assert.match(account, /privacy-site\/index\.html/);
+  assert.match(account, /privacy-site\/privacy\.html/);
   assert.match(account, /<details class="consent-details">/);
   assert.doesNotMatch(account, /store my account identity, profile, resumes, applications, contacts, interviews, and saved answers/i);
   assert.doesNotMatch(account, /Candidate publication|future recruiter search|publish-consent/i);
