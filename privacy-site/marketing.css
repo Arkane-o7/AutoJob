@@ -914,6 +914,12 @@
   white-space: nowrap;
 }
 
+.verb-group {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+}
+
 .verb-track span {
   font-family: var(--serif);
   font-size: clamp(5rem, 9vw, 9.6rem);
@@ -929,13 +935,13 @@
 }
 
 @keyframes ticker {
-  to { transform: translateX(-50%); }
+  to { transform: translateX(-25%); }
 }
 
 .autofill-section {
   display: grid;
   grid-template-columns: minmax(0, 0.9fr) minmax(520px, 1.1fr);
-  min-height: 820px;
+  min-height: 680px;
   overflow: hidden;
   border-bottom: 1px solid var(--paper);
   color: var(--paper);
@@ -944,7 +950,7 @@
 
 .section-copy {
   align-self: center;
-  padding: clamp(5rem, 8vw, 9rem) clamp(2rem, 6vw, 7rem);
+  padding: clamp(4rem, 6vw, 7rem) clamp(2rem, 6vw, 7rem);
 }
 
 .section-copy h2,
@@ -960,13 +966,13 @@
 
 .section-copy h2 {
   max-width: 780px;
-  font-size: clamp(4rem, 6.5vw, 7.4rem);
+  font-size: clamp(4rem, 5.8vw, 6.6rem);
   line-height: 0.88;
 }
 
 .section-copy > p:not(.eyebrow) {
   max-width: 650px;
-  margin: 2.4rem 0 0;
+  margin: 2rem 0 0;
   color: rgba(245, 242, 232, 0.72);
   font-family: var(--serif);
   font-size: clamp(1.1rem, 1.5vw, 1.4rem);
@@ -1003,7 +1009,7 @@
   display: grid;
   place-items: center;
   min-height: 100%;
-  padding: 6rem clamp(2rem, 5vw, 6rem);
+  padding: 4rem clamp(2rem, 5vw, 6rem);
   border-left: 1px solid rgba(245, 242, 232, 0.24);
   background:
     radial-gradient(circle at 78% 18%, rgba(183, 255, 60, 0.28), transparent 26%),
@@ -1167,7 +1173,7 @@
 }
 
 .workspace-section {
-  padding: clamp(5rem, 8vw, 9rem) clamp(1.3rem, 4vw, 4.5rem);
+  padding: clamp(5rem, 6vw, 7rem) clamp(1.3rem, 4vw, 4.5rem);
   overflow: hidden;
   border-bottom: 1px solid var(--ink);
   background:
@@ -1179,21 +1185,28 @@
 
 .workspace-heading {
   display: grid;
-  grid-template-columns: 0.45fr 1.35fr 0.7fr;
-  gap: clamp(2rem, 5vw, 6rem);
+  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.55fr);
+  gap: 1.25rem clamp(2.5rem, 5vw, 6rem);
   align-items: end;
-  max-width: 1600px;
-  margin: 0 auto 5rem;
+  max-width: 1450px;
+  margin: 0 auto 4.5rem;
+}
+
+.workspace-heading > .eyebrow {
+  grid-column: 1 / -1;
+  margin-bottom: 0.25rem;
 }
 
 .workspace-heading h2 {
+  grid-column: 1;
   max-width: 900px;
-  font-size: clamp(4.2rem, 7.2vw, 8.5rem);
+  font-size: clamp(4.2rem, 6.6vw, 7.6rem);
   line-height: 0.86;
 }
 
 .workspace-heading > p:last-child {
-  max-width: 370px;
+  grid-column: 2;
+  max-width: 340px;
   margin: 0;
   color: #565850;
   font-family: var(--serif);
@@ -1355,7 +1368,7 @@
 
 .workspace-board > section {
   min-width: 0;
-  min-height: 310px;
+  min-height: 225px;
   padding: 1.2rem;
   border-right: 1px solid var(--line);
 }
@@ -1781,10 +1794,6 @@
     width: 76%;
   }
 
-  .workspace-heading {
-    grid-template-columns: 0.35fr 1.15fr 0.65fr;
-  }
-
   .workspace-overview {
     grid-template-columns: 1fr;
   }
@@ -1839,6 +1848,12 @@
   .workspace-heading {
     grid-template-columns: 1fr;
     gap: 1.3rem;
+  }
+
+  .workspace-heading > .eyebrow,
+  .workspace-heading h2,
+  .workspace-heading > p:last-child {
+    grid-column: 1;
   }
 
   .workspace-heading h2 {
@@ -1939,6 +1954,7 @@
     top: 4%;
     left: 5%;
     width: 72%;
+    transform: rotate(-1.4deg);
   }
 
   .demo-form {
