@@ -265,7 +265,199 @@ main { max-width:1380px; margin:0 auto; padding-inline:40px; }
 .snooze-dialog input,.detail-grid select,.detail-grid input,.detail form>label textarea,.draft-panel select,.draft input,.draft textarea,.activity-form input,.activity-form textarea,.interview-form input,.interview-form select,.interview-form textarea,.contact-compose input,.contact-compose textarea,.contacts-filters-panel select,.import-mapping-grid select,.import-preview select { border-radius:var(--radius-control); }
 .snooze-dialog__close,.import-dialog-header button,.close { border-radius:var(--radius-control); }
 .toast { border-radius:var(--radius-control); }
-.detail { overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:rgba(23,24,20,.28) transparent; }
-.detail::-webkit-scrollbar { width:8px; }
-.detail::-webkit-scrollbar-track { background:transparent; }
-.detail::-webkit-scrollbar-thumb { border:2px solid transparent; border-radius:999px; background:rgba(23,24,20,.28); background-clip:padding-box; }
+.detail { overscroll-behavior:contain; }
+
+/* Application drawer: essentials first, deeper tools on demand. */
+#detail { padding:30px 32px 44px; }
+#detail>.eyebrow { margin-bottom:12px; }
+#detail .application-primary-grid { margin:22px 0 2px; }
+#detail .record-details,#detail .match-panel { margin:0; padding:0; border:0; border-top:1px solid var(--line); border-radius:0; background:transparent; }
+#detail .record-details>summary,#detail .match-panel>summary { min-height:60px; display:grid; align-items:center; gap:14px; padding:12px 2px; cursor:pointer; list-style:none; }
+#detail .record-details>summary { grid-template-columns:minmax(0,1fr) auto; }
+#detail .match-panel>summary { grid-template-columns:minmax(0,1fr) auto auto; }
+#detail .record-details>summary::-webkit-details-marker,#detail .match-panel>summary::-webkit-details-marker,#detail .detail-workspace>summary::-webkit-details-marker { display:none; }
+#detail .record-details>summary>span,#detail .match-panel>summary>span,#detail .detail-workspace>summary>span:first-child { min-width:0; display:grid; gap:4px; }
+#detail .record-details>summary strong,#detail .match-panel>summary>span strong { font:800 10px/1.2 "Avenir Next",sans-serif; }
+#detail .record-details>summary small,#detail .match-panel>summary small { color:var(--muted); font-size:9px; line-height:1.35; }
+#detail .record-details>summary i,#detail .match-panel>summary i,#detail .detail-workspace>summary i { color:var(--muted); font:400 17px/1 Georgia,serif; transition:transform 160ms ease; }
+#detail .record-details[open]>summary i,#detail .match-panel[open]>summary i,#detail .detail-workspace[open]>summary i { transform:rotate(180deg); }
+.record-details__body,.match-panel__body { padding:2px 2px 18px; }
+.record-details__body .detail-grid { margin:8px 0 14px; }
+.record-details__body>label>span { display:block; margin-bottom:6px; color:var(--muted); font:700 8px/1 "Courier New",monospace; letter-spacing:.1em; text-transform:uppercase; }
+.record-details__body>label textarea { width:100%; min-height:88px; padding:10px; border:1px solid var(--ink); border-radius:var(--radius-control); background:var(--cream); font-size:11px; resize:vertical; }
+#detail .match-panel>summary>#detail-score { font:400 23px/1 Georgia,serif; }
+#detail .match-panel .match-bar { height:6px; margin:4px 0 11px; border-radius:999px; overflow:hidden; }
+#detail .match-panel p { margin:4px 0; }
+.application-actions { display:flex; align-items:stretch; gap:7px; margin-top:18px; padding-bottom:20px; border-bottom:1px solid var(--ink); }
+.application-actions__primary,.application-actions__secondary { display:contents; }
+.application-actions__primary>*,.application-actions__secondary>* { min-width:0; min-height:40px; flex:1 1 0; display:flex; align-items:center; justify-content:center; padding:0 7px; white-space:nowrap; text-align:center; text-decoration:none; font-size:9px; }
+.application-actions__primary>.primary { flex-grow:1.08; }
+.application-actions__secondary>* { border-color:rgba(23,24,20,.42); background:transparent; }
+.application-actions__secondary>*:hover { border-color:var(--ink); background:rgba(23,24,20,.05); }
+.application-actions__secondary>.danger { border-color:rgba(162,54,45,.45); color:var(--danger); }
+.application-actions__secondary>.danger:hover { border-color:var(--danger); background:rgba(162,54,45,.06); }
+#detail>.detail-workspace { margin:0; padding:0; border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; }
+#detail>.detail-workspace>summary { min-height:76px; display:flex; align-items:center; gap:16px; padding:14px 2px; cursor:pointer; list-style:none; }
+#detail>.detail-workspace>summary>span:first-child { flex:1; }
+#detail>.detail-workspace>summary strong { font:400 19px/1.1 Georgia,serif; }
+#detail>.detail-workspace>summary small { color:var(--muted); font-size:9px; line-height:1.35; }
+#detail>.detail-workspace[open]>summary { border-bottom:1px solid var(--line); }
+.detail-workspace__body { padding:18px 2px 24px; }
+.workspace-action-line { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:12px; }
+.workspace-action-line p { max-width:330px; margin:0; color:var(--muted); font-size:9px; line-height:1.45; }
+.workspace-action-line button { flex:0 0 auto; }
+#detail .linked-contact,#detail .interview-card { padding:11px 0; border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; }
+#detail .linked-contact:last-child,#detail .interview-card:last-child { border-bottom:0; }
+#detail .draft-panel>summary+div>label>span { display:block; margin-bottom:6px; color:var(--muted); font:700 8px/1 "Courier New",monospace; letter-spacing:.1em; text-transform:uppercase; }
+#detail .draft-panel select { border-radius:var(--radius-control); }
+#detail .ai-studio { margin:0; padding:0; }
+#detail #studio-status { flex:0 0 auto; display:block; padding:5px 7px; border-radius:6px; background:var(--acid); font:800 7px/1 "Courier New",monospace; letter-spacing:.08em; }
+@media(max-width:620px){#detail{padding:26px 22px 40px}.application-actions__primary>*,.application-actions__secondary>*{padding-inline:5px;font-size:8px}.workspace-action-line{align-items:flex-start;flex-direction:column}}
+@media(max-width:480px){.application-actions{flex-wrap:wrap}.application-actions__primary>*,.application-actions__secondary>*{flex:1 1 calc(50% - 7px)}.application-actions__secondary>.danger{flex-basis:100%}}
+
+/* Separator cleanup: hierarchy comes from spacing and surfaces, not legacy rules. */
+.actions-hero,
+.network-shell,
+.contacts-intro,
+.home-secondary {
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.actions-hero { padding-bottom: 18px; }
+.network-shell { padding-bottom: 12px; }
+.contacts-intro { padding-bottom: 14px; }
+.home-secondary { padding-top: 8px; }
+
+/* Network command bar: keep the primary action attached to the collection it changes. */
+.contacts-workspace .contacts-intro { padding-bottom: 10px; }
+.contacts-command-bar {
+  grid-template-columns: minmax(280px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 22px;
+}
+.contacts-command-bar .contact-count {
+  min-width: max-content;
+  padding: 0 4px;
+  color: var(--muted);
+  font: 800 8px/1 "Courier New", monospace;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.contacts-command-bar .contacts-filters { justify-self: end; }
+.contacts-command-bar .contact-add {
+  min-width: 118px;
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding-inline: 16px;
+  white-space: nowrap;
+}
+.contacts-command-bar .contact-add>span {
+  font: 800 15px/1 "Courier New", monospace;
+}
+
+@media (max-width: 760px) {
+  .contacts-workspace .contacts-intro { padding-bottom: 14px; }
+  .contacts-command-bar {
+    grid-template-columns: 1fr auto !important;
+    gap: 10px;
+    padding-top: 0;
+  }
+  .contacts-command-bar .search,
+  .contacts-command-bar .contact-add { grid-column: 1 / -1; }
+  .contacts-command-bar .contacts-filters { justify-self: end; }
+  .contacts-command-bar .contact-add { width: 100%; }
+}
+
+.action-groups { gap: 32px; }
+.action-group {
+  padding-top: 0;
+  border-top: 0;
+}
+.action-row,
+.waiting-row {
+  padding: 12px 14px;
+  border: 0;
+  border-radius: var(--radius-card);
+  background: rgba(255,255,255,.32);
+  box-shadow: none;
+}
+.action-row:hover,
+.waiting-row:hover {
+  border: 0;
+  background: rgba(255,255,255,.58);
+}
+.waiting-clear {
+  padding-block: 14px;
+  border-top: 0;
+  border-bottom: 0;
+}
+
+.metric-grid {
+  gap: 10px;
+  border: 0;
+}
+.metric-grid article,
+.metric-grid article:last-child {
+  border: 0;
+  border-radius: var(--radius-card);
+}
+.card-meta,
+.contact-card footer {
+  border-top: 0;
+}
+.draft-panel,
+.contact-panel,
+.interview-panel,
+.contact-compose,
+.relationship-timeline,
+.company-context,
+.ai-studio {
+  border-top: 0;
+}
+.snooze-dialog__header,
+.snooze-dialog__actions,
+.import-dialog-header,
+.import-mapping,
+.import-dialog-actions {
+  border-top: 0;
+  border-bottom: 0;
+}
+.snooze-dialog__header { padding-bottom: 10px; }
+.snooze-dialog__actions,
+.import-dialog-actions { padding-top: 8px; }
+
+#detail .record-details,
+#detail .match-panel {
+  margin-top: 4px;
+  border-top: 0;
+}
+#detail .record-details > summary,
+#detail .match-panel > summary,
+#detail > .detail-workspace > summary {
+  border: 0;
+  border-radius: var(--radius-control);
+  transition: background 150ms ease;
+}
+#detail .record-details > summary:hover,
+#detail .match-panel > summary:hover,
+#detail > .detail-workspace > summary:hover {
+  background: rgba(23,24,20,.045);
+}
+.application-actions {
+  margin-bottom: 6px;
+  padding-bottom: 10px;
+  border-bottom: 0;
+}
+#detail > .detail-workspace {
+  margin-top: 2px;
+  border-bottom: 0;
+}
+#detail > .detail-workspace[open] > summary {
+  border-bottom: 0;
+  background: rgba(23,24,20,.045);
+}

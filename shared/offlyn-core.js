@@ -67,6 +67,8 @@
     ["lastName", "profile_field", /last name|lastname|surname|family name|\blname\b/i],
     ["middleName", "profile_field", /middle name|middlename/i],
     ["preferredName", "profile_field", /preferred name|goes by|nickname/i],
+    ["collegeEmail", "profile_field", /(?:college|university|institutional|academic|school).{0,30}e-?mail|e-?mail.{0,30}(?:college|university|institutional|academic|school)/i],
+    ["personalEmail", "profile_field", /personal.{0,30}e-?mail|e-?mail.{0,30}personal/i],
     ["email", "profile_field", /e-?mail(?: address)?/i],
     ["phoneCountryCode", "profile_field", /phone country|country calling code|dial(?:ing)? code/i],
     ["phone", "profile_field", /\bphone\b|\bmobile\b|\bcell\b|\btelephone\b|\btel\b/i, /country|code|extension/i],
@@ -193,6 +195,13 @@
     const raw = String(value || "").trim();
     if (!raw) return { isValid: false, reason: "empty_value" };
     if (SENSITIVE.test(text) || SELF_ID.test(text) || CONSENT.test(text)) return { isValid: false, reason: "manual_review_required" };
+    if (/e-?mail/.test(text) && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) return { isValid: false, reason: "invalid_email" };
+    if (/(?:^|\s)(?:full |legal |applicant |candidate )?name(?:\s|$)/.test(text) && !/[a-z]/i.test(raw)) return { isValid: false, reason: "invalid_name" };
+    if (/\b(?:10th|12th|percentage|percent)\b/.test(text)) {
+      const percentage = Number(raw.replace(/%/g, "").trim());
+      if (!Number.isFinite(percentage) || percentage < 0 || percentage > 100) return { isValid: false, reason: "invalid_percentage" };
+    }
+    if (/\bdegree\b|speciali[sz]ation/.test(text) && !/[a-z]/i.test(raw)) return { isValid: false, reason: "invalid_degree" };
     if (/linkedin|github|portfolio|website|\burl\b/.test(text) && !/^https?:\/\//i.test(raw)) return { isValid: false, reason: "invalid_url" };
     if (/\bwhy\b|tell us about yourself|cover letter/.test(text) && raw.length < 20) return { isValid: false, reason: "long_answer_too_short" };
     if (options.length) {
@@ -213,16 +222,31 @@
   OfflynCore.bestLearnedAnswer = function bestLearnedAnswer(question, items = [], context = {}) {
     const normalizedQuestion = normalize(question);
     if (!normalizedQuestion || SENSITIVE.test(normalizedQuestion) || SELF_ID.test(normalizedQuestion) || CONSENT.test(normalizedQuestion)) return null;
-    const left = new Set(normalizedQuestion.split(" ").filter((token) => token.length > 1));
+    const noise = new Set(["a", "an", "and", "answer", "field", "id", "no", "number", "of", "question", "required", "the", "to", "your"]);
+    const tokens = (value) => new Set(normalize(value).split(" ").filter((token) => token.length > 1 && !noise.has(token) && !/^\d+$/.test(token)));
+    const left = tokens(normalizedQuestion);
+    if (!left.size) return null;
     let best = null;
     for (const item of items) {
       if (!item?.answer || !item?.normalized_question) continue;
-      const right = new Set(normalize(item.normalized_question).split(" ").filter((token) => token.length > 1));
+      const itemQuestion = normalize(item.normalized_question);
+      const right = tokens(itemQuestion);
       if (!right.size) continue;
+      const exact = normalizedQuestion === itemQuestion;
       const overlap = [...left].filter((token) => right.has(token)).length / Math.max(left.size, right.size);
+      const canonicalMatch = Boolean(context.canonicalField && item.canonical_field && context.canonicalField === item.canonical_field);
+      if (context.canonicalField && item.canonical_field && context.canonicalField !== item.canonical_field) continue;
+      // Email subtypes are intentionally isolated. Older generic/uncategorized
+      // email memories must never leak into a personal or institutional field.
+      if (["collegeEmail", "personalEmail"].includes(context.canonicalField) && item.canonical_field !== context.canonicalField) continue;
+      // Site and control-type affinity may break a close tie, but must never
+      // manufacture a match between unrelated short labels such as "Reg No."
+      // and "Phone No." on the same Google Forms host.
+      if (!exact && overlap < (canonicalMatch ? 0.34 : 0.5)) continue;
       const siteBonus = item.site && context.site && item.site === context.site ? 0.16 : 0;
       const typeBonus = item.field_type && context.fieldType && item.field_type === context.fieldType ? 0.08 : 0;
-      const score = Math.min(1, overlap + siteBonus + typeBonus + Math.min(Number(item.use_count || 0), 5) * 0.01);
+      const canonicalBonus = canonicalMatch ? 0.12 : 0;
+      const score = exact ? 1 : Math.min(0.99, overlap + siteBonus + typeBonus + canonicalBonus + Math.min(Number(item.use_count || 0), 5) * 0.01);
       if (!best || score > best.score) best = { ...item, score };
     }
     return best?.score >= 0.68 ? best : null;

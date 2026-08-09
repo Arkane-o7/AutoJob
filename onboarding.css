@@ -104,3 +104,22 @@ main { grid-template-columns:minmax(330px,34%) minmax(560px,1fr); }
 .controls .back,.remove-resume { border-radius:0; }
 .resume-drop,.grid { border-radius:var(--radius-panel); }
 .welcome-note,.next-up { border-radius:var(--radius-card); }
+
+/* Separator cleanup: the setup form uses complete controls instead of underlines. */
+.grid input {
+  padding: 11px 12px;
+  border: 1px solid rgba(21,22,18,.3);
+  border-radius: var(--radius-control);
+  background: rgba(255,255,255,.36);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+.grid input:focus {
+  padding: 11px 12px;
+  border: 1px solid #55791f;
+  background: rgba(255,255,255,.62);
+  box-shadow: 0 0 0 3px rgba(85,121,31,.14);
+}
+.remove-resume {
+  border-bottom: 0;
+  text-decoration: none;
+}

@@ -192,3 +192,68 @@ section { padding-left:0; border-bottom-color:rgba(23,24,20,.16); }
 .reminder-settings .setting-field input { border-radius:var(--radius-control); }
 .calendar-status-row i,.learned-answer-badge { border-radius:6px; }
 .save-bar { border-radius:var(--radius-panel); }
+
+/* Separator cleanup: fields are controls; whitespace separates profile sections. */
+section {
+  border-bottom: 0;
+}
+.overview-heading {
+  padding-bottom: 20px;
+  border-bottom: 0;
+}
+.overview-grid {
+  gap: 38px;
+}
+.overview-grid article,
+.overview-grid article:first-child,
+.overview-grid article:last-child {
+  padding: 24px 0;
+  border: 0;
+}
+
+input,
+select,
+textarea {
+  padding: 10px 12px;
+  border: 1px solid rgba(23,24,20,.3);
+  border-radius: var(--radius-control);
+  background: rgba(255,255,255,.34);
+  transition: border-color 150ms ease, box-shadow 150ms ease, background 150ms ease;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  padding: 10px 12px;
+  border: 1px solid #55791f;
+  background: rgba(255,255,255,.58);
+  box-shadow: 0 0 0 3px rgba(85,121,31,.14);
+}
+.profile-manager select {
+  padding: 8px 32px 8px 10px;
+}
+.file-drop input,
+.reminder-settings input[type="checkbox"],
+.calendar-toggle input {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.remove,
+.add-answer {
+  border-bottom: 0;
+  text-decoration: none;
+}
+.answer-scope-wrap,
+.advanced-ai-body,
+.calendar-status-row,
+.backup-status-row {
+  border-top: 0;
+  border-bottom: 0;
+}
+@media (max-width:600px) {
+  .overview-grid article,
+  .overview-grid article:first-child,
+  .overview-grid article:last-child {
+    border: 0;
+  }
+}

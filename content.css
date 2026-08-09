@@ -26,6 +26,38 @@
   padding: 0 6px 6px 0 !important;
   pointer-events: none !important;
   scrollbar-width: thin !important;
+  scrollbar-color: rgba(23, 24, 20, .38) transparent !important;
+}
+
+.scout-notification-stack::-webkit-scrollbar,
+.applyos-review-fields::-webkit-scrollbar {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+.scout-notification-stack::-webkit-scrollbar-track,
+.applyos-review-fields::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+.scout-notification-stack::-webkit-scrollbar-thumb,
+.applyos-review-fields::-webkit-scrollbar-thumb {
+  min-width: 44px !important;
+  min-height: 44px !important;
+  border: 3px solid transparent !important;
+  border-radius: 999px !important;
+  background: rgba(23, 24, 20, .38) !important;
+  background-clip: padding-box !important;
+}
+
+.scout-notification-stack::-webkit-scrollbar-thumb:hover,
+.applyos-review-fields::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(23, 24, 20, .62) !important;
+}
+
+.applyos-review-fields {
+  scrollbar-color: rgba(23, 24, 20, .38) transparent !important;
+  scrollbar-width: thin !important;
 }
 
 .scout-notification-stack > * {

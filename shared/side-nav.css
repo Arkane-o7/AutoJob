@@ -14,8 +14,8 @@
   display: grid;
   gap: 4px;
   margin: 0 2px 3px;
-  padding: 9px 9px 12px;
-  border-bottom: 1px solid rgba(23, 24, 20, .16);
+  padding: 9px 9px 8px;
+  border-bottom: 0;
 }
 
 .scout-side-nav__heading strong {

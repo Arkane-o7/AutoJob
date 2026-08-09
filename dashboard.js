@@ -519,6 +519,9 @@ function openDetail(id) {
   $("#draft").classList.add("hidden");
   $("#thank-you").classList.add("hidden");
   $("#interview-form").classList.add("hidden");
+  $("#application-record-details").open = false;
+  $("#application-match").open = false;
+  document.querySelectorAll("#detail > .detail-workspace").forEach((workspace) => { workspace.open = false; });
   selectedInterviewId = null;
   renderLinkedContacts(item);
   renderInterviews(item);
@@ -546,6 +549,7 @@ function linkedContacts(applicationId) {
 
 function renderLinkedContacts(application) {
   const contacts = linkedContacts(application.id);
+  $("#application-contacts-status").textContent = contacts.length ? `${contacts.length} linked` : "No one linked";
   $("#linked-contacts").innerHTML = contacts.length ? contacts.map((contact) => `<div class="linked-contact"><div><strong>${escapeHTML(contact.name)}</strong><span>${escapeHTML([contact.title, contact.email].filter(Boolean).join(" · ") || titleCase(contact.relationship))}</span></div><button data-contact-id="${contact.id}" type="button">Edit</button></div>`).join("") : `<div class="linked-contact"><div><strong>No contacts linked yet</strong><span>Add a recruiter, interviewer, referral, or employee.</span></div></div>`;
   $("#linked-contacts").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => { closeDetail(); openContact(button.dataset.contactId); }));
   const draftContact = $("#draft-contact");
@@ -554,6 +558,7 @@ function renderLinkedContacts(application) {
 
 function renderInterviews(application) {
   const interviews = state.interviews.filter((item) => item.application_id === application.id).sort((a, b) => new Date(a.scheduled_at || 0) - new Date(b.scheduled_at || 0));
+  $("#application-interviews-status").textContent = interviews.length ? `${interviews.length} scheduled` : "No interviews scheduled";
   $("#interview-list").innerHTML = interviews.length ? interviews.map((interview) => {
     const contacts = interview.interviewer_contact_ids.map((id) => state.contacts.find((contact) => contact.id === id)).filter(Boolean);
     return `<div class="interview-card"><div><strong>${escapeHTML(titleCase(interview.type))} · ${escapeHTML(dateTimeLabel(interview.scheduled_at))}</strong><span>${escapeHTML([titleCase(interview.format), contacts.map((contact) => contact.name).join(", ")].filter(Boolean).join(" · "))}${interview.next_action ? ` · Next: ${escapeHTML(interview.next_action)}` : ""}</span></div><button data-interview-id="${interview.id}" type="button">Open workspace</button></div>`;
@@ -778,6 +783,7 @@ function closeWaiting() {
 }
 
 function openInterviewEditor(id = null) {
+  $("#application-interviews").open = true;
   const interview = state.interviews.find((item) => item.id === id) || null;
   selectedInterviewId = interview?.id || null;
   $("#interview-id").value = interview?.id || "";
@@ -1014,6 +1020,10 @@ $("#contact-import-form").addEventListener("submit", async (event) => {
   }
 });
 $("#add-linked-contact").addEventListener("click", () => { const applicationId = selectedId; closeDetail(); openContact(null, applicationId); });
+document.querySelectorAll("#detail > .detail-workspace").forEach((workspace) => workspace.addEventListener("toggle", () => {
+  if (!workspace.open) return;
+  document.querySelectorAll("#detail > .detail-workspace").forEach((other) => { if (other !== workspace) other.open = false; });
+}));
 $("#mock").addEventListener("click", async () => { await ApplyOS.seedMockData(); await load(); toast("Sample applications added"); });
 $("#close-detail").addEventListener("click", closeDetail);
 $("#close-contact").addEventListener("click", closeContact);

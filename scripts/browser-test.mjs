@@ -24,7 +24,14 @@ const profile = Object.freeze({
     name: resumeName, type: "application/pdf", size: 51,
     dataUrl: `data:application/pdf;base64,${Buffer.from("%PDF-1.4\n% ApplyOS browser regression fixture\n%%EOF").toString("base64")}`
   },
-  customAnswers: [{ question: "Do you currently have any active academic backlogs?", answer: "No" }]
+  customAnswers: [
+    { question: "Do you currently have any active academic backlogs?", answer: "No" },
+    { question: "Reg No.", answer: "24BDS0129", source: "application" },
+    { question: "College email id", answer: "ada@university.example", source: "application" },
+    { question: "10th %", answer: "95", source: "application" },
+    { question: "12th %", answer: "89", source: "application" },
+    { question: "Degree & specialization", answer: "CSE (Data Science)", source: "application" }
+  ]
 });
 
 function startFixtureServer() {
@@ -105,6 +112,15 @@ async function installBrowserAccount(worker) {
     });
     await ApplyOS.ensureState();
     await ApplyOS.ensureGraph();
+    for (const question of ["Reg No.", "Name", "College email id", "10th %", "12th %", "Degree & specialization"]) {
+      await ApplyOS.rememberCorrection({
+        fingerprint: `docs.google.com|stale|text|${question}`,
+        question,
+        answer: fakeProfile.phone,
+        field_type: "text",
+        site: "docs.google.com"
+      });
+    }
     await ApplyOS.persistActiveUserCache(userId);
   }, { fakeProfile: profile, userId: "11111111-1111-4111-8111-111111111111" });
 }
@@ -242,6 +258,15 @@ async function snapshot(target) {
     microsoftSponsorshipExpanded: document.querySelector("#microsoft-sponsorship")?.getAttribute("aria-expanded"),
     microsoftStrayOptionClicks: window.__fixture.microsoftStrayOptionClicks,
     manualAnswer: document.querySelector("#manual-answer")?.value || "",
+    registrationNumber: document.querySelector("#registration-number")?.value || "",
+    googleFullName: document.querySelector("#google-full-name")?.value || "",
+    personalEmail: document.querySelector("#personal-email")?.value || "",
+    collegeEmail: document.querySelector("#college-email")?.value || "",
+    preservedCollegeEmail: document.querySelector("#preserved-college-email")?.value || "",
+    institutionalEmail: document.querySelector("#institutional-email")?.value || "",
+    tenthPercentage: document.querySelector("#tenth-percentage")?.value || "",
+    twelfthPercentage: document.querySelector("#twelfth-percentage")?.value || "",
+    degreeSpecialization: document.querySelector("#degree-specialization")?.value || "",
     ssn: document.querySelector("#ssn")?.value, verificationCode: document.querySelector("#verification-code")?.value,
     gender: document.querySelector("#gender")?.value,
     consent: document.querySelector("#privacy-consent")?.checked,
@@ -298,6 +323,17 @@ function assertSafeFill(testCase, response, state) {
     assert.ok(state.events["microsoft-backlog-no:change"] >= 1, "microsoft: radio change event should fire");
     assert.equal(state.microsoftSponsorshipExpanded, "false", "microsoft: an unmatched dropdown must be closed after one bounded attempt");
     assert.equal(state.microsoftStrayOptionClicks, 0, "microsoft: a dropdown must never select an option from a sibling listbox");
+  }
+  if (testCase.id === "react-dropzone") {
+    assert.equal(state.registrationNumber, "24BDS0129", "answer memory: exact registration-number answer beats stale same-site correction memory");
+    assert.equal(state.googleFullName, "Ada Lovelace", "answer memory: exact saved name beats stale same-site correction memory");
+    assert.equal(state.personalEmail, "ada@example.test", "answer memory: personal email uses the personal profile identity");
+    assert.equal(state.collegeEmail, "ada@university.example", "answer memory: college email stays distinct from the generic profile email");
+    assert.equal(state.preservedCollegeEmail, "ada@example.test", "answer memory: a Google-restored draft value is preserved until the user corrects it");
+    assert.equal(state.institutionalEmail, "", "answer memory: a generic personal email must not fill an unknown institutional field");
+    assert.equal(state.tenthPercentage, "95", "answer memory: exact 10th-percentage answer beats stale phone-number contamination");
+    assert.equal(state.twelfthPercentage, "89", "answer memory: exact 12th-percentage answer beats stale phone-number contamination");
+    assert.equal(state.degreeSpecialization, "CSE (Data Science)", "answer memory: exact degree answer beats stale same-site correction memory");
   }
   if (testCase.expectedDrops) assert.deepEqual(state.drops, ["dragenter", "dragover", "drop"], `${testCase.id}: ATS dropzone events`);
   assert.equal(state.submitCount, 0, `${testCase.id}: form must not submit`);
@@ -367,6 +403,22 @@ async function main() {
       assert.equal(repeated.resumeName, testCase.existingResume ? "" : resumeName, `${testCase.id}: repeat fill preserves attachment state`);
 
       if (testCase.id === "react-dropzone") {
+        await target.locator("#preserved-college-email").fill("updated@university.example");
+        await target.locator("#preserved-college-email").press("Tab");
+        const correctedMemory = await worker.evaluate(async () => {
+          const deadline = Date.now() + 5000;
+          while (Date.now() < deadline) {
+            const activeProfile = await ApplyOS.getActiveProfile();
+            const corrected = (activeProfile.customAnswers || []).find((item) => item.question === "University email id");
+            if (corrected?.answer === "updated@university.example" && activeProfile.collegeEmail === "updated@university.example") {
+              return { corrected, collegeEmail: activeProfile.collegeEmail };
+            }
+            await new Promise((resolveWait) => setTimeout(resolveWait, 100));
+          }
+          return null;
+        });
+        assert.equal(correctedMemory?.corrected?.source, "application", "a corrected restored draft becomes visible, editable Answer Library memory");
+        assert.equal(correctedMemory?.collegeEmail, "updated@university.example", "a college-email correction updates the reusable college identity");
         await target.locator("#ssn").fill("000-00-0000");
         await target.locator("#ssn").press("Tab");
         await target.waitForTimeout(400);
@@ -531,6 +583,7 @@ async function main() {
       return {
         documentHeight: document.documentElement.scrollHeight,
         bodyHeight: document.body.scrollHeight,
+        bodyPadding: parseFloat(getComputedStyle(document.body).padding),
         mainHeight: main?.clientHeight || 0,
         mainContentHeight: main?.scrollHeight || 0,
         mainOverflow: main ? getComputedStyle(main).overflowY : "missing"
@@ -539,6 +592,7 @@ async function main() {
     assert.ok(popupMetrics.documentHeight <= 600, "popup document should remain within Chrome's 600px maximum");
     assert.ok(popupMetrics.bodyHeight <= 600, "popup body should not create an outer scroll surface");
     assert.ok(popupMetrics.mainHeight <= 600, "popup content surface should remain within Chrome's maximum height");
+    assert.equal(popupMetrics.bodyPadding, 0, "popup uses the Chrome-owned surface edge-to-edge without a fake outer gutter");
     assert.equal(popupMetrics.mainOverflow, "hidden", "popup must not expose a native scrollbar");
     assert.ok(popupMetrics.mainContentHeight <= popupMetrics.mainHeight, `popup content must fit without clipping (${popupMetrics.mainContentHeight}/${popupMetrics.mainHeight})`);
     await popupProbe.close();
@@ -603,7 +657,7 @@ async function main() {
     }
     assert.match(await accountProbe.locator(".auth-consent").textContent(), /stores personal data you choose to provide/i, "account consent keeps the storage disclosure concise and clear");
     assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/terms.html"]').count(), 1, "account consent links the User Agreement");
-    assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/index.html"]').count(), 1, "account consent links the Privacy Policy");
+    assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/privacy.html"]').count(), 1, "account consent links the Privacy Policy");
     assert.equal(await accountProbe.locator("details.consent-details").count(), 1, "account consent offers a compact data-category explanation");
     assert.equal(await accountProbe.locator("#publication-section").count(), 0, "unreleased recruiter search has no customer-facing controls");
     await accountProbe.evaluate((conflict) => renderConflict(conflict), conflictFixture.meta.conflict);
@@ -643,12 +697,12 @@ async function main() {
     await accountProbe.close();
 
     const legalProbe = await context.newPage();
-    await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/index.html`, { waitUntil: "domcontentloaded" });
+    await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/privacy.html`, { waitUntil: "domcontentloaded" });
     assert.match(await legalProbe.locator("h1").textContent(), /job search is/i, "packaged Privacy Policy renders");
     assert.equal(await legalProbe.locator('a[href="terms.html"]').count() > 0, true, "Privacy Policy links the User Agreement");
     await legalProbe.goto(`chrome-extension://${extensionId}/privacy-site/terms.html`, { waitUntil: "domcontentloaded" });
     assert.match(await legalProbe.locator("h1").textContent(), /helpful automation/i, "packaged User Agreement renders");
-    assert.equal(await legalProbe.locator('a[href="index.html"]').count() > 0, true, "User Agreement links the Privacy Policy");
+    assert.equal(await legalProbe.locator('a[href="privacy.html"]').count() > 0, true, "User Agreement links the Privacy Policy");
     await legalProbe.close();
     console.log("PASS concise account consent links complete packaged legal disclosures");
     await worker.evaluate(async () => {
@@ -839,6 +893,13 @@ async function main() {
     assert.equal(await detail.getAttribute("aria-modal"), "true", "open detail drawer is exposed as the active modal");
     assert.equal(await detail.getAttribute("data-state"), "open", "application drawer reports its open state");
     assert.equal(await helper.evaluate(() => document.activeElement?.id), "detail-role", "detail drawer moves focus to its first editable field");
+    assert.equal(await helper.locator("#application-record-details").getAttribute("open"), null, "secondary application fields start collapsed");
+    assert.equal(await helper.locator("#application-contacts").getAttribute("open"), null, "application workspaces start collapsed");
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await helper.waitForTimeout(250);
+      await helper.screenshot({ path: resolve(root, "output/playwright/application-detail.png") });
+    }
     await helper.locator("#delete-application").click();
     const deleteApplicationDialog = helper.locator(".scout-system-dialog");
     await deleteApplicationDialog.waitFor({ state: "visible" });
@@ -1027,9 +1088,11 @@ async function main() {
 
     await helper.locator("[data-section='pipeline']").click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
+    await helper.locator("#application-contacts > summary").click();
     await helper.locator("#linked-contacts", { hasText: "Casey Recruiter" }).waitFor({ state: "visible" });
     const contactId = await helper.locator("#draft-contact option", { hasText: "Casey Recruiter" }).getAttribute("value");
     assert.ok(contactId, "saved contact should be selectable for a reviewed follow-up");
+    await helper.locator("#application-follow-up > summary").click();
     await helper.locator("#draft-contact").selectOption(contactId);
     await helper.locator("#draft-type").selectOption("final_follow_up");
     await helper.locator("#generate-draft").click();
@@ -1047,6 +1110,7 @@ async function main() {
     await helper.locator(`[data-section="pipeline"]`).click();
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
 
+    await helper.locator("#application-interviews > summary").click();
     await helper.locator("#add-interview").click();
     await helper.locator("#interview-type").selectOption("technical");
     await helper.locator("#interview-format").selectOption("video");
@@ -1061,6 +1125,10 @@ async function main() {
     await helper.locator("#interview-next-date").fill("2026-08-06T12:00");
     await helper.locator("#interview-form button[type='submit']").click();
     const interviewCard = helper.locator("#interview-list .interview-card", { hasText: "Technical" });
+    await interviewCard.waitFor({ state: "attached" });
+    if (await helper.locator("#application-interviews").getAttribute("open") === null) {
+      await helper.locator("#application-interviews > summary").click();
+    }
     await interviewCard.waitFor({ state: "visible" });
     await interviewCard.locator("button").click();
     await helper.locator("#generate-thank-you").click();

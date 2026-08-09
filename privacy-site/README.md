@@ -1,6 +1,6 @@
-# Scout privacy-policy site
+# Scout website
 
-A dependency-free static website ready for Vercel.
+A dependency-free product and legal website ready for Vercel.
 
 ## Deploy on Vercel
 
@@ -10,8 +10,8 @@ A dependency-free static website ready for Vercel.
 4. Leave the build command and output directory empty.
 5. Deploy.
 
-The Privacy Policy is available at both `/` and `/privacy`. The User Agreement
-is available at `/terms`.
+The product site is available at `/`, the Privacy Policy at `/privacy`, and the
+User Agreement at `/terms`.
 
 Before publishing the Chrome Web Store listing, confirm that the operator,
 contact details, service providers, Supabase region, retention statements, and

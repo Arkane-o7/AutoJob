@@ -599,8 +599,14 @@ test("Offlyn-derived classifier recognizes ATS fields and keeps sensitive answer
   const authorization = ApplyOS.OfflynCore.classifyField("Are you legally permitted to work in this country?", "select-one", "workAuth");
   assert.equal(authorization.canonicalField, "workAuthorization");
   assert.equal(authorization.shouldAutofill, true);
+  assert.equal(ApplyOS.OfflynCore.classifyField("Personal Email ID", "email").canonicalField, "personalEmail");
+  assert.equal(ApplyOS.OfflynCore.classifyField("College email id", "email").canonicalField, "collegeEmail");
   const demographic = ApplyOS.OfflynCore.classifyField("What is your race or ethnicity?", "select-one", "race");
   assert.equal(demographic.shouldAutofill, false);
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("Name", "9030065423").reason, "invalid_name");
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("College email id", "9030065423").reason, "invalid_email");
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("10th %", "9030065423").reason, "invalid_percentage");
+  assert.equal(ApplyOS.OfflynCore.validateFieldData("Degree & specialization", "9030065423").reason, "invalid_degree");
 });
 
 test("stores corrections and reuses the best site-aware learned answer", async () => {
@@ -622,6 +628,51 @@ test("stores corrections and reuses the best site-aware learned answer", async (
     fieldType: "number"
   });
   assert.equal(match.answer, "4");
+});
+
+test("site and input-type bonuses cannot reuse an unrelated short learned answer", async () => {
+  const { ApplyOS } = await runtime();
+  const items = [{
+    id: "learned_phone",
+    fingerprint: "docs.google.com|phone|text|phone no",
+    question: "Phone No.",
+    normalized_question: "phone no",
+    answer: "9030065423",
+    canonical_field: "phone",
+    field_type: "text",
+    site: "docs.google.com",
+    use_count: 5
+  }];
+  const match = ApplyOS.OfflynCore.bestLearnedAnswer("Reg No.", items, {
+    site: "docs.google.com",
+    fieldType: "text"
+  });
+  assert.equal(match, null);
+});
+
+test("generic email memory cannot cross personal and college email identities", async () => {
+  const { ApplyOS } = await runtime();
+  const items = [{
+    id: "learned_generic_email",
+    fingerprint: "docs.google.com|email|email|email address",
+    question: "Email address",
+    normalized_question: "email address",
+    answer: "personal@example.test",
+    canonical_field: "email",
+    field_type: "email",
+    site: "docs.google.com",
+    use_count: 5
+  }];
+  assert.equal(ApplyOS.OfflynCore.bestLearnedAnswer("College email address", items, {
+    site: "docs.google.com",
+    fieldType: "email",
+    canonicalField: "collegeEmail"
+  }), null);
+  assert.equal(ApplyOS.OfflynCore.bestLearnedAnswer("Personal email address", items, {
+    site: "docs.google.com",
+    fieldType: "email",
+    canonicalField: "personalEmail"
+  }), null);
 });
 
 test("follow-up generation produces a draft but no send action", async () => {
@@ -930,14 +981,46 @@ test("dashboard drawers use inert state instead of aria-hidden focus transitions
   assert.match(source, /drawer\.inert = true/);
 });
 
+test("application details use an essentials-first disclosure hierarchy", async () => {
+  const [html, source] = await Promise.all([readFile(resolve("dashboard.html"), "utf8"), readFile(resolve("dashboard.js"), "utf8")]);
+  assert.match(html, /class="detail-grid application-primary-grid">\s*<label><span>Status<\/span>[\s\S]*?<label><span>Deadline<\/span>/);
+  assert.match(html, /<details id="application-record-details"/);
+  assert.match(html, /<details id="application-match"/);
+  assert.equal((html.match(/<details id="application-[^"]+" class="detail-workspace/g) || []).length, 4);
+  for (const id of ["application-contacts", "application-follow-up", "application-interviews", "application-smart-drafts"]) assert.match(html, new RegExp(`<details id="${id}"`));
+  assert.doesNotMatch(html, /application-more-actions/);
+  assert.match(html, /class="application-actions__secondary"><button id="mark-application-waiting"[\s\S]*?<a id="detail-url"[\s\S]*?<button id="delete-application"/);
+  assert.match(source, /document\.querySelectorAll\("#detail > \.detail-workspace"\)/);
+  assert.match(source, /application-contacts-status/);
+  assert.match(source, /application-interviews-status/);
+});
+
 test("popup stays within Chrome's surface without exposing a native scrollbar", async () => {
   const css = await readFile(resolve("popup.css"), "utf8");
   assert.match(css, /html,body\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;/s);
-  assert.match(css, /main\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;/s);
+  assert.match(css, /main\s*\{[^}]*max-height:600px;[^}]*overflow:hidden;[^}]*background:var\(--paper\);/s);
+  assert.match(css, /body\s*\{[^}]*padding:0;/s);
   assert.match(css, /\.result:empty\s*\{[^}]*display:none;/s);
   assert.doesNotMatch(css, /overflow-y:auto/);
   assert.doesNotMatch(css, /(?:^|[;{])\s*height:600px/);
   assert.doesNotMatch(css, /min-height:650px/);
+});
+
+test("Scout pages share one polished scrollbar system", async () => {
+  const [scrollbars, contentCss, privacyCss, ...pages] = await Promise.all([
+    readFile(resolve("shared/scrollbars.css"), "utf8"),
+    readFile(resolve("content.css"), "utf8"),
+    readFile(resolve("privacy-site/styles.css"), "utf8"),
+    ...["dashboard.html", "options.html", "account.html", "onboarding.html"].map((file) => readFile(resolve(file), "utf8"))
+  ]);
+  for (const page of pages) assert.match(page, /href="shared\/scrollbars\.css"/);
+  assert.match(scrollbars, /scrollbar-color:/);
+  assert.match(scrollbars, /scrollbar-gutter:\s*stable/);
+  assert.match(scrollbars, /html:has\(> body\[data-scout-page\]\)::-webkit-scrollbar-track\s*\{[^}]*margin-top:\s*var\(--scout-header-height,\s*68px\)/s);
+  assert.match(scrollbars, /::-webkit-scrollbar-thumb:hover/);
+  assert.match(scrollbars, /min-height:\s*44px/);
+  assert.match(contentCss, /\.applyos-review-fields::-webkit-scrollbar-thumb/);
+  assert.match(privacyCss, /\*::-webkit-scrollbar-thumb/);
 });
 
 test("major ATS compatibility registry recognizes hosted application domains", async () => {
