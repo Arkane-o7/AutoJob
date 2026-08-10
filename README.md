@@ -51,7 +51,7 @@ The new modules are:
 - `shared/profiles.js`: multi-profile index, active-profile switching, legacy `profile` mirroring, completeness checks, and resume-text normalization.
 - `shared/storage.js`: explicit versioned migrations, runtime normalization, serialized writes, and CRUD for applications, actions, contact activity, interviews, scoped answer memory, immutable resume versions, and settings. Schema v6 records its revision and migration history while preserving legacy reminder data.
 - `shared/matching.js`: deterministic, local skill/keyword matching with matched skills, gaps, keywords, experience hints, and answer prompts.
-- `shared/followup.js`: configurable follow-up sequences, action scheduling helpers, interview thank-you drafts, and review-only Gmail, Outlook, and local-email-app compose links.
+- `shared/followup.js`: configurable follow-up sequences and action scheduling helpers.
 - `shared/ai.js`: zero-setup Smart Draft fallbacks for cover letters, resume focus plans, and keyword gaps, plus optional localhost-only Ollama enhancement.
 - `shared/graph.js`: answer/correction knowledge graph with reusable-answer retrieval and lightweight reinforcement weights.
 - `shared/agent.js`: local-AI planning with an allowlist of fill/select/check/skip actions and hard blocks for submission, consent, sensitive fields, CAPTCHAs, and assessments.
@@ -64,7 +64,7 @@ The new modules are:
 - `background.js`: state/profile migration, serialized per-tab application sessions, hourly due-date refresh, follow-up badge, correction learning, cloud/account message boundaries, and localhost Ollama requests. It has no email credentials or send capability.
 - `onboarding.*`: a three-step activation flow covering Scout’s value, an optional resume import, and the core autofill identity fields. It opens directly into Home; the product uses contextual copy and clear empty states instead of a forced coach-mark tour.
 - `account.*`: required sign-in, connection/sync state, reviewed legacy import, authoritative export/deletion, and tutorial replay controls. Deployment settings and unreleased recruiter-search controls are never shown to customers.
-- `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, review-only compose handoffs, match guidance, profile switching, and the local-AI studio.
+- `dashboard.*`: Kanban and table views, search/filters, priorities, upcoming actions, application details, contact/networking CRM, interview workspaces, metadata-only relationship activity, match guidance, profile switching, and the local-AI studio.
 - `types/applyos.ts`: TypeScript contracts for captured jobs, applications, contacts, interviews, reminders, answers, profiles, Ollama, knowledge graph/RL state, agent plans, resume versions, matches, and storage state.
 
 ## Install or update locally
@@ -75,7 +75,7 @@ The new modules are:
 4. Refresh any job pages that were already open so the updated content scripts load.
 5. Pin **Scout** and choose **Finish setup** once. After completion the same button becomes **Profile** and opens the canonical profile editor.
 
-Sign in with email, Google, or LinkedIn before setup. Application, contact, interview, profile, answer, and resume data belongs to that private cloud account and is cached locally for temporary offline use. The cache is namespaced by user and cleared from the active workspace on sign-out. Scout has no analytics and exposes no recruiter-search profile in this release. Clicking Gmail, Outlook, or Email app explicitly opens a reviewed draft in that provider; nothing is sent. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
+Sign in with email, Google, or LinkedIn before setup. Application, contact, interview, profile, answer, and resume data belongs to that private cloud account and is cached locally for temporary offline use. The cache is namespaced by user and cleared from the active workspace on sign-out. Scout has no analytics, mailbox access, message drafting, message storage, or recruiter-search profile in this release. If Ollama is enabled, AI prompts go only to the user-configured localhost endpoint (default `http://localhost:11434`).
 
 ## Test the complete workflow
 
@@ -146,19 +146,15 @@ Applied records create follow-up actions from the offsets configured in **Settin
 
 ### 6. Keep relationship history
 
-Contacts can be filtered and tagged, linked to applications, imported from a reviewed local CSV, and merged when exact email or LinkedIn duplicates are found. Log email, LinkedIn, phone, meeting, and note activity manually. A confirmed log can complete the current action and schedule the next one atomically. Opening a compose link records nothing and Scout never reads a mailbox or assumes that a draft was sent.
-
-### 6. Generate a follow-up draft
-
-Open an application record, choose first or final follow-up, and click **Generate draft**. Select a linked contact if available, edit the subject and body, then copy it or open the reviewed draft in Gmail, Outlook, or the device email app. Scout has no email credentials and no send function.
+Contacts can be filtered and tagged, linked to applications, imported from a reviewed local CSV, and merged when exact email or LinkedIn duplicates are found. Log only the type, direction, time, and linked action for email, LinkedIn, phone, meeting, or note activity. Scout does not store a subject, summary, outcome, or message body. A confirmed log can complete the current action and schedule the next one atomically.
 
 ### 7. Track contacts and networking
 
-Open **Network → People** to add recruiters, hiring managers, interviewers, referrals, employees, or general networking contacts. Store their company, title, email, LinkedIn URL, relationship, notes, last-contacted date, and next action. Switch to **Companies** without leaving Network. A contact can be linked to an application and selected as the recipient for reviewed drafts.
+Open **Network → People** to add recruiters, hiring managers, interviewers, referrals, employees, or general networking contacts. Store their company, title, email, LinkedIn URL, relationship, notes, last-contacted date, and next action. Switch to **Companies** without leaving Network. A contact can be linked to an application for relationship and interview tracking.
 
 ### 8. Use the interview workspace
 
-Open an application and choose **Add interview**. Record the round, format, scheduled time, interviewer, location or meeting URL, company research, preparation notes, question notes, and next action. Saved interviews appear in **Next Actions** and move an active application to Interview. Generate and edit a thank-you draft, then manually open it in an email provider if desired.
+Open an application and choose **Add interview**. Record the round, format, scheduled time, interviewer, location or meeting URL, company research, preparation notes, question notes, and next action. Saved interviews appear in **Next Actions** and move an active application to Interview.
 
 ### 9. Use Smart Drafts
 
@@ -208,9 +204,9 @@ npm run test:browser:dist
 npm run verify
 ```
 
-`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, contact/interview CRUD, encrypted backup round trips and rollback, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, review-only draft generation, cloud-origin validation, token isolation, account/onboarding surface boundaries, and reserved database RLS contracts.
+`npm test` covers explicit storage migrations, normalization and serialized writes alongside legacy and multi-profile migration, metadata-only contact/interview CRUD, encrypted backup round trips and rollback, local matching, answer recall, knowledge-graph correction learning, agent action safety, Workday no-navigation enforcement, 7/14-day reminders and rescheduling, reviewed diagnostics, conservative confirmation scoring, cloud-origin validation, token isolation, account/onboarding surface boundaries, and reserved database RLS contracts.
 
-`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed private diagnostics and post-submit confirmation, popup sizing, account privacy defaults, contact creation, compose handoffs, interview preparation, and thank-you drafting. Set `SCOUT_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
+`npm run test:browser:dist` launches the real unpacked Manifest V3 build in Playwright and runs deterministic regression fixtures for Workday, Greenhouse, Lever, Ashby, iCIMS, SmartRecruiters, Oracle/Taleo, Microsoft Careers/Eightfold, NorthStarz, and a generic React dropzone. It verifies field values and events, native and portal-rendered dropdowns, readonly-styled radio controls, resume attachment/existing-resume preservation, sensitive/consent exclusions, no navigation or submission, late-rendered fields, reviewed private diagnostics and post-submit confirmation, popup sizing, account privacy defaults, contact creation, metadata-only relationship activity, and interview preparation. Set `SCOUT_REQUIRE_BROWSER=1` to make a missing Playwright browser a hard failure. `npm run build` creates the clean extension in `dist/`.
 
 ## Safety boundaries and limitations
 

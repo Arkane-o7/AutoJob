@@ -233,9 +233,6 @@ export interface ContactActivity {
   type: ContactActivityType;
   direction: ContactActivityDirection;
   occurred_at: string;
-  subject: string;
-  summary: string;
-  outcome: string;
   created_at: string;
   updated_at: string;
 }

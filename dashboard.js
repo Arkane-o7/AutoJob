@@ -516,8 +516,6 @@ function openDetail(id) {
   const highlight = item.suggested_experiences?.[0] || item.missing_skills?.join(", ") || item.suggested_keywords?.slice(0, 6).join(", ") || "No major gaps detected";
   $("#detail-missing").textContent = hasJobDescription(item) ? `Consider highlighting: ${highlight}` : "Reopen the job posting or update the saved job after its description is captured.";
   $("#detail-url").href = item.url; $("#detail-applied").classList.toggle("hidden", Boolean(item.applied_at));
-  $("#draft").classList.add("hidden");
-  $("#thank-you").classList.add("hidden");
   $("#interview-form").classList.add("hidden");
   $("#application-record-details").open = false;
   $("#application-match").open = false;
@@ -552,8 +550,6 @@ function renderLinkedContacts(application) {
   $("#application-contacts-status").textContent = contacts.length ? `${contacts.length} linked` : "No one linked";
   $("#linked-contacts").innerHTML = contacts.length ? contacts.map((contact) => `<div class="linked-contact"><div><strong>${escapeHTML(contact.name)}</strong><span>${escapeHTML([contact.title, contact.email].filter(Boolean).join(" · ") || titleCase(contact.relationship))}</span></div><button data-contact-id="${contact.id}" type="button">Edit</button></div>`).join("") : `<div class="linked-contact"><div><strong>No contacts linked yet</strong><span>Add a recruiter, interviewer, referral, or employee.</span></div></div>`;
   $("#linked-contacts").querySelectorAll("button").forEach((button) => button.addEventListener("click", () => { closeDetail(); openContact(button.dataset.contactId); }));
-  const draftContact = $("#draft-contact");
-  draftContact.innerHTML = `<option value="">Hiring team / no address</option>` + contacts.map((contact) => `<option value="${contact.id}">${escapeHTML(contact.name)}${contact.email ? ` · ${escapeHTML(contact.email)}` : ""}</option>`).join("");
 }
 
 function renderInterviews(application) {
@@ -571,7 +567,7 @@ function renderContactTimeline(contactId) {
     .sort((a, b) => new Date(b.occurred_at) - new Date(a.occurred_at));
   $("#contact-timeline").innerHTML = activities.length ? activities.map((item) => {
     const application = state.applications.find((entry) => entry.id === item.application_id);
-    return `<article class="timeline-entry"><strong>${escapeHTML(item.subject || titleCase(item.type))}</strong><span>${escapeHTML(titleCase(item.direction))} ${escapeHTML(titleCase(item.type))} · ${escapeHTML(dateTimeLabel(item.occurred_at))}${application ? ` · ${escapeHTML(application.company)}` : ""}</span>${item.summary ? `<p>${escapeHTML(item.summary)}</p>` : ""}${item.outcome ? `<p><strong>Outcome:</strong> ${escapeHTML(item.outcome)}</p>` : ""}</article>`;
+    return `<article class="timeline-entry"><strong>${escapeHTML(titleCase(item.type))}</strong><span>${escapeHTML(titleCase(item.direction))} · ${escapeHTML(dateTimeLabel(item.occurred_at))}${application ? ` · ${escapeHTML(application.company)}` : ""}</span></article>`;
   }).join("") : `<div class="action-empty">No interactions logged yet. Scout never infers them from your inbox.</div>`;
   const actions = state.reminders.filter((item) => item.contact_id === contactId && item.status === "open").sort((a, b) => new Date(a.snoozed_until || a.due_at) - new Date(b.snoozed_until || b.due_at));
   $("#activity-action").innerHTML = `<option value="">None</option>` + actions.map((item) => `<option value="${item.id}">${escapeHTML(item.title)} · ${escapeHTML(dateLabel(item.snoozed_until || item.due_at))}</option>`).join("");
@@ -583,13 +579,10 @@ function openActivityForm(prefill = {}) {
   $("#activity-type").value = prefill.type || "email";
   $("#activity-direction").value = prefill.direction || "outbound";
   $("#activity-when").value = toDateTimeInput(prefill.occurred_at || new Date().toISOString());
-  $("#activity-subject").value = prefill.subject || "";
-  $("#activity-summary").value = prefill.summary || "";
-  $("#activity-outcome").value = prefill.outcome || "";
   $("#activity-action").value = prefill.action_id || "";
   $("#activity-complete-action").checked = Boolean(prefill.action_id);
   $("#activity-next-title").value = ""; $("#activity-next-date").value = "";
-  $("#activity-summary").focus();
+  $("#activity-type").focus();
 }
 
 function renderActionCalendar(action) {
@@ -688,11 +681,9 @@ function openContact(id = null, applicationId = "") {
   });
   $("#open-contact-linkedin").classList.toggle("hidden", !contact?.linkedin_url);
   $("#open-contact-linkedin").href = contact?.linkedin_url || "#";
-  $("#contact-message").value = contact ? `Hello ${contact.name.split(/\s+/)[0]},\n\nIt was great connecting with you. I wanted to stay in touch regarding opportunities at ${contact.company || "your company"}.\n\nBest,\n${profile.fullName || [profile.firstName, profile.lastName].filter(Boolean).join(" ") || ""}` : "";
   $("#log-interaction").disabled = !contact;
   $("#activity-form").classList.add("hidden");
   renderContactTimeline(contact?.id || "");
-  updateContactComposeLinks();
   openDrawer($("#contact-detail"));
   $("#contact-name").focus();
 }
@@ -805,7 +796,6 @@ function openInterviewEditor(id = null) {
   $("#interview-contact").value = interview?.interviewer_contact_ids?.[0] || "";
   $("#delete-interview").classList.toggle("hidden", !interview);
   $("#interview-form").classList.remove("hidden");
-  $("#thank-you").classList.add("hidden");
   updateInterviewActionReview();
   $("#interview-type").focus();
 }
@@ -816,30 +806,6 @@ function updateInterviewActionReview() {
   $("#interview-prep-date").disabled = !prepEnabled;
   $("#interview-next-action").disabled = !thanksEnabled;
   $("#interview-next-date").disabled = !thanksEnabled;
-}
-
-function draftRecipient() {
-  return state.contacts.find((contact) => contact.id === $("#draft-contact").value)?.email || "";
-}
-
-function setComposeLinks(prefix, draft, recipient) {
-  const links = ApplyOS.buildComposeLinks(draft, recipient);
-  $(`#${prefix}-gmail`).href = links.gmail;
-  $(`#${prefix}-outlook`).href = links.outlook;
-  $(`#${prefix}-mailto`).href = links.mailto;
-}
-
-function updateDraftComposeLinks() {
-  setComposeLinks("compose", { subject: $("#draft-subject").value, body: $("#draft-body").value }, draftRecipient());
-}
-
-function updateContactComposeLinks() {
-  setComposeLinks("contact", { subject: $("#contact-subject").value, body: $("#contact-message").value }, $("#contact-email").value);
-}
-
-function updateThankYouComposeLinks() {
-  const email = state.contacts.find((contact) => contact.id === $("#interview-contact").value)?.email || "";
-  setComposeLinks("thank-you", { subject: $("#thank-you-subject").value, body: $("#thank-you-body").value }, email);
 }
 
 function closeDetail() {
@@ -1052,14 +1018,6 @@ $("#delete-application").addEventListener("click", async () => {
   await load();
   toast("Application deleted");
 });
-$("#generate-draft").addEventListener("click", () => {
-  const application = state.applications.find((item) => item.id === selectedId); if (!application) return;
-  const contact = state.contacts.find((item) => item.id === $("#draft-contact").value) || {};
-  const draft = ApplyOS.generateFollowUpDraft(application, profile, $("#draft-type").value, contact); $("#draft-subject").value = draft.subject; $("#draft-body").value = draft.body; updateDraftComposeLinks(); $("#draft").classList.remove("hidden");
-});
-$("#copy-draft").addEventListener("click", async () => { await navigator.clipboard.writeText(`Subject: ${$("#draft-subject").value}\n\n${$("#draft-body").value}`); toast("Draft copied for manual review"); });
-[$("#draft-subject"), $("#draft-body"), $("#draft-contact")].forEach((control) => control.addEventListener(control.tagName === "SELECT" ? "change" : "input", updateDraftComposeLinks));
-
 $("#company-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const saved = await ApplyOS.upsertCompany({
@@ -1139,7 +1097,6 @@ $("#merge-contact").addEventListener("click", async () => {
   if (!source || !target || !await ScoutDialog.confirm({ eyebrow: "MERGE CONTACTS", title: `Merge ${source.name} into ${target.name}?`, message: "Scout will keep the destination contact and combine the useful context from both records.", consequences: ["Linked applications, actions, interviews, notes, tags, and history will be preserved."], confirmLabel: "Merge contacts", cancelLabel: "Keep separate" })) return;
   await ApplyOS.mergeContacts(source.id, target.id); await load(); closeContact(); openContact(target.id); toast("Contacts merged");
 });
-[$("#contact-subject"), $("#contact-message"), $("#contact-email")].forEach((control) => control.addEventListener("input", updateContactComposeLinks));
 $("#log-interaction").addEventListener("click", () => openActivityForm());
 $("#cancel-activity").addEventListener("click", () => $("#activity-form").classList.add("hidden"));
 $("#activity-form").addEventListener("submit", async (event) => {
@@ -1152,10 +1109,7 @@ $("#activity-form").addEventListener("submit", async (event) => {
     action_id: actionId || null,
     type: $("#activity-type").value,
     direction: $("#activity-direction").value,
-    occurred_at: toISOFromInput($("#activity-when").value),
-    subject: $("#activity-subject").value.trim(),
-    summary: $("#activity-summary").value.trim(),
-    outcome: $("#activity-outcome").value.trim()
+    occurred_at: toISOFromInput($("#activity-when").value)
   }, {
     complete_action_id: $("#activity-complete-action").checked ? actionId : "",
     next_action: $("#activity-next-title").value.trim() && $("#activity-next-date").value ? {
@@ -1164,22 +1118,6 @@ $("#activity-form").addEventListener("submit", async (event) => {
   });
   await load(); selectedContactId = contact.id; renderContactTimeline(contact.id); $("#activity-form").classList.add("hidden"); toast("Interaction logged");
 });
-document.querySelectorAll("[data-log-compose]").forEach((link) => link.addEventListener("click", () => {
-  const context = link.dataset.composeContext;
-  const contactId = context === "application" ? $("#draft-contact").value : context === "interview" ? $("#interview-contact").value : selectedContactId;
-  const applicationId = context === "application" ? selectedId : context === "interview" ? state.interviews.find((item) => item.id === selectedInterviewId)?.application_id : null;
-  const action = context === "application"
-    ? state.reminders.find((item) => item.application_id === applicationId && item.status === "open" && item.kind === ($("#draft-type").value === "final_follow_up" ? "application_final_follow_up" : "application_follow_up"))
-    : context === "interview"
-      ? state.reminders.find((item) => item.interview_id === selectedInterviewId && item.status === "open" && item.kind === "interview_thank_you")
-      : null;
-  const subject = context === "application" ? $("#draft-subject").value : context === "interview" ? $("#thank-you-subject").value : $("#contact-subject").value;
-  window.setTimeout(() => {
-    if (!contactId) return toast("Link a contact before logging this message");
-    if (context !== "contact") { closeDetail(); openContact(contactId); }
-    openActivityForm({ type: link.dataset.logCompose, direction: "outbound", subject, action_id: action?.id || "", summary: "Reviewed message opened in compose. Confirm only after sending." });
-  }, 150);
-}));
 
 $("#action-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -1209,7 +1147,7 @@ $("#action-calendar-download").addEventListener("click", () => {
 });
 
 $("#add-interview").addEventListener("click", () => openInterviewEditor());
-$("#cancel-interview").addEventListener("click", () => { selectedInterviewId = null; $("#interview-form").classList.add("hidden"); $("#thank-you").classList.add("hidden"); });
+$("#cancel-interview").addEventListener("click", () => { selectedInterviewId = null; $("#interview-form").classList.add("hidden"); });
 [$("#interview-create-prep"), $("#interview-create-thanks")].forEach((control) => control.addEventListener("change", updateInterviewActionReview));
 $("#interview-scheduled").addEventListener("change", () => {
   if (!$("#interview-prep-date").value && $("#interview-scheduled").value) {
@@ -1233,15 +1171,6 @@ $("#delete-interview").addEventListener("click", async () => {
   if (!selectedInterviewId || !await ScoutDialog.confirm({ eyebrow: "DELETE INTERVIEW", title: "Delete this interview workspace?", message: "The application will stay in your pipeline.", consequences: ["Open interview actions will be cancelled.", "Completed and skipped action history will remain."], tone: "danger", confirmLabel: "Delete interview", cancelLabel: "Keep interview" })) return;
   const applicationId = selectedId; await ApplyOS.deleteInterview(selectedInterviewId); await load(); openDetail(applicationId); toast("Interview deleted");
 });
-$("#generate-thank-you").addEventListener("click", () => {
-  const application = state.applications.find((item) => item.id === selectedId); if (!application) return;
-  const interview = state.interviews.find((item) => item.id === selectedInterviewId) || { type: $("#interview-type").value, question_notes: $("#interview-questions").value };
-  const contact = state.contacts.find((item) => item.id === $("#interview-contact").value) || {};
-  const draft = ApplyOS.generateThankYouDraft(application, interview, profile, contact); $("#thank-you-subject").value = draft.subject; $("#thank-you-body").value = draft.body; updateThankYouComposeLinks(); $("#thank-you").classList.remove("hidden");
-});
-$("#copy-thank-you").addEventListener("click", async () => { await navigator.clipboard.writeText(`Subject: ${$("#thank-you-subject").value}\n\n${$("#thank-you-body").value}`); toast("Thank-you draft copied"); });
-[$("#thank-you-subject"), $("#thank-you-body")].forEach((control) => control.addEventListener("input", updateThankYouComposeLinks));
-$("#interview-contact").addEventListener("change", updateThankYouComposeLinks);
 async function runAIStudio(kind) {
   const application = state.applications.find((item) => item.id === selectedId); if (!application) return;
   const buttons = [...document.querySelectorAll(".studio-actions button")]; buttons.forEach((button) => { button.disabled = true; });

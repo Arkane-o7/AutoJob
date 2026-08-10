@@ -1,0 +1,57 @@
+:root {
+  --scout-scrollbar-size: 12px;
+  --scout-scrollbar-track: rgba(23, 24, 20, .045);
+  --scout-scrollbar-thumb: rgba(23, 24, 20, .32);
+  --scout-scrollbar-thumb-hover: rgba(23, 24, 20, .54);
+}
+
+html {
+  scrollbar-gutter: stable;
+}
+
+/* Keep the page scrollbar visually attached to content, not the global header. */
+html:has(> body[data-scout-page])::-webkit-scrollbar-track {
+  margin-top: var(--scout-header-height, 68px);
+}
+
+* {
+  scrollbar-color: var(--scout-scrollbar-thumb) var(--scout-scrollbar-track);
+  scrollbar-width: thin;
+}
+
+*::-webkit-scrollbar {
+  width: var(--scout-scrollbar-size);
+  height: var(--scout-scrollbar-size);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scout-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+  min-width: 44px;
+  min-height: 44px;
+  border: 3px solid transparent;
+  border-radius: 999px;
+  background: var(--scout-scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scout-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* These compact navigation rails scroll by gesture; a visible bar adds noise. */
+.scout-header__nav,
+.scout-side-nav {
+  scrollbar-width: none;
+}
+
+.scout-header__nav::-webkit-scrollbar,
+.scout-side-nav::-webkit-scrollbar {
+  display: none;
+}

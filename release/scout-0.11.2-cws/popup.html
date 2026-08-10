@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Scout</title>
+    <link rel="icon" href="assets/icons/scout-32.png">
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <section class="profile-strip">
+        <div class="popup-brand"><img src="assets/brand/scout-wordmark.png" alt="Scout"></div>
+        <label><span>PROFILE</span><select id="profile-select"></select></label>
+        <button id="onboarding" type="button">Profile</button>
+        <button id="dashboard" class="dashboard-button" type="button">Open Scout</button>
+      </section>
+
+      <section id="empty-state" class="empty-state hidden"><span>⌁</span><h1>Open a job to begin.</h1><p>Scout will detect the role, save it to your Pipeline, and help fill the application.</p><button id="empty-dashboard" type="button">Open Home</button></section>
+
+      <section class="page-state">
+        <div class="job-summary">
+          <p class="eyebrow" id="site-label">READING THIS PAGE</p>
+          <label class="editable-title"><span>Role</span><input id="role" placeholder="Job title"></label>
+          <label class="editable-company"><span>Company</span><input id="company" placeholder="Company"></label>
+        </div>
+        <div class="score" id="score" aria-label="Resume match score"><span>RESUME MATCH</span><strong>-</strong></div>
+      </section>
+
+      <div id="confidence" class="confidence">Waiting for page details…</div>
+
+      <section id="record-controls" class="record-controls hidden">
+        <label><span>Status</span><select id="status"></select></label>
+        <div><span>Next follow-up</span><strong id="follow-up">Not scheduled</strong></div>
+      </section>
+
+      <section class="actions">
+        <button id="fill" class="primary" type="button" disabled><span>Save &amp; autofill</span><span>↗</span></button>
+        <button id="save" class="secondary" type="button" disabled><span>Save job</span><span>→</span></button>
+        <button id="agent" class="secondary ai-action hidden" type="button" disabled><span>Optional AI enhancement</span><span>✦</span></button>
+        <button id="applied" class="secondary dark hidden" type="button" disabled><span>Mark as applied</span><span>✓</span></button>
+      </section>
+
+      <div id="result" class="result" role="status" aria-live="polite"></div>
+      <button id="report" class="report-action" type="button"><span>Site not working correctly?</span><span>Report issue</span></button>
+
+    </main>
+    <script src="shared/constants.js"></script>
+    <script src="shared/matching.js"></script>
+    <script src="shared/followup.js"></script>
+    <script src="shared/profiles.js"></script>
+    <script src="shared/ai.js"></script>
+    <script src="shared/storage.js"></script>
+    <script src="popup.js"></script>
+  </body>
+</html>

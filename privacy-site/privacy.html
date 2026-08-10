@@ -37,7 +37,7 @@
     <main>
       <section class="hero" aria-labelledby="page-title">
         <div class="hero-copy">
-          <p class="eyebrow">Privacy policy · Last updated July 31, 2026</p>
+          <p class="eyebrow">Privacy policy · Last updated August 10, 2026</p>
           <h1 id="page-title">
             Your job search is
             <em>your business.</em>
@@ -121,7 +121,7 @@
             <h2 id="policy-title">Scout Privacy Policy</h2>
             <p>
               <strong>Effective date:</strong> July 18, 2026<br />
-              <strong>Last updated:</strong> July 31, 2026
+              <strong>Last updated:</strong> August 10, 2026
             </p>
             <p>
               Scout is a job-application organization and autofill service
@@ -142,9 +142,11 @@
               image when supplied by the provider, authentication timestamps,
               and session and security information. You may sign in using an
               email verification code, Google, or LinkedIn OpenID Connect.
-              Google and LinkedIn are used only for authentication. Scout does
-              not import your Google data, LinkedIn connections, messages,
-              posts, employment history, or contacts.
+              Google and LinkedIn sign-in are used only for authentication.
+              Scout does not use sign-in access to import your Google data,
+              LinkedIn connections, messages, posts, employment history, or
+              contacts. Optional Google Calendar access is separately requested
+              only when you choose to connect it, as described below.
             </p>
 
             <h3>Profile and resume information</h3>
@@ -162,9 +164,12 @@
               Scout processes jobs you save and your related activity,
               including company, role, source website, job URL, job
               description, extracted skills, match results, application
-              status, deadlines, notes, reminders, follow-ups, reviewed drafts,
+              status, deadlines, notes, reminders, follow-ups,
               recruiter or networking contacts, interviews, preparation notes,
               next actions, and relationship activity that you explicitly log.
+              Relationship activity is limited to metadata such as its type,
+              direction, time, and linked records; Scout does not store message
+              subjects, summaries, outcomes, or bodies.
               Contact CSV files are parsed locally after your review; the
               source CSV is not uploaded as a file.
             </p>
@@ -173,8 +178,22 @@
             <p>
               If you enable Chrome desktop notifications, Scout displays only
               a generic count of actions due. Contact names, company names,
-              notes, message summaries, and interview details remain inside
-              your private Scout workspace.
+              notes and interview details remain inside your private Scout
+              workspace.
+            </p>
+
+            <h3>Optional Google Calendar sync</h3>
+            <p>
+              If you explicitly connect Google Calendar, Scout requests the
+              <code>calendar.events.owned</code> permission so it can create,
+              update, find, and remove Scout reminder events on your primary
+              calendar. Scout queries only events carrying Scout’s private
+              action identifiers and does not import or browse unrelated
+              events. Event titles, due times, reminder details, and limited
+              application or contact context that you choose to synchronize
+              are stored in Google Calendar. Scout stores the Google event ID,
+              calendar ID, and synchronization status with the corresponding
+              Scout action, but does not persist the Google OAuth access token.
             </p>
 
             <h3>Job-page and form information</h3>
@@ -223,7 +242,11 @@
               </li>
               <li>
                 provide job capture, autofill, matching, reminders, CRM,
-                drafts, and interview organization;
+                resume and cover-letter guidance, and interview organization;
+              </li>
+              <li>
+                synchronize selected Scout actions to Google Calendar when you
+                explicitly connect and use that optional integration;
               </li>
               <li>
                 preserve user-specific offline access and synchronize queued
@@ -291,8 +314,10 @@
                 private file storage, and server-side functions;
               </li>
               <li>
-                <strong>Google and LinkedIn</strong>, only when you choose those
-                authentication methods;
+                <strong>Google and LinkedIn</strong> for authentication only
+                when you choose those sign-in methods, and
+                <strong>Google Calendar</strong> only when you separately
+                connect optional reminder synchronization;
               </li>
               <li>
                 <strong>Google Gmail SMTP</strong> to deliver email verification
@@ -303,11 +328,6 @@
                 distribute and run the extension.
               </li>
             </ul>
-            <p>
-              When you explicitly choose a Gmail, Outlook, or default-email
-              compose button, Scout opens a reviewed draft in that provider.
-              Scout does not receive mailbox access and does not send the draft.
-            </p>
             <p>
               If you explicitly enable optional local Ollama tools, selected
               prompt content is sent to the localhost endpoint you configure. It
@@ -351,6 +371,10 @@
               <li>export your account workspace;</li>
               <li>delete individual applications and related records;</li>
               <li>sign out and stop using the local account cache; and</li>
+              <li>
+                connect or disconnect Google Calendar, choose individual or
+                bulk reminder synchronization, and disable automatic sync; and
+              </li>
               <li>permanently delete your Scout account.</li>
             </ul>
             <p>

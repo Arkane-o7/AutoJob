@@ -295,7 +295,15 @@
         ...(isRecord(state.settings) ? state.settings : {}),
         calendar_auto_sync: false
       }
-    }, 7, 8)
+    }, 7, 8),
+    8: (state) => recordMigration({
+      ...state,
+      contact_activities: (Array.isArray(state.contact_activities) ? state.contact_activities : []).map((item) => {
+        if (!isRecord(item)) return item;
+        const { subject: _subject, summary: _summary, outcome: _outcome, ...metadata } = item;
+        return metadata;
+      })
+    }, 8, 9)
   };
 
   function migrateState(input) {
@@ -506,7 +514,6 @@
     const now = ApplyOS.nowISO();
     const createdAt = safeDateString(item.created_at, now);
     return {
-      ...item,
       id: safeId(item.id, "activity"),
       contact_id: safeString(item.contact_id),
       application_id: safeNullableString(item.application_id),
@@ -515,9 +522,6 @@
       type: ApplyOS.CONTACT_ACTIVITY_TYPES.includes(item.type) ? item.type : "note",
       direction: ApplyOS.CONTACT_ACTIVITY_DIRECTIONS.includes(item.direction) ? item.direction : "none",
       occurred_at: safeDateString(item.occurred_at, now),
-      subject: safeString(item.subject),
-      summary: safeString(item.summary),
-      outcome: safeString(item.outcome),
       created_at: createdAt,
       updated_at: safeDateString(item.updated_at, createdAt)
     };
