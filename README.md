@@ -1,5 +1,23 @@
 # Scout
 
+![Chrome](https://img.shields.io/badge/Chrome-Manifest%20V3-4285f4?logo=googlechrome&logoColor=white)
+![Version](https://img.shields.io/badge/version-0.11.2-7c3aed)
+![Privacy](https://img.shields.io/badge/workflow-review--first-22c55e)
+
+<p align="center">
+  <img src="assets/brand/scout-wordmark.png" alt="Scout wordmark" width="420">
+</p>
+
+```mermaid
+flowchart LR
+    A[Job page] --> B[Scout extension]
+    B --> C[Reviewed autofill]
+    B --> D[Private candidate workspace]
+    D --> E[Applications and contacts]
+    D --> F[Interviews and follow-ups]
+    B -. optional .-> G[Local Ollama]
+```
+
 Scout is a private, review-first Chrome extension that combines job capture, application tracking, resume matching, answer memory, a unified action inbox, relationship history, and the existing autofill engine. It never submits an application or sends a message.
 
 Scout retains its interface and legacy-profile compatibility while incorporating licensed implementation work adapted from [Offlyn Apply](https://github.com/offlyn-ai/offlyn-apply) and [Job App Filler](https://github.com/berellevy/job_app_filler). See `THIRD_PARTY_NOTICES.md` and `licenses/` for attribution and license terms.
