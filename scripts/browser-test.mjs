@@ -106,7 +106,7 @@ async function installBrowserAccount(worker) {
       profile: { ...fakeProfile, firstName: "Stale", address: "", city: "", state: "", postalCode: "" },
       profilesIndex: {
         activeId: "browser_test",
-        profiles: [{ id: "browser_test", name: "Browser test", targetRole: "", color: "#b7ff3c", createdAt: Date.now() }]
+        profiles: [{ id: "browser_test", name: "Product design", targetRole: "", color: "#b7ff3c", createdAt: Date.now() }]
       },
       profile_browser_test: fakeProfile
     });
@@ -364,7 +364,67 @@ async function main() {
     });
     const worker = await waitForWorker(context);
     assert.match(worker.url(), /^chrome-extension:\/\//, "unpacked MV3 service worker should run");
+    const extensionId = new URL(worker.url()).host;
     await waitForSignedOutInitialization(worker);
+
+    const signedOutProbe = await context.newPage();
+    await signedOutProbe.setViewportSize({ width: 1440, height: 900 });
+    await signedOutProbe.goto(`chrome-extension://${extensionId}/account.html?reason=sign-in-required&returnTo=popup`, { waitUntil: "domcontentloaded" });
+    await signedOutProbe.waitForFunction(() => document.body.classList.contains("first-run-auth") && !document.querySelector("#signed-out-actions")?.classList.contains("hidden"));
+    const signInLayout = await signedOutProbe.locator("#identity").evaluate((card) => {
+      const bounds = card.getBoundingClientRect();
+      const heading = document.querySelector(".identity-heading");
+      const header = document.querySelector(".scout-header");
+      const emailForm = document.querySelector("#email-request-form");
+      const consent = document.querySelector(".auth-consent");
+      const consentDetails = document.querySelector(".consent-details");
+      const bodyStyle = getComputedStyle(document.body);
+      return {
+        cardCenter: bounds.left + bounds.width / 2,
+        viewportCenter: document.documentElement.clientWidth / 2,
+        cardWidth: bounds.width,
+        headingAlignment: heading ? getComputedStyle(heading).textAlign : "",
+        headerDisplay: header ? getComputedStyle(header).display : "",
+        identityEyebrowCount: document.querySelectorAll("#identity .identity-heading .eyebrow").length,
+        consentAfterEmail: Boolean(emailForm && consent && (emailForm.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING)),
+        consentBottomBorder: consent ? getComputedStyle(consent).borderBottomWidth : "",
+        detailsTopBorder: consentDetails ? getComputedStyle(consentDetails).borderTopWidth : "",
+        backgroundImage: bodyStyle.backgroundImage,
+        backgroundColor: bodyStyle.backgroundColor
+      };
+    });
+    assert.ok(Math.abs(signInLayout.cardCenter - signInLayout.viewportCenter) <= 8, `first-run sign-in card stays centered within the browser scrollbar tolerance (${JSON.stringify(signInLayout)})`);
+    assert.ok(signInLayout.cardWidth >= 620, "first-run sign-in card uses an intentional desktop scale");
+    assert.equal(signInLayout.headingAlignment, "center", "first-run sign-in heading follows the centered composition");
+    assert.equal(signInLayout.headerDisplay, "none", "first-run sign-in removes the top header bar");
+    assert.equal(signInLayout.identityEyebrowCount, 0, "first-run sign-in has no identity eyebrow label");
+    assert.equal(signInLayout.consentAfterEmail, true, "first-run sign-in places consent after the login methods");
+    assert.equal(signInLayout.consentBottomBorder, "0px", "first-run consent disclosure has no internal horizontal divider");
+    assert.equal(signInLayout.detailsTopBorder, "0px", "first-run consent details have no internal horizontal divider");
+    assert.equal(signInLayout.backgroundImage, "none", "first-run sign-in keeps its background free of gradients and decorative images");
+    assert.equal(signInLayout.backgroundColor, "rgb(227, 241, 201)", "first-run sign-in uses one quiet solid Scout background");
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await signedOutProbe.locator(".consent-details").evaluate((details) => { details.open = true; });
+      await signedOutProbe.waitForTimeout(300);
+      await signedOutProbe.screenshot({ path: resolve(root, "output/playwright/account-sign-in.png"), fullPage: true });
+    }
+    await signedOutProbe.setViewportSize({ width: 390, height: 844 });
+    const mobileSignInLayout = await signedOutProbe.evaluate(() => ({
+      clientWidth: document.documentElement.clientWidth,
+      scrollWidth: document.documentElement.scrollWidth,
+      headerHeight: document.querySelector(".scout-header")?.getBoundingClientRect().height || 0,
+      cardWidth: document.querySelector("#identity")?.getBoundingClientRect().width || 0
+    }));
+    assert.ok(mobileSignInLayout.scrollWidth <= mobileSignInLayout.clientWidth, `first-run sign-in avoids horizontal overflow on mobile (${JSON.stringify(mobileSignInLayout)})`);
+    assert.equal(mobileSignInLayout.headerHeight, 0, "first-run mobile sign-in keeps the header removed");
+    assert.ok(mobileSignInLayout.cardWidth <= mobileSignInLayout.clientWidth - 24, "first-run sign-in card keeps a mobile canvas margin");
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await signedOutProbe.waitForTimeout(200);
+      await signedOutProbe.screenshot({ path: resolve(root, "output/playwright/account-sign-in-mobile.png"), fullPage: true });
+    }
+    await signedOutProbe.close();
+
     await installBrowserAccount(worker);
     await waitForExtensionInitialization(worker);
     await installCalendarMock(worker);
@@ -488,6 +548,11 @@ async function main() {
     const pagePrompt = page.locator(".scout-page-prompt");
     await pagePrompt.waitFor({ state: "visible", timeout: 5000 });
     assert.match(await pagePrompt.locator("h2").textContent(), /autofill/i, "known ATS form should offer review-gated autofill");
+    if (process.env.SCOUT_CAPTURE_UI === "1") {
+      await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await page.setViewportSize({ width: 1280, height: 800 });
+      await page.screenshot({ path: resolve(root, "output/playwright/autofill-review.png") });
+    }
     const promptLayout = await pagePrompt.evaluate((prompt) => {
       const card = prompt.getBoundingClientRect();
       const stack = prompt.parentElement;
@@ -515,6 +580,7 @@ async function main() {
     assert.ok(promptedApplication?.match_score >= 80, "saved job match uses the active profile's extracted resume text");
     assert.ok(promptedApplication?.matched_skills?.includes("typescript"), "saved job records resume-text skill overlap");
     await page.locator(".applykit-toast").first().waitFor({ state: "visible" });
+    if (process.env.SCOUT_CAPTURE_UI === "1") await page.screenshot({ path: resolve(root, "output/playwright/autofill-complete.png") });
     assert.equal(await page.locator(".scout-notification-stack > .applykit-toast").count(), 1, "save-and-autofill reports its result once");
     await sendFill(worker);
     await page.waitForFunction(() => document.querySelectorAll(".scout-notification-stack > .applykit-toast").length >= 2);
@@ -566,7 +632,6 @@ async function main() {
     await review.locator(".applyos-review-close").click();
     console.log("PASS reviewed-report value-free preview and private support fallback");
 
-    const extensionId = new URL(worker.url()).host;
     const popupProbe = await context.newPage();
     await popupProbe.setViewportSize({ width: 420, height: 600 });
     await popupProbe.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
@@ -779,6 +844,7 @@ async function main() {
     console.log("PASS canonical profile round-trip and section-based profile overview");
 
     const helper = await context.newPage();
+    await helper.setViewportSize({ width: 1440, height: 900 });
     const dashboardMessages = [];
     const dashboardNativeDialogs = [];
     helper.on("console", (message) => { if (["warning", "error"].includes(message.type())) dashboardMessages.push(message.text()); });
@@ -877,6 +943,25 @@ async function main() {
     }, applicationId);
     assert.equal(confirmedState.application.status, "applied", "affirmative review marks the application applied");
     assert.equal(confirmedState.reminders.length, 2, "affirmative review schedules 7/14-day reminders");
+    await worker.evaluate(async () => {
+      const samples = [
+        { company: "Northstar Labs", role: "Product Designer", status: "saved", priority: "high", source: "Greenhouse", description: "Design React product workflows and collaborate with TypeScript engineers." },
+        { company: "Orbit Systems", role: "Senior Product Manager", status: "applied", priority: "medium", source: "Workday", description: "Lead an AWS platform roadmap across TypeScript services." },
+        { company: "Lantern Health", role: "UX Researcher", status: "interview", priority: "high", source: "Ashby", description: "Research developer tools and Kubernetes workflows." },
+        { company: "Papertrail Studio", role: "Design Systems Lead", status: "offer", priority: "medium", source: "Lever", description: "Build a React design system with TypeScript." }
+      ];
+      const saved = [];
+      for (const [index, sample] of samples.entries()) {
+        const application = await ApplyOS.upsertApplication({
+          ...sample,
+          url: `https://jobs.example.test/scout-${index + 1}`,
+          deadline: new Date(Date.now() + (index + 2) * 86400000).toISOString()
+        });
+        saved.push(await ApplyOS.updateApplication(application.id, { status: sample.status, priority: sample.priority }));
+      }
+      await ApplyOS.upsertAction({ kind: "custom", title: "Review Northstar portfolio notes", due_at: new Date(Date.now() + 3 * 3600000).toISOString(), priority: "high", channel: "other", application_id: saved[0].id, source: "user" });
+      await ApplyOS.upsertAction({ kind: "interview_prep", title: "Prepare for Lantern interview", due_at: new Date(Date.now() + 28 * 3600000).toISOString(), priority: "high", channel: "meeting", application_id: saved[2].id, source: "user" });
+    });
     await helper.reload({ waitUntil: "domcontentloaded" });
     await helper.locator("[data-section='home']").click();
     const completeReminder = helper.locator(".action-row", { hasText: "Follow up" }).first().locator("[data-action-done]");
@@ -887,7 +972,7 @@ async function main() {
     const applicationCard = helper.locator(`#board .job-card[data-id="${applicationId}"]`);
     await applicationCard.waitFor({ state: "visible" });
     assert.deepEqual(await helper.locator("#board .column-head > span:first-child").allTextContents(), ["SAVED", "APPLIED", "INTERVIEWING", "OFFER", "ARCHIVED"], "Pipeline groups detailed application states into five understandable stages");
-    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/pipeline-workspace.png"), fullPage: true }); }
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForFunction(() => !document.querySelector("#toast")?.classList.contains("show")); await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/pipeline-workspace.png"), fullPage: true }); }
     await applicationCard.click();
     const detail = helper.locator("#detail");
     assert.equal(await detail.getAttribute("aria-modal"), "true", "open detail drawer is exposed as the active modal");
@@ -950,31 +1035,27 @@ async function main() {
     await contactCard.waitFor({ state: "visible" });
     if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(300); await helper.screenshot({ path: resolve(root, "output/playwright/people-workspace.png"), fullPage: true }); }
     await contactCard.click();
-    assert.match(await helper.locator("#contact-gmail").getAttribute("href"), /mail\.google\.com\/mail\/\?.*to=casey%40example\.test/);
-    assert.match(await helper.locator("#contact-outlook").getAttribute("href"), /outlook\.office\.com\/mail\/deeplink\/compose\?/);
-    assert.match(await helper.locator("#contact-mailto").getAttribute("href"), /^mailto:casey@example\.test\?/);
-    const activityCountBeforeCompose = await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities.length);
-    await helper.evaluate(() => {
-      const link = document.querySelector("#contact-gmail");
-      link.addEventListener("click", (event) => event.preventDefault(), { once: true });
-      link.click();
-    });
+    await helper.locator("#log-interaction").click();
     await helper.locator("#activity-form").waitFor({ state: "visible" });
-    assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities.length), activityCountBeforeCompose, "opening a reviewed compose handoff does not infer that a message was sent");
-    await helper.locator("#activity-summary").fill("Sent the reviewed follow-up after checking every line.");
-    await helper.locator("#activity-outcome").fill("Awaiting response");
+    await helper.locator("#activity-type").selectOption("email");
+    await helper.locator("#activity-direction").selectOption("outbound");
     await helper.locator("#activity-next-title").fill("Check for Casey's reply");
     await helper.locator("#activity-next-date").fill("2026-08-08T09:00");
     await helper.locator("#activity-form button[type='submit']").click();
-    await helper.locator("#contact-timeline", { hasText: "Sent the reviewed follow-up" }).waitFor({ state: "visible" });
+    await helper.locator("#contact-timeline", { hasText: "Email" }).waitFor({ state: "visible" });
     if (process.env.SCOUT_CAPTURE_UI === "1") {
       await mkdir(resolve(root, "output/playwright"), { recursive: true });
+      await helper.waitForFunction(() => !document.querySelector("#toast")?.classList.contains("show"));
+      await helper.waitForTimeout(250);
       await helper.screenshot({ path: resolve(root, "output/playwright/contact-timeline.png"), fullPage: true });
     }
     await helper.reload({ waitUntil: "domcontentloaded" });
     await helper.locator(".contact-card", { hasText: "Casey Recruiter" }).click();
-    await helper.locator("#contact-timeline", { hasText: "Sent the reviewed follow-up" }).waitFor({ state: "visible" });
-    assert.match(await helper.locator("#contact-timeline").textContent(), /Awaiting response/, "relationship activity survives a full dashboard reload");
+    await helper.locator("#contact-timeline", { hasText: "Email" }).waitFor({ state: "visible" });
+    assert.match(await helper.locator("#contact-timeline").textContent(), /Outbound/, "metadata-only relationship activity survives a full dashboard reload");
+    const savedActivity = await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities[0]);
+    assert.deepEqual({ type: savedActivity.type, direction: savedActivity.direction }, { type: "email", direction: "outbound" }, "relationship history keeps reviewed event metadata");
+    for (const key of ["subject", "summary", "outcome"]) assert.equal(key in savedActivity, false, `relationship activity excludes ${key}`);
     await helper.locator("#close-contact").click();
     assert.equal(await contactDetail.getAttribute("data-state"), "closed", "contact timeline drawer closes before navigating to Today");
 
@@ -993,6 +1074,17 @@ async function main() {
     await importDialog.waitFor({ state: "hidden" });
     await helper.locator(".contact-card", { hasText: "Rowan Referral" }).waitFor({ state: "visible" });
     assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).contacts.filter((item) => item.email === "casey@example.test").length), 1, "approved CSV merge does not create a duplicate contact");
+    await worker.evaluate(async () => {
+      const applications = (await ApplyOS.getState()).applications;
+      const lantern = applications.find((item) => item.company === "Lantern Health");
+      const orbit = applications.find((item) => item.company === "Orbit Systems");
+      await ApplyOS.upsertContact({ name: "Jordan Lee", title: "Hiring Manager", company: "Lantern Health", relationship: "hiring_manager", application_ids: lantern ? [lantern.id] : [], tags: ["design team"] });
+      await ApplyOS.upsertContact({ name: "Sam Patel", title: "Product Lead", company: "Orbit Systems", relationship: "interviewer", application_ids: orbit ? [orbit.id] : [], tags: ["interview"] });
+    });
+    await helper.reload({ waitUntil: "domcontentloaded" });
+    await helper.locator("[data-section='network']").click();
+    await helper.locator(".contact-card", { hasText: "Jordan Lee" }).waitFor({ state: "visible" });
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForFunction(() => !document.querySelector("#toast")?.classList.contains("show")); await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/people-workspace-rich.png"), fullPage: true }); }
 
     await helper.locator("[data-network-view='companies']").click();
     assert.equal(new URL(helper.url()).searchParams.get("section"), "network", "Companies stays inside the shareable Network URL");
@@ -1082,7 +1174,7 @@ async function main() {
       const action = (await ApplyOS.getState()).reminders.find((item) => item.id === id);
       return Boolean(action?.snoozed_until && new Date(action.snoozed_until).getTime() > Date.now() + 2 * 86400000);
     }, snoozedActionId), true, "Snooze modal persists the selected delay");
-    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForTimeout(300); await helper.screenshot({ path: resolve(root, "output/playwright/today-workspace.png") }); }
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await helper.waitForFunction(() => !document.querySelector("#toast")?.classList.contains("show")); await helper.waitForTimeout(250); await helper.screenshot({ path: resolve(root, "output/playwright/today-workspace.png") }); }
     await relationshipAction.locator("[data-action-done]").click();
     assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).reminders.some((item) => item.title === "Check for Casey's reply" && item.status === "done")), true, "Today completes a relationship action persistently");
 
@@ -1090,25 +1182,8 @@ async function main() {
     await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
     await helper.locator("#application-contacts > summary").click();
     await helper.locator("#linked-contacts", { hasText: "Casey Recruiter" }).waitFor({ state: "visible" });
-    const contactId = await helper.locator("#draft-contact option", { hasText: "Casey Recruiter" }).getAttribute("value");
-    assert.ok(contactId, "saved contact should be selectable for a reviewed follow-up");
-    await helper.locator("#application-follow-up > summary").click();
-    await helper.locator("#draft-contact").selectOption(contactId);
-    await helper.locator("#draft-type").selectOption("final_follow_up");
-    await helper.locator("#generate-draft").click();
-    assert.match(await helper.locator("#compose-gmail").getAttribute("href"), /to=casey%40example\.test/);
-    const applicationComposeActivityCount = await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities.length);
-    await helper.evaluate(() => {
-      const link = document.querySelector("#compose-gmail");
-      link.addEventListener("click", (event) => event.preventDefault(), { once: true });
-      link.click();
-    });
-    await helper.locator("#contact-detail #activity-form").waitFor({ state: "visible" });
-    assert.equal(await worker.evaluate(async () => (await ApplyOS.getState()).contact_activities.length), applicationComposeActivityCount, "application compose handoff requires explicit activity confirmation");
-    await helper.locator("#cancel-activity").click();
-    await helper.locator("#close-contact").click();
-    await helper.locator(`[data-section="pipeline"]`).click();
-    await helper.locator(`#board .job-card[data-id="${applicationId}"]`).click();
+    const contactId = await worker.evaluate(async (id) => (await ApplyOS.getState()).contacts.find((item) => item.application_ids.includes(id))?.id || null, applicationId);
+    assert.ok(contactId, "saved contact should be selectable for interview planning");
 
     await helper.locator("#application-interviews > summary").click();
     await helper.locator("#add-interview").click();
@@ -1131,9 +1206,7 @@ async function main() {
     }
     await interviewCard.waitFor({ state: "visible" });
     await interviewCard.locator("button").click();
-    await helper.locator("#generate-thank-you").click();
-    assert.match(await helper.locator("#thank-you-body").inputValue(), /Hello Casey/);
-    assert.match(await helper.locator("#thank-you-gmail").getAttribute("href"), /to=casey%40example\.test/);
+    assert.equal(await helper.locator("#generate-thank-you").count(), 0, "interview workspace exposes actions without message drafting");
     const crmState = await worker.evaluate(async (id) => {
       const current = await ApplyOS.getState();
       return {
@@ -1144,7 +1217,8 @@ async function main() {
       };
     }, applicationId);
     assert.equal(crmState.contact.email, "casey@example.test", "contact CRM persists the reviewed recipient");
-    assert.equal(crmState.activity.outcome, "Awaiting response", "contact timeline persists the explicitly logged interaction");
+    assert.deepEqual({ type: crmState.activity.type, direction: crmState.activity.direction }, { type: "email", direction: "outbound" }, "contact timeline persists metadata-only interaction history");
+    for (const key of ["subject", "summary", "outcome"]) assert.equal(key in crmState.activity, false, `contact timeline excludes ${key}`);
     assert.equal(crmState.interview.preparation_notes, "Prepare a system-design story.", "interview workspace persists preparation");
     assert.equal(crmState.application.status, "interview", "saving an interview advances an active application to interview");
     await helper.locator("#close-detail").click();

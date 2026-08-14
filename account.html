@@ -80,7 +80,6 @@
     <div class="stack">
       <section class="account-card hero-card settings-section-active" id="identity" data-settings-group="account" aria-labelledby="identity-title">
         <div class="identity-heading">
-          <p class="eyebrow">IDENTITY</p>
           <h2 id="identity-title">Checking your session…</h2>
           <p id="identity-copy">Connecting this browser to your Scout workspace.</p>
         </div>
@@ -90,8 +89,6 @@
         </div>
 
         <div id="signed-out-actions" class="auth-panel hidden">
-          <label class="choice auth-consent"><input id="account-data-consent" type="checkbox"><span><b>I agree to create my private Scout workspace</b><small>Scout securely stores personal data you choose to provide in a private cloud workspace and device cache to deliver its features. By continuing, you agree to the <a href="privacy-site/terms.html" target="_blank" rel="noopener noreferrer">User Agreement</a> and acknowledge the <a href="privacy-site/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</small></span></label>
-          <details class="consent-details"><summary>What this includes</summary><p>Account details, information added to your profile and job-search workspace, uploaded documents, and saved answers. Scout uses this information for sign-in, sync, autofill, application tracking, and the other features you choose to use.</p></details>
           <button id="google-sign-in" class="provider-button" type="button"><span>Continue with Google</span><b>G</b></button>
           <button id="linkedin-sign-in" class="provider-button outline light" type="button"><span>Continue with LinkedIn</span><b>in</b></button>
           <div class="divider"><span>or use email</span></div>
@@ -104,6 +101,10 @@
             <div class="inline-control"><input id="auth-code" type="text" autocomplete="one-time-code" inputmode="numeric" maxlength="8" required placeholder="Enter code"><button type="submit">Verify <span>→</span></button></div>
             <button id="change-email" class="text-button" type="button">Use a different email</button>
           </form>
+          <div class="consent-group">
+            <label class="choice auth-consent"><input id="account-data-consent" type="checkbox"><span><b>I agree to create my private Scout workspace</b><small>By continuing, you agree to the <a href="privacy-site/terms.html" target="_blank" rel="noopener noreferrer">User Agreement</a> and acknowledge the <a href="privacy-site/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</small></span></label>
+            <details class="consent-details"><summary>What this includes</summary><p>Scout securely stores personal data you choose to provide in a private cloud workspace and device cache to deliver its features. Account details, information added to your profile and job-search workspace, uploaded documents, and saved answers. Scout uses this information for sign-in, sync, autofill, application tracking, and the other features you choose to use.</p></details>
+          </div>
         </div>
 
         <div id="signed-in-actions" class="signed-in-panel hidden">

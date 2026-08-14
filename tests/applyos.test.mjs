@@ -42,7 +42,7 @@ test("migrates legacy profile without removing it", async () => {
   assert.equal(state.resume_versions[0].name, "ada.pdf");
 });
 
-test("migrates a v2 state through v8 without losing applications or the legacy profile", async () => {
+test("migrates a v2 state through v9 without losing applications or the legacy profile", async () => {
   const profile = { firstName: "Ada", email: "ada@example.com" };
   const application = {
     id: "app_existing",
@@ -77,12 +77,12 @@ test("migrates a v2 state through v8 without losing applications or the legacy p
   });
 
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 8);
+  assert.equal(state.schema_version, 9);
   assert.equal(state.revision, 0);
   assert.equal(state.applications.length, 1);
   assert.equal(state.applications[0].id, "app_existing");
   assert.equal(state.applications[0].notes, "Keep this note");
-  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8]]));
+  assert.equal(JSON.stringify(state.migration_history.map(({ from_version, to_version }) => [from_version, to_version])), JSON.stringify([[2, 3], [3, 4], [4, 5], [5, 6], [6, 7], [7, 8], [8, 9]]));
   assert.equal(state.contacts.length, 0);
   assert.equal(state.interviews.length, 0);
   assert.equal(data.profile.email, "ada@example.com");
@@ -107,7 +107,7 @@ test("state migration is idempotent and does not increment the mutation revision
 
   assert.equal(first.revision, 0);
   assert.equal(second.revision, 0);
-  assert.equal(second.migration_history.length, 6);
+  assert.equal(second.migration_history.length, 7);
   assert.deepEqual(data.applyos_state, storedAfterFirstRead);
 });
 
@@ -250,7 +250,7 @@ test("schema v6 migrates application, contact, and interview next actions exactl
     }
   });
   const first = await ApplyOS.ensureState();
-  assert.equal(first.schema_version, 8);
+  assert.equal(first.schema_version, 9);
   assert.equal(first.reminders.filter((item) => item.kind === "application_follow_up").length, 1);
   assert.equal(first.reminders.filter((item) => item.kind === "contact_follow_up").length, 1);
   assert.equal(first.reminders.filter((item) => item.kind === "interview_thank_you").length, 1);
@@ -260,7 +260,7 @@ test("schema v6 migrates application, contact, and interview next actions exactl
   assert.equal(JSON.stringify(data.applyos_state), serialized);
 });
 
-test("schema v7 company migration survives the v8 calendar upgrade and preserves display strings", async () => {
+test("schema v7 company migration survives the v8 calendar and v9 metadata upgrades", async () => {
   const { ApplyOS } = await runtime({
     applyos_state: {
       schema_version: 6,
@@ -276,7 +276,7 @@ test("schema v7 company migration survives the v8 calendar upgrade and preserves
     }
   });
   const state = await ApplyOS.ensureState();
-  assert.equal(state.schema_version, 8);
+  assert.equal(state.schema_version, 9);
   assert.equal(state.companies.length, 2);
   assert.equal(state.applications[0].company, "  Acme   Corp  ");
   assert.equal(state.applications[0].company_id, state.applications[1].company_id);
@@ -454,7 +454,9 @@ test("application and interview deletion preserve action and activity history", 
   assert.ok(state.reminders.every((item) => item.application_id === null && item.interview_id === null));
   assert.equal(state.contact_activities[0].application_id, null);
   assert.equal(state.contact_activities[0].interview_id, null);
-  assert.equal(state.contact_activities[0].summary, "Interviewed");
+  assert.equal(state.contact_activities[0].type, "meeting");
+  assert.equal(state.contact_activities[0].direction, "none");
+  assert.equal("summary" in state.contact_activities[0], false);
 });
 
 test("clearing interview dates cancels generated open actions without deleting history", async () => {
@@ -621,7 +623,7 @@ test("stores corrections and reuses the best site-aware learned answer", async (
   });
   assert.equal(learned.answer, "4");
   const state = await ApplyOS.getState();
-  assert.equal(state.schema_version, 8);
+  assert.equal(state.schema_version, 9);
   assert.equal(state.learned_answers.length, 1);
   const match = ApplyOS.OfflynCore.bestLearnedAnswer("How many years have you handled large datasets", state.learned_answers, {
     site: "example.myworkdayjobs.com",
@@ -675,15 +677,16 @@ test("generic email memory cannot cross personal and college email identities", 
   }), null);
 });
 
-test("follow-up generation produces a draft but no send action", async () => {
+test("follow-up helpers schedule actions without message generation or send capability", async () => {
   const { ApplyOS } = await runtime();
-  const draft = ApplyOS.generateFollowUpDraft({ company: "Acme", role: "Engineer", matched_skills: ["typescript"] }, { firstName: "Ada", lastName: "Lovelace" });
-  assert.match(draft.subject, /Engineer at Acme/);
-  assert.match(draft.body, /Ada Lovelace/);
+  const reminders = ApplyOS.buildFollowUpReminders({ id: "app_1", company: "Acme", role: "Engineer", priority: "high" }, "2026-08-01T00:00:00.000Z");
+  assert.equal(reminders.length, 2);
+  assert.match(reminders[0].title, /Follow up on Engineer at Acme/);
+  assert.equal(typeof ApplyOS.generateFollowUpDraft, "undefined");
   assert.equal(typeof ApplyOS.sendFollowUp, "undefined");
 });
 
-test("contact CRM links people to applications and preserves review-only compose URLs", async () => {
+test("contact CRM links people to applications and stores metadata-only activity", async () => {
   const { ApplyOS } = await runtime();
   const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/contact-job", source: "test", description: "" });
   const contact = await ApplyOS.upsertContact({
@@ -693,14 +696,18 @@ test("contact CRM links people to applications and preserves review-only compose
   const state = await ApplyOS.getState();
   assert.equal(state.contacts[0].id, contact.id);
   assert.deepEqual([...state.contacts[0].application_ids], [application.id]);
-  const links = ApplyOS.buildComposeLinks({ subject: "Following up", body: "Reviewed draft" }, contact.email);
-  assert.match(links.gmail, /^https:\/\/mail\.google\.com\/mail\/\?/);
-  assert.match(links.outlook, /^https:\/\/outlook\.office\.com\/mail\/deeplink\/compose\?/);
-  assert.match(links.mailto, /^mailto:riley@example\.com\?/);
+  await ApplyOS.logContactActivity({
+    contact_id: contact.id, application_id: application.id, type: "email", direction: "outbound",
+    occurred_at: "2026-08-02T12:00:00.000Z", subject: "Removed", summary: "Removed", outcome: "Removed"
+  });
+  const activity = (await ApplyOS.getState()).contact_activities[0];
+  assert.deepEqual({ type: activity.type, direction: activity.direction, application_id: activity.application_id }, { type: "email", direction: "outbound", application_id: application.id });
+  for (const key of ["subject", "summary", "outcome"]) assert.equal(key in activity, false);
+  assert.equal(typeof ApplyOS.buildComposeLinks, "undefined");
   assert.equal(typeof ApplyOS.sendContactMessage, "undefined");
 });
 
-test("interview workspace stores preparation and builds a manual thank-you draft", async () => {
+test("interview workspace stores preparation and creates reviewable next actions", async () => {
   const { ApplyOS } = await runtime();
   const application = await ApplyOS.upsertApplication({ company: "Acme", role: "Engineer", url: "https://example.com/interview-job", source: "test", description: "" });
   const contact = await ApplyOS.upsertContact({ name: "Taylor Manager", email: "taylor@example.com", relationship: "interviewer", application_ids: [application.id] });
@@ -713,10 +720,9 @@ test("interview workspace stores preparation and builds a manual thank-you draft
   assert.equal(state.applications[0].status, "interview");
   assert.equal(state.interviews[0].id, interview.id);
   assert.equal(state.interviews[0].preparation_notes, "Review system design");
-  const draft = ApplyOS.generateThankYouDraft(state.applications[0], interview, { fullName: "Ada Lovelace" }, contact);
-  assert.match(draft.subject, /Engineer interview/);
-  assert.match(draft.body, /Hello Taylor/);
-  assert.match(draft.body, /event-driven architecture/);
+  assert.ok(state.reminders.some((item) => item.interview_id === interview.id && item.kind === "interview_prep"));
+  assert.ok(state.reminders.some((item) => item.interview_id === interview.id && item.kind === "interview_thank_you"));
+  assert.equal(typeof ApplyOS.generateThankYouDraft, "undefined");
   assert.equal(typeof ApplyOS.sendThankYou, "undefined");
   await ApplyOS.deleteContact(contact.id);
   assert.equal((await ApplyOS.getState()).interviews[0].interviewer_contact_ids.length, 0);
@@ -986,8 +992,9 @@ test("application details use an essentials-first disclosure hierarchy", async (
   assert.match(html, /class="detail-grid application-primary-grid">\s*<label><span>Status<\/span>[\s\S]*?<label><span>Deadline<\/span>/);
   assert.match(html, /<details id="application-record-details"/);
   assert.match(html, /<details id="application-match"/);
-  assert.equal((html.match(/<details id="application-[^"]+" class="detail-workspace/g) || []).length, 4);
-  for (const id of ["application-contacts", "application-follow-up", "application-interviews", "application-smart-drafts"]) assert.match(html, new RegExp(`<details id="${id}"`));
+  assert.equal((html.match(/<details id="application-[^"]+" class="detail-workspace/g) || []).length, 3);
+  for (const id of ["application-contacts", "application-interviews", "application-smart-drafts"]) assert.match(html, new RegExp(`<details id="${id}"`));
+  assert.doesNotMatch(html, /application-follow-up/);
   assert.doesNotMatch(html, /application-more-actions/);
   assert.match(html, /class="application-actions__secondary"><button id="mark-application-waiting"[\s\S]*?<a id="detail-url"[\s\S]*?<button id="delete-application"/);
   assert.match(source, /document\.querySelectorAll\("#detail > \.detail-workspace"\)/);
