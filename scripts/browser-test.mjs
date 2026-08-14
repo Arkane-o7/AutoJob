@@ -387,6 +387,7 @@ async function main() {
         headerDisplay: header ? getComputedStyle(header).display : "",
         identityEyebrowCount: document.querySelectorAll("#identity .identity-heading .eyebrow").length,
         consentAfterEmail: Boolean(emailForm && consent && (emailForm.compareDocumentPosition(consent) & Node.DOCUMENT_POSITION_FOLLOWING)),
+        consentDetailsGap: consent && consentDetails ? consentDetails.getBoundingClientRect().top - consent.getBoundingClientRect().bottom : 0,
         consentBottomBorder: consent ? getComputedStyle(consent).borderBottomWidth : "",
         detailsTopBorder: consentDetails ? getComputedStyle(consentDetails).borderTopWidth : "",
         backgroundImage: bodyStyle.backgroundImage,
@@ -399,6 +400,7 @@ async function main() {
     assert.equal(signInLayout.headerDisplay, "none", "first-run sign-in removes the top header bar");
     assert.equal(signInLayout.identityEyebrowCount, 0, "first-run sign-in has no identity eyebrow label");
     assert.equal(signInLayout.consentAfterEmail, true, "first-run sign-in places consent after the login methods");
+    assert.ok(signInLayout.consentDetailsGap >= 8, `first-run consent leaves clear space before What this includes (${JSON.stringify(signInLayout)})`);
     assert.equal(signInLayout.consentBottomBorder, "0px", "first-run consent disclosure has no internal horizontal divider");
     assert.equal(signInLayout.detailsTopBorder, "0px", "first-run consent details have no internal horizontal divider");
     assert.equal(signInLayout.backgroundImage, "none", "first-run sign-in keeps its background free of gradients and decorative images");
@@ -636,6 +638,8 @@ async function main() {
     await popupProbe.setViewportSize({ width: 420, height: 600 });
     await popupProbe.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: "domcontentloaded" });
     await popupProbe.waitForFunction(() => document.querySelector("#score strong")?.textContent.trim() === "-");
+    await popupProbe.waitForFunction(() => document.querySelectorAll("select:not([multiple])").length === document.querySelectorAll("select.scout-select__native").length);
+    assert.equal(await popupProbe.locator(".scout-select__trigger").count(), await popupProbe.locator("select:not([multiple])").count(), "popup replaces every native dropdown presentation with the shared Scout control");
     if (process.env.SCOUT_CAPTURE_UI === "1") { await popupProbe.waitForTimeout(300); await popupProbe.evaluate(() => scrollTo(0, 0)); await popupProbe.locator("main").screenshot({ path: resolve(root, "output/playwright/popup-job.png") }); }
     const popupMetrics = await popupProbe.evaluate(() => {
       document.querySelector("#record-controls")?.classList.remove("hidden");
@@ -720,10 +724,11 @@ async function main() {
       await accountProbe.waitForTimeout(250);
       await accountProbe.screenshot({ path: resolve(root, "output/playwright/account-sync.png"), fullPage: true });
     }
-    assert.match(await accountProbe.locator(".auth-consent").textContent(), /stores personal data you choose to provide/i, "account consent keeps the storage disclosure concise and clear");
+    assert.doesNotMatch(await accountProbe.locator(".auth-consent").textContent(), /stores personal data you choose to provide/i, "account consent keeps the storage explanation out of the checkbox copy");
     assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/terms.html"]').count(), 1, "account consent links the User Agreement");
     assert.equal(await accountProbe.locator('.auth-consent a[href="privacy-site/privacy.html"]').count(), 1, "account consent links the Privacy Policy");
     assert.equal(await accountProbe.locator("details.consent-details").count(), 1, "account consent offers a compact data-category explanation");
+    assert.match(await accountProbe.locator("details.consent-details").textContent(), /stores personal data you choose to provide/i, "account consent moves the storage explanation into What this includes");
     assert.equal(await accountProbe.locator("#publication-section").count(), 0, "unreleased recruiter search has no customer-facing controls");
     await accountProbe.evaluate((conflict) => renderConflict(conflict), conflictFixture.meta.conflict);
     await accountProbe.locator("#conflict-panel").waitFor({ state: "visible" });
@@ -778,6 +783,23 @@ async function main() {
     console.log("PASS account page shows a readable newest-version conflict choice without raw JSON");
     console.log("PASS stale account sessions cannot create an account/dashboard redirect loop");
 
+    const savedFirstLoginProfile = await worker.evaluate(async () => {
+      const index = await ApplyOS.getProfilesIndex();
+      const key = `profile_${index.activeId}`;
+      const stored = await chrome.storage.local.get([key, ApplyOS.PROFILE_KEY]);
+      await chrome.storage.local.set({ [key]: {}, [ApplyOS.PROFILE_KEY]: {} });
+      return { key, profile: stored[key] || stored[ApplyOS.PROFILE_KEY] || {} };
+    });
+    const firstLoginProbe = await context.newPage();
+    await firstLoginProbe.goto(`chrome-extension://${extensionId}/account.html?reason=sign-in-required&returnTo=popup`, { waitUntil: "domcontentloaded" });
+    await firstLoginProbe.waitForURL(`chrome-extension://${extensionId}/onboarding.html?start=1`);
+    await firstLoginProbe.waitForFunction(() => document.querySelector("[data-panel='0']")?.classList.contains("active"));
+    await firstLoginProbe.close();
+    await worker.evaluate(async ({ key, profile: savedProfile }) => {
+      await chrome.storage.local.set({ [key]: savedProfile, [ApplyOS.PROFILE_KEY]: savedProfile });
+    }, savedFirstLoginProfile);
+    console.log("PASS incomplete first-login profiles enter guided setup from the popup sign-in route");
+
     const starterProbe = await context.newPage();
     await starterProbe.goto(`chrome-extension://${extensionId}/onboarding.html?start=1`, { waitUntil: "domcontentloaded" });
     await starterProbe.waitForFunction(() => document.querySelector("[data-panel='0']")?.classList.contains("active"));
@@ -831,6 +853,35 @@ async function main() {
     assert.notEqual(activeProfileNavBackground, "rgba(0, 0, 0, 0)", "The active profile section is visually prominent rather than a muted text link");
     assert.match(await profileProbe.locator("#completion-value").textContent(), /\d+%/, "Profile communicates readiness at a glance");
     assert.equal(await profileProbe.locator("#local-ai, #follow-up-offsets").count(), 0, "Profile keeps reminder and advanced configuration in Settings");
+    const profileSelectControl = profileProbe.locator('[data-scout-select-for="profile-select"]');
+    const profileSelectTrigger = profileSelectControl.locator(".scout-select__trigger");
+    await profileSelectTrigger.press("Enter");
+    const profileSelectMenu = profileProbe.locator(`#${await profileSelectTrigger.getAttribute("aria-controls")}`);
+    await profileSelectMenu.waitFor({ state: "visible" });
+    const profileSelectStyle = await profileSelectMenu.evaluate((menu) => ({
+      background: getComputedStyle(menu).backgroundColor,
+      shadow: getComputedStyle(menu).boxShadow,
+      selected: menu.querySelector('[role="option"][aria-selected="true"]')?.textContent.trim() || ""
+    }));
+    assert.equal(profileSelectStyle.background, "rgb(255, 253, 247)", "open dropdown menus use the Scout paper surface instead of the platform menu");
+    assert.notEqual(profileSelectStyle.shadow, "none", "open dropdown menus use the Scout offset surface treatment");
+    assert.match(profileSelectStyle.selected, /Product design/i, "the custom dropdown exposes its selected option");
+    if (process.env.SCOUT_CAPTURE_UI === "1") { await profileProbe.waitForTimeout(180); await profileProbe.screenshot({ path: resolve(root, "output/playwright/profile-dropdown-open.png"), fullPage: true }); }
+    await profileSelectTrigger.press("Escape");
+    assert.equal(await profileSelectTrigger.getAttribute("aria-expanded"), "false", "Escape closes the themed dropdown and restores its combobox state");
+    await profileProbe.evaluate(() => {
+      const select = document.createElement("select");
+      select.id = "dynamic-select-regression";
+      select.innerHTML = '<option value="remote">Remote</option><option value="hybrid">Hybrid</option>';
+      select.addEventListener("change", () => { select.dataset.changeCount = String(Number(select.dataset.changeCount || 0) + 1); });
+      document.body.append(select);
+    });
+    const dynamicTrigger = profileProbe.locator('[data-scout-select-for="dynamic-select-regression"] .scout-select__trigger');
+    await dynamicTrigger.waitFor({ state: "visible" });
+    await dynamicTrigger.press("ArrowDown");
+    await dynamicTrigger.press("Enter");
+    assert.deepEqual(await profileProbe.locator("#dynamic-select-regression").evaluate((select) => ({ value: select.value, changes: select.dataset.changeCount })), { value: "hybrid", changes: "1" }, "dynamically added dropdowns preserve native values, keyboard selection, and change events");
+    await profileProbe.locator('[data-scout-select-for="dynamic-select-regression"]').evaluate((wrapper) => wrapper.remove());
     if (process.env.SCOUT_CAPTURE_UI === "1") { await profileProbe.waitForTimeout(250); await profileProbe.screenshot({ path: resolve(root, "output/playwright/profile-overview.png"), fullPage: true }); }
     await profileProbe.locator("[data-profile-view='answers']").click();
     const answerRowLayout = await profileProbe.locator(".answer-row").first().evaluate((row) => {
@@ -862,7 +913,9 @@ async function main() {
         nav: [...header.querySelectorAll(".scout-header__nav a")].map((item) => item.textContent.trim()),
         actions: [...header.querySelectorAll(".scout-header__action")].map((item) => item.textContent.trim()),
         active: header.querySelector("[aria-current='page']")?.dataset.scoutNav || "",
-        profile: header.querySelector("[data-scout-profile-select]")?.value || ""
+        profile: header.querySelector("[data-scout-profile-select]")?.value || "",
+        selectCount: document.querySelectorAll("select:not([multiple])").length,
+        themedSelectCount: document.querySelectorAll("select.scout-select__native").length
       };
     });
     const headerSamples = [{ page: "dashboard", ...(await headerSnapshot(helper)) }];
@@ -887,6 +940,7 @@ async function main() {
         assert.deepEqual(sample.actions, ["Profile", "Settings"], `${sample.page} uses clear utility actions`);
         assert.equal(sample.profile, "browser_test", `${sample.page} uses the active workspace profile`);
       }
+      assert.equal(sample.themedSelectCount, sample.selectCount, `${sample.page} replaces every native dropdown presentation with the shared Scout control`);
     }
     assert.equal(headerSamples.find((sample) => sample.page === "dashboard").active, "home");
     assert.equal(headerSamples.find((sample) => sample.page === "account").active, "settings");

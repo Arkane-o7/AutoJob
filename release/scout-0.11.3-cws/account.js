@@ -18,7 +18,7 @@ function setSettingsView(view, updateUrl = true) {
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
-function maybeContinue(status) {
+async function maybeContinue(status) {
   // The dashboard requires a configured cloud build before it will open. Keep
   // the account page on the same side of that boundary so stale session data
   // cannot bounce the tab between account.html and dashboard.html.
@@ -32,9 +32,11 @@ function maybeContinue(status) {
   const requested = params.get("returnTo") || "";
   if (!firstRun && !requested) return;
   const allowed = /^(?:dashboard|options|onboarding)\.html(?:[?#].*)?$/.test(requested) ? requested : "";
-  const target = firstRun ? "onboarding.html?start=1" : (allowed || "dashboard.html");
+  const profile = await ApplyOS.getActiveProfile();
+  const needsOnboarding = !ApplyOS.isOnboardingComplete(profile);
+  const target = needsOnboarding ? "onboarding.html?start=1" : (allowed || "dashboard.html");
   handoffScheduled = true;
-  setStatus("#identity-result", firstRun ? "Account ready. Opening your guided setup…" : "Workspace ready. Returning to Scout…", "success");
+  setStatus("#identity-result", needsOnboarding ? "Account ready. Opening your guided setup…" : "Workspace ready. Returning to Scout…", "success");
   setTimeout(() => location.replace(chrome.runtime.getURL(target)), 650);
 }
 
@@ -274,7 +276,7 @@ function render(status) {
     text("#user-avatar", (user.name || user.email || "A").trim().charAt(0).toUpperCase());
   } else {
     text("#identity-title", "Sign in to Scout");
-    text("#identity-copy", "Choose Google, email, or LinkedIn to securely access your application workspace.");
+    text("#identity-copy", "Continue with Google, LinkedIn, or email.");
   }
 
   for (const button of [$("#google-sign-in"), $("#linkedin-sign-in")]) if (button) button.disabled = !configured;
@@ -361,7 +363,7 @@ async function refresh() {
     ui.authState = response.status?.signedIn ? "signed-in" : "signed-out";
     render(response.status);
     await refreshWorkspaceTools(response.status);
-    maybeContinue(response.status);
+    await maybeContinue(response.status);
     if (response.status?.signedIn) await loadConflict(response.status).catch((error) => setStatus("#conflict-status", error.message, "error"));
     else renderConflict(null);
   } catch (error) {

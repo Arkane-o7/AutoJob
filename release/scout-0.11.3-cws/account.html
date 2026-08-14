@@ -10,6 +10,7 @@
   <link rel="stylesheet" href="shared/header.css">
   <link rel="stylesheet" href="shared/dialog.css">
   <link rel="stylesheet" href="shared/scrollbars.css">
+  <link rel="stylesheet" href="shared/controls.css">
   <style>
     .migration-card{border:2px solid var(--warning);box-shadow:8px 8px 0 rgba(209,154,47,.28)}
     .record-summary{display:grid;grid-template-columns:repeat(4,1fr);border:1px solid rgba(23,24,20,.35);margin:22px 0}
@@ -102,8 +103,8 @@
             <button id="change-email" class="text-button" type="button">Use a different email</button>
           </form>
           <div class="consent-group">
-            <label class="choice auth-consent"><input id="account-data-consent" type="checkbox"><span><b>I agree to create my private Scout workspace</b><small>Scout securely stores personal data you choose to provide in a private cloud workspace and device cache to deliver its features. By continuing, you agree to the <a href="privacy-site/terms.html" target="_blank" rel="noopener noreferrer">User Agreement</a> and acknowledge the <a href="privacy-site/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</small></span></label>
-            <details class="consent-details"><summary>What this includes</summary><p>Account details, information added to your profile and job-search workspace, uploaded documents, and saved answers. Scout uses this information for sign-in, sync, autofill, application tracking, and the other features you choose to use.</p></details>
+            <label class="choice auth-consent"><input id="account-data-consent" type="checkbox"><span><b>I agree to create my private Scout workspace</b><small>By continuing, you agree to the <a href="privacy-site/terms.html" target="_blank" rel="noopener noreferrer">User Agreement</a> and acknowledge the <a href="privacy-site/privacy.html" target="_blank" rel="noopener noreferrer">Privacy Policy</a>.</small></span></label>
+            <details class="consent-details"><summary>What this includes</summary><p>Scout securely stores personal data you choose to provide in a private cloud workspace and device cache to deliver its features. Account details, information added to your profile and job-search workspace, uploaded documents, and saved answers. Scout uses this information for sign-in, sync, autofill, application tracking, and the other features you choose to use.</p></details>
           </div>
         </div>
 
@@ -240,6 +241,7 @@
   <script src="shared/ai.js"></script>
   <script src="shared/storage.js"></script>
   <script src="shared/backup.js"></script>
+  <script src="shared/controls.js"></script>
   <script src="shared/header.js"></script>
   <script src="shared/dialog.js"></script>
   <script src="account.js"></script>
