@@ -846,10 +846,16 @@ async function main() {
     await onboardingProbe.goto(`chrome-extension://${extensionId}/onboarding.html`, { waitUntil: "domcontentloaded" });
     await onboardingProbe.waitForURL(`chrome-extension://${extensionId}/options.html`);
     await onboardingProbe.close();
-    await profileProbe.locator("[data-profile-view='overview']").click();
-    assert.equal(await profileProbe.locator("[data-profile-view='overview']").getAttribute("aria-selected"), "true", "Profile opens on a useful completion overview");
+    const activeProfileNav = profileProbe.locator("[data-profile-view='overview']");
+    await activeProfileNav.click();
+    assert.equal(await activeProfileNav.getAttribute("aria-selected"), "true", "Profile opens on a useful completion overview");
     assert.equal(await profileProbe.locator(".scout-side-nav__heading").count(), 1, "Profile sections use the shared, labeled sidebar navigation component");
-    const activeProfileNavBackground = await profileProbe.locator("[data-profile-view='overview']").evaluate((node) => getComputedStyle(node).backgroundColor);
+    await profileProbe.waitForFunction(
+      () => getComputedStyle(document.querySelector("[data-profile-view='overview']")).backgroundColor !== "rgba(0, 0, 0, 0)",
+      null,
+      { timeout: 1_000 }
+    );
+    const activeProfileNavBackground = await activeProfileNav.evaluate((node) => getComputedStyle(node).backgroundColor);
     assert.notEqual(activeProfileNavBackground, "rgba(0, 0, 0, 0)", "The active profile section is visually prominent rather than a muted text link");
     assert.match(await profileProbe.locator("#completion-value").textContent(), /\d+%/, "Profile communicates readiness at a glance");
     assert.equal(await profileProbe.locator("#local-ai, #follow-up-offsets").count(), 0, "Profile keeps reminder and advanced configuration in Settings");
