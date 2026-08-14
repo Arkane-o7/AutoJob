@@ -1,0 +1,28 @@
+Apply faster without giving up control.
+
+Scout is a job application autofill extension and job application tracker for people who want one focused place to fill forms, save opportunities, and manage the work after they apply.
+
+WHAT SCOUT DOES
+
+• Autofill common application fields from a profile you control
+• Attach your saved resume to compatible empty upload fields
+• Save roles from supported job and application pages
+• Track every opportunity from Saved to Applied, Interview, Offer, or Archive
+• Keep deadlines, contacts, interview notes, and follow-up actions connected to each role
+• Reuse answers you have reviewed for recurring application questions
+• Compare your profile with a job description to see matched and missing skills
+• Maintain separate profiles and resume versions for different job searches
+
+REVIEW FIRST. SUBMIT YOURSELF.
+
+Scout fills only after you choose to use it. It leaves low-confidence and sensitive fields for you, never clicks Next, Review, Apply, or Submit, and never sends messages on your behalf. You can inspect and change every answer before submitting an application yourself.
+
+YOUR PRIVATE JOB-SEARCH WORKSPACE
+
+Scout requires an account so your owner-only workspace can stay tied to you and synchronize safely. A user-scoped browser cache supports temporary offline work. Scout does not sell your job-search data, read your inbox, store message content, or create a recruiter-visible profile.
+
+BUILT FOR REAL APPLICATION FLOWS
+
+Scout recognizes common job boards and applicant tracking systems, including Workday, Greenhouse, Lever, and Ashby, with a careful generic fallback for other career pages. Employer customizations vary, so unsupported controls remain untouched for manual review.
+
+Use Scout to spend less time retyping the same details and more time choosing the right opportunities, preparing well, and following through.

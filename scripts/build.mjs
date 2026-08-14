@@ -1,5 +1,5 @@
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -29,14 +29,18 @@ const files = [
   , "onboarding.html", "onboarding.css", "onboarding.js",
   "account.html", "account.css", "account.js"
 ];
+const copyOptions = {
+  recursive: true,
+  filter: (source) => basename(source) !== ".DS_Store"
+};
 
 await rm(out, { recursive: true, force: true });
 await mkdir(out, { recursive: true });
 for (const file of files) await cp(resolve(root, file), resolve(out, file));
-await cp(resolve(root, "assets"), resolve(out, "assets"), { recursive: true });
-await cp(resolve(root, "shared"), resolve(out, "shared"), { recursive: true });
-await cp(resolve(root, "licenses"), resolve(out, "licenses"), { recursive: true });
-await cp(resolve(root, "privacy-site"), resolve(out, "privacy-site"), { recursive: true });
+await cp(resolve(root, "assets"), resolve(out, "assets"), copyOptions);
+await cp(resolve(root, "shared"), resolve(out, "shared"), copyOptions);
+await cp(resolve(root, "licenses"), resolve(out, "licenses"), copyOptions);
+await cp(resolve(root, "privacy-site"), resolve(out, "privacy-site"), copyOptions);
 const manifest = JSON.parse(await readFile(resolve(out, "manifest.json"), "utf8"));
 manifest.oauth2 = {
   client_id: validGoogleClientId ? googleClientId : defaultGoogleClientId,

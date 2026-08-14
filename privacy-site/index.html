@@ -17,6 +17,7 @@
     <link rel="icon" type="image/png" href="assets/favicon.png" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="marketing.css" />
+    <link rel="stylesheet" href="product-visual.css" />
     <script src="site.js" defer></script>
     <title>Scout — Apply faster. Keep everything moving.</title>
   </head>
@@ -127,19 +128,20 @@
           <div class="demo-window dashboard-window" aria-hidden="true">
             <div class="dashboard-bar">
               <img src="assets/scout-wordmark.png" alt="" />
-              <span>Applications</span>
-              <span>Contacts</span>
+              <span>Home</span>
+              <span>Pipeline</span>
+              <span>Network</span>
               <i></i>
             </div>
             <div class="dashboard-body">
               <div class="dashboard-intro">
                 <div>
-                  <p class="demo-kicker">Opportunity radar</p>
-                  <h2>Keep every opportunity <em>in sight.</em></h2>
+                  <p class="demo-kicker">Pipeline</p>
+                  <h2>Every opportunity, <em>one clear view.</em></h2>
                 </div>
                 <div class="dashboard-stats">
                   <span><strong>12</strong>Active</span>
-                  <span class="lime"><strong>8</strong>Follow-ups</span>
+                  <span class="lime"><strong>8</strong>Follow-ups due</span>
                   <span><strong>5</strong>Interviews</span>
                 </div>
               </div>
@@ -201,32 +203,34 @@
           </ul>
         </div>
 
-        <div class="profile-stack reveal" aria-label="Example Scout profile powering an application">
-          <div class="profile-card card-back" aria-hidden="true"></div>
-          <div class="profile-card card-mid" aria-hidden="true"></div>
-          <div class="profile-card card-front">
-            <header>
-              <span class="profile-avatar">AM</span>
-              <div><small>Active profile</small><strong>Alex Morgan</strong></div>
-              <span class="profile-ready">Ready</span>
-            </header>
-            <div class="profile-block">
-              <span>Contact</span>
-              <strong>San Francisco, CA · alex.morgan@gmail.com</strong>
+        <div class="autofill-visual reveal" aria-label="The current Scout extension ready to autofill a job application">
+          <div class="job-page-backdrop" aria-hidden="true">
+            <div class="job-page-chrome">
+              <span><i></i><i></i><i></i></span>
+              <strong>northstar.design/careers/apply</strong>
             </div>
-            <div class="profile-block split">
-              <div><span>Experience</span><strong>5+ years</strong></div>
-              <div><span>Authorization</span><strong>US authorized</strong></div>
+            <div class="job-page-content">
+              <div class="job-page-heading">
+                <span>N</span>
+                <div><small>Northstar Design</small><strong>Product Designer</strong></div>
+              </div>
+              <div class="job-page-progress"><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="job-page-fields">
+                <span>Full name</span><span>Email</span><span>Phone number</span>
+                <span>Years of experience</span><span class="wide">Resume</span>
+              </div>
             </div>
-            <div class="profile-block">
-              <span>Resume</span>
-              <strong class="file-row"><i>PDF</i> Product-Designer-v4.pdf <em>Selected</em></strong>
-            </div>
-            <div class="answer-row"><span>Expected salary</span><strong>Saved answer</strong></div>
-            <div class="answer-row"><span>Notice period</span><strong>Saved answer</strong></div>
-            <div class="answer-row"><span>Portfolio</span><strong>Saved answer</strong></div>
-            <footer><span>42 answers ready</span><strong>Profile complete ✓</strong></footer>
           </div>
+
+          <figure class="extension-popup-preview">
+            <img
+              src="assets/scout-popup-autofill.png"
+              width="840"
+              height="874"
+              alt="Scout extension popup showing a Product Designer role, 88 percent resume match, and Save and autofill action"
+            />
+            <figcaption><i></i> Current Scout extension UI</figcaption>
+          </figure>
         </div>
       </section>
 
@@ -243,17 +247,17 @@
         <div class="workspace-shell reveal">
           <div class="workspace-topbar">
             <img src="assets/scout-wordmark.png" alt="Scout" />
-            <nav aria-label="Workspace preview navigation"><span class="active">Applications</span><span>Contacts</span></nav>
+            <nav aria-label="Workspace preview navigation"><span>Home</span><span class="active">Pipeline</span><span>Network</span></nav>
             <span class="profile-pill">Alex Morgan⌄</span>
           </div>
           <div class="workspace-overview">
             <div>
-              <p class="demo-kicker">Opportunity radar</p>
-              <h3>Keep every opportunity <em>in sight.</em></h3>
+              <p class="demo-kicker">Pipeline</p>
+              <h3>Every opportunity, <em>one clear view.</em></h3>
             </div>
             <div class="overview-metrics">
               <article><strong>12</strong><span>Active</span></article>
-              <article class="lime"><strong>3</strong><span>Due today</span></article>
+              <article class="lime"><strong>3</strong><span>Follow-ups due</span></article>
               <article><strong>5</strong><span>Interviews</span></article>
             </div>
           </div>
